@@ -1,0 +1,19 @@
+{
+  "name": "greek-myth-mmo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "2D MMORPG web game inspired by Greek Mythology - BUT3 Informatique Project",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"cyan,magenta\" \"npm run dev -w @greek-myth/server\" \"npm run dev -w @greek-myth/client\"",
+    "dev:client": "npm run dev -w @greek-myth/client",
+    "dev:server": "npm run dev -w @greek-myth/server",
+    "build": "npm run build --workspaces"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.4.5"
+  }
+}
