@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { GodAffinity, GODS_LORE, ServerInfo } from '@greek-myth/shared';
 import {
   Shield,
@@ -7,10 +7,7 @@ import {
   Users,
   Wifi,
   Sparkles,
-  ChevronRight,
-  Database,
-  Cpu,
-  Network
+  ChevronRight
 } from 'lucide-react';
 
 interface TitleScreenProps {
@@ -57,7 +54,6 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
       justifyContent: 'space-between',
       padding: '30px 48px'
     }}>
-      {/* Background stars / divine ambient glow */}
       <div style={{
         position: 'absolute',
         top: '-150px',
@@ -70,7 +66,6 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         zIndex: 0
       }} />
 
-      {/* HEADER / TITRE PRINCIPAL */}
       <header style={{ textAlign: 'center', position: 'relative', zIndex: 1, marginTop: 10 }}>
         <div style={{
           display: 'inline-flex',
@@ -86,7 +81,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           textTransform: 'uppercase',
           marginBottom: 12
         }}>
-          <Sparkles size={14} /> MMORPG 2D • BUT3 Informatique
+          <Sparkles size={14} /> MMORPG 2D
         </div>
 
         <h1 style={{
@@ -116,7 +111,6 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         </p>
       </header>
 
-      {/* CORPS PRINCIPAL DU LOBBY (PANELS) */}
       <main style={{
         maxWidth: 1200,
         width: '100%',
@@ -127,7 +121,6 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         position: 'relative',
         zIndex: 1
       }}>
-        {/* PANEL GAUCHE : IDENTITÉ DU HÉROS & CHOIX DU DIEU */}
         <section style={{
           background: 'rgba(15, 20, 32, 0.75)',
           backdropFilter: 'blur(16px)',
@@ -149,7 +142,6 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
             <Shield size={20} /> Profil du Héros
           </h2>
 
-          {/* Nom du Héros */}
           <div style={{ marginBottom: 20 }}>
             <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 }}>
               Nom d'Aventurier
@@ -173,7 +165,6 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
             />
           </div>
 
-          {/* Sélecteur de Dieu Tutélaire */}
           <div>
             <label style={{ display: 'block', fontSize: 12, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>
               Allégeance au Panthéon
@@ -208,7 +199,6 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
               })}
             </div>
 
-            {/* Carte de Lore & Bénédicton du Dieu sélectionné */}
             <div style={{
               background: 'rgba(5, 8, 14, 0.6)',
               borderLeft: `4px solid ${godLore.color}`,
@@ -228,7 +218,6 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           </div>
         </section>
 
-        {/* PANEL DROIT : SÉLECTION DU SERVEUR / ROYAUME & LANCEMENT */}
         <section style={{
           background: 'rgba(15, 20, 32, 0.75)',
           backdropFilter: 'blur(16px)',
@@ -254,7 +243,6 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
               <Globe size={20} /> Choix du Monde / Serveur
             </h2>
 
-            {/* Liste des mondes disponibles */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {servers.map((s) => {
                 const isSelected = selectedServer.id === s.id;
@@ -318,7 +306,6 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
             </div>
           </div>
 
-          {/* Bouton de Connexion / Entrée en jeu */}
           <div style={{ marginTop: 24 }}>
             <button
               onClick={onEnterGame}
@@ -355,26 +342,15 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         </section>
       </main>
 
-      {/* FOOTER : RAPPEL PÔLES BUT3 */}
       <footer style={{
-        display: 'flex',
-        justifyContent: 'center',
-        gap: 36,
+        textAlign: 'center',
         color: '#64748b',
         fontSize: 12,
         position: 'relative',
         zIndex: 1,
         marginBottom: 10
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Cpu size={14} color="#facc15" /> Dével. : PixiJS 2D Engine & React Vite
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Network size={14} color="#38bdf8" /> Réseau : WebSockets Protocol & Rooms
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Database size={14} color="#a855f7" /> BDD : PostgreSQL & Prisma ORM
-        </div>
+        Mythologia 2D — Prototype Client & Moteur
       </footer>
     </div>
   );

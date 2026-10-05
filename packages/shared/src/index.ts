@@ -1,8 +1,4 @@
-// ==========================================
-// ROYAUMES & SERVEURS MYTHOLOGIQUES
-// ==========================================
-
-export type RealmType = 'olympus' | 'elysium' | 'tartarus';
+﻿export type RealmType = "olympus" | "elysium" | "tartarus";
 
 export interface ServerInfo {
   id: string;
@@ -13,15 +9,11 @@ export interface ServerInfo {
   port: number;
   playerCount: number;
   maxPlayers: number;
-  status: 'online' | 'busy' | 'full' | 'offline';
+  status: "online" | "busy" | "full" | "offline";
   pingMs?: number;
 }
 
-// ==========================================
-// ALLÉGEANCE DIVINE & PERSONNAGES
-// ==========================================
-
-export type GodAffinity = 'ZEUS' | 'POSEIDON' | 'HADES' | 'ATHENA' | 'ARES' | 'APOLLO';
+export type GodAffinity = "ZEUS" | "POSEIDON" | "HADES" | "ATHENA" | "ARES" | "APOLLO";
 
 export interface GodLore {
   id: GodAffinity;
@@ -35,74 +27,70 @@ export interface GodLore {
 
 export const GODS_LORE: Record<GodAffinity, GodLore> = {
   ZEUS: {
-    id: 'ZEUS',
-    name: 'Zeus',
-    title: 'Roi de l\'Olympe & Maître de la Foudre',
-    realm: 'olympus',
-    color: '#facc15',
-    passiveBonus: '+15% Vitesse de déplacement',
-    description: 'Règne sur les cieux et les éclairs depuis le sommet du mont Olympe.'
+    id: "ZEUS",
+    name: "Zeus",
+    title: "Roi de l'Olympe",
+    realm: "olympus",
+    color: "#facc15",
+    passiveBonus: "+15% Vitesse",
+    description: "Règne sur les cieux et les éclairs depuis le mont Olympe."
   },
   POSEIDON: {
-    id: 'POSEIDON',
-    name: 'Poséidon',
-    title: 'Souverain des Océans & des Tempêtes',
-    realm: 'olympus',
-    color: '#38bdf8',
-    passiveBonus: '+20% Résistance et endurance',
-    description: 'Dompte les flots et fait trembler la terre de son trident.'
+    id: "POSEIDON",
+    name: "Poséidon",
+    title: "Souverain des Océans",
+    realm: "olympus",
+    color: "#38bdf8",
+    passiveBonus: "+20% Résistance",
+    description: "Dompte les flots et fait trembler la terre de son trident."
   },
   HADES: {
-    id: 'HADES',
-    name: 'Hadès',
-    title: 'Seigneur des Enfers & des Ombres',
-    realm: 'tartarus',
-    color: '#a855f7',
-    passiveBonus: '+10% Dégâts d\'ombre & régénération',
-    description: 'Gouverne le royaume des morts et les richesses souterraines cachées.'
+    id: "HADES",
+    name: "Hadès",
+    title: "Seigneur des Enfers",
+    realm: "tartarus",
+    color: "#a855f7",
+    passiveBonus: "+10% Dégâts d'ombre",
+    description: "Gouverne le royaume des morts et les profondeurs souterraines."
   },
   ATHENA: {
-    id: 'ATHENA',
-    name: 'Athéna',
-    title: 'Déesse de la Sagesse & Stratégie',
-    realm: 'elysium',
-    color: '#2dd4bf',
-    passiveBonus: '+15% Intelligence & Parade tactique',
-    description: 'Protectrice des héros, stratège sans égal et gardienne du savoir.'
+    id: "ATHENA",
+    name: "Athéna",
+    title: "Déesse de la Sagesse",
+    realm: "elysium",
+    color: "#2dd4bf",
+    passiveBonus: "+15% Parade",
+    description: "Protectrice des héros et stratège militaire sans égal."
   },
   ARES: {
-    id: 'ARES',
-    name: 'Arès',
-    title: 'Dieu du Conflit & de la Guerre Brutale',
-    realm: 'tartarus',
-    color: '#ef4444',
-    passiveBonus: '+25% Force brute',
-    description: 'Incarnation de la fureur guerrière et des champs de bataille sanglants.'
+    id: "ARES",
+    name: "Arès",
+    title: "Dieu de la Guerre",
+    realm: "tartarus",
+    color: "#ef4444",
+    passiveBonus: "+25% Force brute",
+    description: "Incarnation de la fureur guerrière et des champs de bataille."
   },
   APOLLO: {
-    id: 'APOLLO',
-    name: 'Apollon',
-    title: 'Dieu de la Lumière, Musique & Prophétie',
-    realm: 'elysium',
-    color: '#fb923c',
-    passiveBonus: '+15% Portée et précision',
-    description: 'Illumine le monde de ses flèches d\'or et guide les oracles.'
+    id: "APOLLO",
+    name: "Apollon",
+    title: "Dieu de la Lumière",
+    realm: "elysium",
+    color: "#fb923c",
+    passiveBonus: "+15% Portée",
+    description: "Guide les oracles et tire des flèches solaires à distance."
   }
 };
 
-// ==========================================
-// VUES & ÉTATS DE JEU 2D
-// ==========================================
-
-export type ViewMode = 'top-down' | 'side-view';
+export type ViewMode = "top-down" | "side-view";
 
 export interface PlayerPosition {
   x: number;
   y: number;
   vx: number;
   vy: number;
-  direction: 'left' | 'right' | 'up' | 'down';
-  isGrounded?: boolean; // Pour la vue de profil (side-view / plateforme)
+  direction: "left" | "right" | "up" | "down";
+  isGrounded?: boolean;
 }
 
 export interface PlayerState {
@@ -117,25 +105,18 @@ export interface PlayerState {
   currentRoomId: string;
 }
 
-// ==========================================
-// PROTOCOLE DE COMMUNICATION RÉSEAU
-// ==========================================
-
 export enum PacketType {
-  // Client -> Server
-  JOIN_REQUEST = 'JOIN_REQUEST',
-  PLAYER_INPUT = 'PLAYER_INPUT',
-  SWITCH_VIEW_REQUEST = 'SWITCH_VIEW_REQUEST',
-  CHAT_SEND = 'CHAT_SEND',
-
-  // Server -> Client
-  JOIN_RESPONSE = 'JOIN_RESPONSE',
-  WORLD_TICK = 'WORLD_TICK',
-  PLAYER_JOINED = 'PLAYER_JOINED',
-  PLAYER_LEFT = 'PLAYER_LEFT',
-  VIEW_SWITCHED = 'VIEW_SWITCHED',
-  CHAT_BROADCAST = 'CHAT_BROADCAST',
-  ERROR = 'ERROR'
+  JOIN_REQUEST = "JOIN_REQUEST",
+  PLAYER_INPUT = "PLAYER_INPUT",
+  SWITCH_VIEW_REQUEST = "SWITCH_VIEW_REQUEST",
+  CHAT_SEND = "CHAT_SEND",
+  JOIN_RESPONSE = "JOIN_RESPONSE",
+  WORLD_TICK = "WORLD_TICK",
+  PLAYER_JOINED = "PLAYER_JOINED",
+  PLAYER_LEFT = "PLAYER_LEFT",
+  VIEW_SWITCHED = "VIEW_SWITCHED",
+  CHAT_BROADCAST = "CHAT_BROADCAST",
+  ERROR = "ERROR"
 }
 
 export interface BasePacket {
@@ -150,7 +131,7 @@ export interface PlayerInputPacket extends BasePacket {
     down: boolean;
     left: boolean;
     right: boolean;
-    jump?: boolean; // Utilisé en vue profil
+    jump?: boolean;
   };
 }
 

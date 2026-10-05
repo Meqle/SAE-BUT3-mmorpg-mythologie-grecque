@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+﻿import React, { useEffect, useRef, useState } from 'react';
 import { Application, Graphics, Container, Text, TextStyle } from 'pixi.js';
 import { GodAffinity, GODS_LORE, ServerInfo, ViewMode } from '@greek-myth/shared';
 import { ArrowLeft, Eye, Zap, Shield } from 'lucide-react';
@@ -21,7 +21,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const [fps, setFps] = useState<number>(60);
   const [coords, setCoords] = useState<{ x: number; y: number }>({ x: 400, y: 300 });
 
-  // Refs pour garder l'accès dans le tick loop sans re-rendre
   const viewModeRef = useRef<ViewMode>('top-down');
   viewModeRef.current = viewMode;
 
@@ -33,7 +32,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     let app: Application | null = null;
     let isDestroyed = false;
 
-    // État du joueur local
     const player = {
       x: 400,
       y: 300,
@@ -44,7 +42,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       color: parseInt(godLore.color.replace('#', '0x'), 16)
     };
 
-    // Gestion des touches
     const keys: Record<string, boolean> = {
       ArrowUp: false,
       ArrowDown: false,
@@ -60,7 +57,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const handleKeyDown = (e: KeyboardEvent) => {
       if (keys.hasOwnProperty(e.code)) keys[e.code] = true;
       if (e.code === 'KeyV') {
-        // Raccourci pour basculer la vue
         setViewMode((prev) => (prev === 'top-down' ? 'side-view' : 'top-down'));
       }
     };
@@ -72,7 +68,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
 
-    // Initialisation PixiJS
     const initPixi = async () => {
       app = new Application();
       await app.init({
@@ -90,7 +85,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
       canvasContainerRef.current.appendChild(app.canvas);
 
-      // Scène principale et couches
       const worldContainer = new Container();
       const backgroundLayer = new Graphics();
       const entityLayer = new Container();
@@ -101,12 +95,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       worldContainer.addChild(fxLayer);
       app.stage.addChild(worldContainer);
 
-      // Création du personnage (Héros grec)
       const playerContainer = new Container();
       const playerBody = new Graphics();
       const playerAura = new Graphics();
 
-      // Style du nom au-dessus de la tête
       const nameStyle = new TextStyle({
         fontFamily: 'Outfit, sans-serif',
         fontSize: 13,
@@ -128,17 +120,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       playerContainer.addChild(nameTag);
       entityLayer.addChild(playerContainer);
 
-      // Particules de poussière dorée / étincelles
       const sparks: { x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: number }[] = [];
       const sparkGraphics = new Graphics();
       fxLayer.addChild(sparkGraphics);
 
-      // Rendu du décor selon la vue
       const renderEnvironment = (mode: ViewMode, width: number, height: number) => {
         backgroundLayer.clear();
 
         if (mode === 'top-down') {
-          // Sol du Temple (Dalles en marbre avec motif grec)
           const tileSize = 60;
           for (let x = -800; x < width + 800; x += tileSize) {
             for (let y = -800; y < height + 800; y += tileSize) {
@@ -149,7 +138,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             }
           }
 
-          // Bordures et colonnes sacrées (Pillars)
           const pillars = [
             { x: 150, y: 150 }, { x: 650, y: 150 },
             { x: 150, y: 450 }, { x: 650, y: 450 },
@@ -157,10 +145,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           ];
 
           pillars.forEach(p => {
-            // Ombre de la colonne
             backgroundLayer.circle(p.x, p.y + 6, 26);
             backgroundLayer.fill({ color: 0x000000, alpha: 0.4 });
-            // Socle et colonne de marbre dorée
             backgroundLayer.circle(p.x, p.y, 24);
             backgroundLayer.fill({ color: 0xd4af37 });
             backgroundLayer.circle(p.x, p.y, 20);
@@ -168,20 +154,16 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             backgroundLayer.stroke({ width: 2, color: 0x854d0e });
           });
 
-          // Autel central du Dieu
           backgroundLayer.roundRect(350, 260, 100, 80, 10);
           backgroundLayer.fill({ color: 0x1e293b });
           backgroundLayer.stroke({ width: 3, color: player.color });
 
         } else {
-          // --- SIDE-VIEW (Vue Profil / Plateforme) ---
           const groundY = height * 0.75;
 
-          // Ciel dégradé mythologique
           backgroundLayer.rect(-1000, -500, width + 2000, height + 1000);
           backgroundLayer.fill({ color: 0x090c15 });
 
-          // Montagnes sacrées à l'horizon (parallaxe)
           backgroundLayer.moveTo(-200, groundY);
           backgroundLayer.lineTo(200, groundY - 220);
           backgroundLayer.lineTo(500, groundY - 140);
@@ -189,21 +171,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           backgroundLayer.lineTo(1200, groundY);
           backgroundLayer.fill({ color: 0x111625 });
 
-          // Sol sacré (Plateforme principale)
           backgroundLayer.rect(-1000, groundY, width + 2000, 300);
           backgroundLayer.fill({ color: 0x161d2d });
           backgroundLayer.stroke({ width: 4, color: 0xd4af37 });
 
-          // Colonnes d'arrière-plan en vue de côté
           [-100, 200, 500, 800, 1100].forEach((colX) => {
             backgroundLayer.rect(colX, groundY - 260, 34, 260);
             backgroundLayer.fill({ color: 0x242e44 });
-            // Chapiteau
             backgroundLayer.rect(colX - 8, groundY - 275, 50, 15);
             backgroundLayer.fill({ color: 0xd4af37 });
           });
 
-          // Plateformes surélevées flottantes
           const floatPlatforms = [
             { x: 250, y: groundY - 120, w: 160 },
             { x: 550, y: groundY - 180, w: 180 },
@@ -218,23 +196,19 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         }
       };
 
-      // Premier rendu d'ambiance
       renderEnvironment(viewModeRef.current, app.screen.width, app.screen.height);
 
       let lastMode = viewModeRef.current;
       let lastTime = performance.now();
       let frameCount = 0;
 
-      // Boucle de jeu (PixiJS Ticker / 60 FPS)
       app.ticker.add(() => {
         const currentMode = viewModeRef.current;
 
-        // Si la vue a basculé (Top-down <-> Side-view)
         if (currentMode !== lastMode) {
           lastMode = currentMode;
           renderEnvironment(currentMode, app!.screen.width, app!.screen.height);
 
-          // Ajustement doux de la position lors du switch
           if (currentMode === 'side-view') {
             const groundY = app!.screen.height * 0.75;
             player.y = groundY - 30;
@@ -242,7 +216,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
         }
 
-        // Entrées clavier
         const isUp = keys.ArrowUp || keys.KeyW;
         const isDown = keys.ArrowDown || keys.KeyS;
         const isLeft = keys.ArrowLeft || keys.KeyA;
@@ -250,7 +223,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const isJump = keys.Space || isUp;
 
         if (currentMode === 'top-down') {
-          // --- PHYSIQUE VUE TOP-DOWN (8 directions) ---
           let targetVx = 0;
           let targetVy = 0;
 
@@ -259,7 +231,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           if (isUp) targetVy -= player.speed;
           if (isDown) targetVy += player.speed;
 
-          // Normalisation diagonale
           if (targetVx !== 0 && targetVy !== 0) {
             targetVx *= 0.7071;
             targetVy *= 0.7071;
@@ -272,21 +243,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           player.y += player.vy;
 
         } else {
-          // --- PHYSIQUE VUE DE PROFIL (Platformer / Gravité / Saut) ---
           const groundY = app!.screen.height * 0.75 - 20;
 
-          // Déplacement horizontal
           let targetVx = 0;
           if (isLeft) targetVx -= player.speed;
           if (isRight) targetVx += player.speed;
           player.vx += (targetVx - player.vx) * 0.2;
           player.x += player.vx;
 
-          // Gravité
           player.vy += 0.65;
           player.y += player.vy;
 
-          // Collision avec le sol
           if (player.y >= groundY) {
             player.y = groundY;
             player.vy = 0;
@@ -295,12 +262,10 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             player.isGrounded = false;
           }
 
-          // Saut divin
           if (isJump && player.isGrounded) {
             player.vy = -13;
             player.isGrounded = false;
 
-            // Effet d'impulsion de saut
             for (let i = 0; i < 8; i++) {
               sparks.push({
                 x: player.x + (Math.random() - 0.5) * 20,
@@ -315,26 +280,21 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
         }
 
-        // Mise à jour de l'affichage du joueur
         playerContainer.position.set(player.x, player.y);
 
-        // Dessin du corps du joueur (bouclier divin & halo)
         playerAura.clear();
         playerAura.circle(0, 0, 26);
         playerAura.fill({ color: player.color, alpha: 0.25 });
         playerAura.stroke({ width: 2, color: player.color, alpha: 0.7 });
 
         playerBody.clear();
-        // Corps
         playerBody.circle(0, 0, 16);
         playerBody.fill({ color: 0x1e293b });
         playerBody.stroke({ width: 2.5, color: 0xfacc15 });
 
-        // Symbole / Casque au centre
         playerBody.rect(-6, -8, 12, 16);
         playerBody.fill({ color: player.color });
 
-        // Génération d'étincelles divines en marchant
         if (Math.abs(player.vx) > 0.5 || Math.abs(player.vy) > 0.5) {
           if (Math.random() > 0.5) {
             sparks.push({
@@ -349,7 +309,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           }
         }
 
-        // Mise à jour des particules
         sparkGraphics.clear();
         for (let i = sparks.length - 1; i >= 0; i--) {
           const s = sparks[i];
@@ -364,7 +323,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           if (s.life <= 0) sparks.splice(i, 1);
         }
 
-        // Suivi Caméra fluide
         const targetCamX = app!.screen.width / 2 - player.x;
         const targetCamY = currentMode === 'top-down'
           ? app!.screen.height / 2 - player.y
@@ -373,7 +331,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         worldContainer.x += (targetCamX - worldContainer.x) * 0.08;
         worldContainer.y += (targetCamY - worldContainer.y) * 0.08;
 
-        // Mise à jour FPS & Coords
         frameCount++;
         const now = performance.now();
         if (now - lastTime >= 500) {
@@ -399,10 +356,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: '#07090e' }}>
-      {/* Conteneur Canvas PixiJS */}
       <div ref={canvasContainerRef} style={{ width: '100%', height: '100%' }} />
 
-      {/* Barre d'en-tête & HUD de jeu */}
       <div style={{
         position: 'absolute',
         top: 16,
@@ -413,7 +368,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         alignItems: 'center',
         pointerEvents: 'none'
       }}>
-        {/* Infos Héros & Serveur */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -467,7 +421,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           </div>
         </div>
 
-        {/* Contrôleur de Mode de Vue (Top-Down / Side-View) */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
@@ -506,7 +459,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         </div>
       </div>
 
-      {/* Guide des touches & Coordonnées HUD */}
       <div style={{
         position: 'absolute',
         bottom: 20,
@@ -521,7 +473,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         pointerEvents: 'none'
       }}>
         <div style={{ fontWeight: 'bold', color: '#facc15', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Shield size={14} /> Guide de Déplacement ({viewMode === 'top-down' ? 'Top-Down' : 'Side-View'})
+          <Shield size={14} /> Contrôles ({viewMode === 'top-down' ? 'Top-Down' : 'Side-View'})
         </div>
         {viewMode === 'top-down' ? (
           <div>• <b>Z, Q, S, D</b> ou <b>Flèches</b> : Déplacement 8 directions</div>
@@ -536,7 +488,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         </div>
       </div>
 
-      {/* Télémétrie Réseau & Moteur */}
       <div style={{
         position: 'absolute',
         bottom: 20,
