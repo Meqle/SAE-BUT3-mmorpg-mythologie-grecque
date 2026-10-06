@@ -1,4 +1,4 @@
-﻿export type RealmType = "olympus" | "elysium" | "tartarus";
+export type RealmType = "olympus" | "elysium" | "tartarus";
 
 export interface ServerInfo {
   id: string;

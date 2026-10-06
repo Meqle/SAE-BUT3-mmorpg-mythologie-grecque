@@ -8,8 +8,7 @@ COPY packages/shared/package.json packages/shared/package.json
 RUN npm ci
 
 COPY . .
-RUN npm run build --workspace @greek-myth/client \
-    && npm run build --workspace @greek-myth/server
+RUN npm run build
 
 FROM build AS production-dependencies
 RUN npm prune --omit=dev
@@ -19,6 +18,7 @@ ENV NODE_ENV=production
 ENV PORT=3001
 WORKDIR /app
 COPY --from=production-dependencies /app/node_modules ./node_modules
+COPY --from=build /app/packages/shared ./packages/shared
 COPY --from=build /app/packages/server/package.json ./packages/server/package.json
 COPY --from=build /app/packages/server/dist ./packages/server/dist
 EXPOSE 3001

@@ -1,77 +1,100 @@
-﻿# Feuille de route et planification du projet (SAE BUT3)
+# Feuille de route et planification du projet (SAE BUT3)
 
-Ce document détaille la répartition des tâches, l'état d'avancement et les contrats d'interfaces entre les trois pôles du projet.
+Ce document détaille la répartition des tâches, l'état d'avancement, la stratégie DevOps et les contrats d'interfaces entre les pôles du projet.
 
 ---
 
 ## 1. Pôle Développement (Client & Moteur de jeu)
 
-Responsable : Développement frontend, moteur 2D, interface et rendu.
+Responsable : Développement frontend, moteur 2D PixiJS, interface utilisateur et intégration.
 Dossier principal : `packages/client/`
 
 ### Tâches réalisées :
-- [x] Initialisation de l'arborescence monorepo et configuration TypeScript / Vite.
-- [x] Écran titre et interface du Lobby (sélection de serveur et de divinité tutélaire).
+- [x] Initialisation de l'architecture monorepo et configuration TypeScript / Vite.
+- [x] Écran titre et interface du Lobby en pixel art (sélection de serveur, panthéon, dons divins).
 - [x] Intégration du moteur PixiJS dans React.
-- [x] Déplacement de base en vue du dessus (8 directions, vélocité, caméra fluide).
+- [x] Moteur de déplacement en vue du dessus (8 directions, normalisation diagonale, caméra fluide).
 - [x] Prototype de transition vers la vue de profil (gravité, plateformes, saut).
+- [x] Intégration du client réseau temps réel (connexion WebSocket, prédiction locale, réconciliation avec snapshots serveur, rendu multi-joueurs).
 
 ### Tâches à venir :
-- [ ] Remplacer les formes géométriques par des spritesheets 2D (héros, décors du mont Olympe).
-- [ ] Système d'animations (marche, saut, idle, compétences).
+- [ ] Remplacement des formes géométriques par des spritesheets 2D (héros, décors du mont Olympe).
+- [ ] Système d'animations par état (marche, saut, course, idle, compétences).
 - [ ] Gestion des masques de collision (tilesets / obstacles de la carte).
 - [ ] Interface en jeu (HUD : barre de vie, niveau, endurance, chat).
-- [ ] Intégration du client réseau (écoute des événements WebSocket fournis par le pôle Réseau).
-- [ ] Packaging Desktop en fin de projet (intégration Tauri / Electron pour générer l'exécutable).
+- [ ] Mécanique des défis de boss en vue de profil (énigmes, plateformes, artefacts d'affaiblissement).
+- [ ] Packaging Desktop en fin de projet (intégration Tauri / Electron pour exécutable natif).
 
 ---
 
 ## 2. Pôle Réseau (Architecture Client-Serveur & Synchronisation)
 
-Responsable : Communication temps réel, synchronisation d'état et gestion des instances.
+Responsable : Communication temps réel, synchronisation d'état et gestion des instances de jeu.
 Dossier principal : `packages/server/`
 
-### Tâches à réaliser :
-- [x] Mise en place du serveur WebSocket (`ws`, endpoint `/ws`).
-- [x] Définition de la boucle de jeu serveur (tickrate à 20 Hz).
-- [x] Gestion des salles / rooms en mémoire (une salle par serveur sélectionné).
-- [x] Réception des inputs clients (déplacements) et validation côté serveur.
-- [x] Diffusion de l'état du monde (`WORLD_TICK`) à tous les clients d'une salle.
-- [ ] Gestion des déconnexions et reconnexions.
-- [ ] Implémentation du système de chat textuel entre joueurs de la même salle.
-- [x] Déploiement Docker Compose du serveur et du client derrière Nginx.
+### Tâches réalisées :
+- [x] Serveur WebSocket opérationnel (`ws`, point d'entrée `/ws`).
+- [x] Boucle de simulation autoritaire côté serveur à 20 ticks par seconde.
+- [x] Gestion des salles en mémoire (`Map<roomId, Map<playerId, PlayerSession>>`).
+- [x] Réception des entrées clavier clients (`PLAYER_INPUT`) et validation stricte côté serveur.
+- [x] Diffusion périodique de l'état du monde (`WORLD_TICK`) à tous les clients d'une salle.
+- [x] Prise en charge des déconnexions (nettoyage de session et suppression des salles vides).
+- [x] Sécurisation de base (limitation de débit à 60 msg/s, taille max 4 Ko, filtrage Origin).
+
+### Tâches à venir :
+- [ ] Gestion de la reconnexion avec restauration de session.
+- [ ] Système de chat textuel en temps réel entre joueurs d'une même instance.
+- [ ] Optimisation de la bande passante (delta snapshots et culling spatial selon la portée de vue).
+- [ ] Synchronisation des états de boss et d'artefacts d'arène.
 
 ---
 
 ## 3. Pôle Base de Données (Persistance & API REST)
 
-Responsable : Modélisation des données, persistance et sécurité des comptes.
-Dossier principal : `packages/server/` (dossiers `db/`, `models/`, `routes/`)
+Responsable : Modélisation des données, persistance PostgreSQL et API REST d'authentification.
+Dossier principal : `packages/server/` (`src/db/`, `src/routes/`)
 
-### Tâches à réaliser :
-- [ ] Conception du schéma relationnel (MCD/MLD) :
-  - Table `users` (id, email, mot de passe haché, date de création).
-  - Table `characters` (id, user_id, nom, dieu_tutelaire, niveau, pv, position_x, position_y, salle_actuelle).
-  - Table `inventories` & `items` (si gestion d'équipement/objets).
-- [ ] Choix de la technologie (PostgreSQL recommandé + ORM Prisma ou Drizzle).
-- [ ] Création des migrations SQL et scripts de seed.
-- [ ] Développement de l'API REST d'authentification :
-  - `POST /api/auth/register` (création de compte sécurisée avec bcrypt).
-  - `POST /api/auth/login` (vérification des identifiants et génération de token JWT).
-  - `GET /api/characters` (récupération des personnages du joueur connecté).
-- [ ] Mise en place d'un cache optionnel (Redis) pour la liste des serveurs ou sessions actives.
+### Tâches réalisées :
+- [x] Conception du schéma relationnel (MCD / MLD complet) :
+  - Tables principales : `COMPTE`, `PERSONNAGE`, `CLASSE`, `ZONE`, `BOSS`, `VICTOIRE_BOSS`.
+  - Tables de progression et inventaire : `PROGRESSION_QUETE`, `OBJET`, `INSTANCE_OBJET`.
+  - Tables multijoueurs : `SESSION_JEU`, `INTERACTION`, `ECHANGE`, `LIGNE_ECHANGE`, `CLASSEMENT_SAISON`.
+
+### Tâches à venir :
+- [ ] Initialisation de la base PostgreSQL (schéma DDL, scripts de migration et fixtures/seed).
+- [ ] Intégration d'un ORM ou query builder adapté (Prisma / Drizzle / Kysely).
+- [ ] Développement des endpoints REST d'authentification (`POST /api/auth/register`, `POST /api/auth/login` avec hachage bcrypt et JWT).
+- [ ] Endpoints de gestion de personnages et inventaire (`GET /api/characters`, `POST /api/characters`).
+- [ ] Liaison de la persistance avec le serveur WebSocket (chargement du personnage à l'entrée en salle, sauvegarde lors de la déconnexion).
 
 ---
 
-## 4. Contrats d'interfaces et travail en équipe
+## 4. Pôle DevOps & Qualité de Code
 
-Pour que chaque membre puisse avancer de manière autonome (et éventuellement s'aider d'un assistant de code) sans casser le travail des autres :
+Responsable : Intégration continue, conteneurisation, normes Git et flux de livraison.
+Fichiers : `Dockerfile`, `docker-compose.yml`, `.github/workflows/`
+
+### Tâches réalisées :
+- [x] Conteneurisation complète avec Docker (build multi-stage Node.js 24 + image Nginx Alpine pour le client).
+- [x] Orchestration Docker Compose (service client sur port 8080, service serveur interne sur port 3001, reverse-proxy Nginx avec proxy WebSocket).
+- [x] Configuration du reverse-proxy pour servir le frontend statique et relayer `/ws` et `/api`.
+- [x] Harmonisation du build monorepo (compilation TypeScript de `@greek-myth/shared` en ESM).
+
+### Tâches à venir :
+- [ ] Mise en place des règles de protection de branches GitHub (Branch Protection Rules sur `main` et `dev`).
+- [ ] Obligation des Pull Requests et revue de code avant tout merge.
+- [ ] Pipeline CI GitHub Actions (validation automatique des builds `shared`, `server` et `client`).
+- [ ] Harmonisation des conventions de nommage des branches Git (`feat/...`, `fix/...`).
+
+---
+
+## 5. Contrats d'interfaces et règles de collaboration
 
 1. **Le point central est `packages/shared`** :
-   - Tous les types TypeScript (structures des paquets réseau, modèles de données d'un joueur, liste des dieux) doivent être définis dans ce dossier.
-   - Avant de coder une fonctionnalité réseau ou base de données, valider les types partagés ensemble.
+   - Tous les types TypeScript (structures de paquets réseau, modèles de données, énumérations) sont partagés et versionnés ici.
+   - Toute modification de structure de données doit être validée en amont dans `packages/shared`.
 
-2. **Indépendance des modules** :
-   - Le pôle **Développement** écoute des événements (ex: `onPlayerMoved`, `onWorldUpdate`) sans dépendre de l'implémentation interne du serveur.
-   - Le pôle **Réseau** manipule des états en mémoire sans avoir besoin de connaître le rendu PixiJS.
-   - Le pôle **Base de données** expose des fonctions d'accès aux données (ou routes REST) consommées par le serveur de jeu.
+2. **Flux Git et livraisons** :
+   - La branche `main` est réservée aux livrables stables et présentations.
+   - La branche `dev` centralise les développements intégrés.
+   - Toute nouvelle fonctionnalité fait l'objet d'une branche dédiée (`feat/<nom-feature>`) et d'une Pull Request relue avant fusion.
