@@ -32,13 +32,14 @@ Responsable : Communication temps réel, synchronisation d'état et gestion des 
 Dossier principal : `packages/server/`
 
 ### Tâches à réaliser :
-- [ ] Mise en place du serveur WebSocket (ex: `ws` ou `socket.io`).
-- [ ] Définition de la boucle de jeu serveur (tickrate à 20 ou 30 Hz).
-- [ ] Gestion des salles / rooms (instanciation d'un monde : Olympe, Élysée, Tartare).
-- [ ] Réception des inputs clients (déplacements) et validation côté serveur (anti-triche).
-- [ ] Diffusion de l'état du monde (`WORLD_TICK`) à tous les clients connectés.
+- [x] Mise en place du serveur WebSocket (`ws`, endpoint `/ws`).
+- [x] Définition de la boucle de jeu serveur (tickrate à 20 Hz).
+- [x] Gestion des salles / rooms en mémoire (une salle par serveur sélectionné).
+- [x] Réception des inputs clients (déplacements) et validation côté serveur.
+- [x] Diffusion de l'état du monde (`WORLD_TICK`) à tous les clients d'une salle.
 - [ ] Gestion des déconnexions et reconnexions.
 - [ ] Implémentation du système de chat textuel entre joueurs de la même salle.
+- [x] Déploiement Docker Compose du serveur et du client derrière Nginx.
 
 ---
 
