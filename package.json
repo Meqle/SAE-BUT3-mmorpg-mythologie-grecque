@@ -10,7 +10,7 @@
     "dev": "concurrently -n \"SERVER,CLIENT\" -c \"cyan,magenta\" \"npm run dev -w @greek-myth/server\" \"npm run dev -w @greek-myth/client\"",
     "dev:client": "npm run dev -w @greek-myth/client",
     "dev:server": "npm run dev -w @greek-myth/server",
-    "build": "npm run build --workspaces"
+    "build": "npm run build -w @greek-myth/shared && npm run build -w @greek-myth/server && npm run build -w @greek-myth/client"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

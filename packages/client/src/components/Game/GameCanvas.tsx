@@ -1,6 +1,6 @@
 ﻿import React, { useEffect, useRef, useState } from 'react';
 import { Application, Graphics, Container, Text, TextStyle } from 'pixi.js';
-import { GodAffinity, GODS_LORE, ServerInfo, ViewMode } from '@greek-myth/shared';
+import { GodAffinity, GODS_LORE, PlayerState, ServerInfo, ViewMode } from '@greek-myth/shared';
 import { ArrowLeft, Eye, Zap, Shield } from 'lucide-react';
 
 interface GameCanvasProps {
@@ -21,6 +21,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const [fps, setFps] = useState<number>(60);
   const [coords, setCoords] = useState<{ x: number; y: number }>({ x: 400, y: 300 });
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [networkStatus, setNetworkStatus] = useState('Connexion…');
+  const socketRef = useRef<WebSocket | null>(null);
+  const joinedRef = useRef(false);
 
   const viewModeRef = useRef<ViewMode>('top-down');
   viewModeRef.current = viewMode;
@@ -32,13 +35,70 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
     let app: Application | null = null;
     let isCleanedUp = false;
+    let playerId: string | null = null;
+    const worldPlayers = new Map<string, PlayerState>();
+
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const socket = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
+    socketRef.current = socket;
+
+    socket.addEventListener('open', () => {
+      socket.send(JSON.stringify({
+        type: 'JOIN_REQUEST',
+        timestamp: Date.now(),
+        roomId: server.id,
+        username: heroName,
+        god: selectedGod
+      }));
+    });
+
+    socket.addEventListener('message', (event) => {
+      try {
+        const packet: unknown = JSON.parse(String(event.data));
+        if (!packet || typeof packet !== 'object' || !('type' in packet)) return;
+        const message = packet as {
+          type: string;
+          message?: string;
+          playerId?: string;
+          players?: Record<string, PlayerState>;
+        };
+
+        if (message.type === 'ERROR') {
+          setNetworkStatus(message.message || 'Erreur de connexion');
+        } else if (message.type === 'JOIN_RESPONSE' && message.playerId && message.players) {
+          playerId = message.playerId;
+          joinedRef.current = true;
+          worldPlayers.clear();
+          Object.entries(message.players).forEach(([id, playerState]) => worldPlayers.set(id, playerState));
+          setNetworkStatus('Connecté');
+          if (viewModeRef.current !== 'top-down') {
+            socket.send(JSON.stringify({
+              type: 'SWITCH_VIEW_REQUEST',
+              timestamp: Date.now(),
+              viewMode: viewModeRef.current
+            }));
+          }
+        } else if (message.type === 'WORLD_TICK' && message.players) {
+          worldPlayers.clear();
+          Object.entries(message.players).forEach(([id, playerState]) => worldPlayers.set(id, playerState));
+        }
+      } catch (error) {
+        console.error('Message réseau invalide :', error);
+        setNetworkStatus('Message réseau invalide');
+      }
+    });
+
+    socket.addEventListener('close', () => {
+      if (!isCleanedUp) setNetworkStatus('Déconnecté');
+    });
+    socket.addEventListener('error', () => setNetworkStatus('Serveur inaccessible'));
 
     const player = {
       x: 400,
       y: 300,
       vx: 0,
       vy: 0,
-      speed: 6,
+      speed: 220,
       isGrounded: false,
       color: parseInt(godLore.color.replace('#', '0x'), 16)
     };
@@ -102,6 +162,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const decorLayer = new Graphics();
         const entityLayer = new Container();
         const fxLayer = new Container();
+        const remotePlayers = new Map<string, Container>();
 
         worldContainer.addChild(backgroundLayer);
         worldContainer.addChild(decorLayer);
@@ -137,6 +198,54 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const sparks: { x: number; y: number; vx: number; vy: number; life: number; maxLife: number; color: number }[] = [];
         const sparkGraphics = new Graphics();
         fxLayer.addChild(sparkGraphics);
+
+        const syncRemotePlayers = () => {
+          for (const [id, playerState] of worldPlayers) {
+            if (id === playerId) continue;
+
+            let remote = remotePlayers.get(id);
+            if (!remote) {
+              remote = new Container();
+              const color = parseInt(GODS_LORE[playerState.god].color.replace('#', '0x'), 16);
+              const aura = new Graphics();
+              aura.circle(0, 0, 26);
+              aura.fill({ color, alpha: 0.25 });
+              const body = new Graphics();
+              body.circle(0, 0, 16);
+              body.fill({ color: 0x0f172a });
+              body.stroke({ width: 3, color: 0xfacc15 });
+              body.roundRect(-7, -9, 14, 18, 4);
+              body.fill({ color });
+              const label = new Text({
+                text: playerState.username,
+                style: new TextStyle({
+                  fontFamily: 'Outfit, sans-serif',
+                  fontSize: 12,
+                  fontWeight: 'bold',
+                  fill: 0xffffff,
+                  dropShadow: { alpha: 0.9, blur: 4, color: 0x000000, distance: 1 }
+                })
+              });
+              label.anchor.set(0.5, 1);
+              label.position.set(0, -27);
+              remote.addChild(aura, body, label);
+              entityLayer.addChild(remote);
+              remotePlayers.set(id, remote);
+            }
+            remote.position.set(
+              remote.x + (playerState.position.x - remote.x) * 0.45,
+              remote.y + (playerState.position.y - remote.y) * 0.45
+            );
+          }
+
+          for (const [id, remote] of remotePlayers) {
+            if (!worldPlayers.has(id)) {
+              entityLayer.removeChild(remote);
+              remote.destroy({ children: true });
+              remotePlayers.delete(id);
+            }
+          }
+        };
 
         const renderEnvironment = (mode: ViewMode) => {
           backgroundLayer.clear();
@@ -231,8 +340,28 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         let lastMode = viewModeRef.current;
         let lastTime = performance.now();
         let frameCount = 0;
+        let inputElapsed = 0;
+        let previousJump = false;
 
-        app.ticker.add(() => {
+        app.ticker.add((ticker) => {
+          inputElapsed += ticker.deltaMS;
+          if (inputElapsed >= 50) {
+            inputElapsed %= 50;
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({
+                type: 'PLAYER_INPUT',
+                timestamp: Date.now(),
+                keys: {
+                  up: keys.ArrowUp || keys.KeyW,
+                  down: keys.ArrowDown || keys.KeyS,
+                  left: keys.ArrowLeft || keys.KeyA,
+                  right: keys.ArrowRight || keys.KeyD,
+                  jump: keys.Space || keys.ArrowUp || keys.KeyW
+                }
+              }));
+            }
+          }
+
           const currentMode = viewModeRef.current;
 
           if (currentMode !== lastMode) {
@@ -251,50 +380,39 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           const isRight = keys.ArrowRight || keys.KeyD;
           const isJump = keys.Space || isUp;
 
+          const deltaSeconds = Math.min(ticker.deltaMS / 1000, 0.05);
+          const frameFactor = deltaSeconds * 60;
+          const acceleration = 1 - Math.pow(0.75, frameFactor);
+          const authoritativePlayer = playerId ? worldPlayers.get(playerId) : undefined;
+          const inputX = Number(isRight) - Number(isLeft);
+          const inputY = Number(isDown) - Number(isUp);
+          const wasGrounded = player.isGrounded;
+
           if (currentMode === 'top-down') {
-            let targetVx = 0;
-            let targetVy = 0;
-
-            if (isLeft) targetVx -= player.speed;
-            if (isRight) targetVx += player.speed;
-            if (isUp) targetVy -= player.speed;
-            if (isDown) targetVy += player.speed;
-
-            if (targetVx !== 0 && targetVy !== 0) {
-              targetVx *= 0.7071;
-              targetVy *= 0.7071;
-            }
-
-            player.vx += (targetVx - player.vx) * 0.25;
-            player.vy += (targetVy - player.vy) * 0.25;
-
-            player.x += player.vx;
-            player.y += player.vy;
-
+            const length = Math.hypot(inputX, inputY) || 1;
+            const targetVx = (inputX / length) * player.speed;
+            const targetVy = (inputY / length) * player.speed;
+            player.vx += (targetVx - player.vx) * acceleration;
+            player.vy += (targetVy - player.vy) * acceleration;
+            player.x += player.vx * deltaSeconds;
+            player.y += player.vy * deltaSeconds;
+            player.isGrounded = true;
           } else {
-            const groundY = 480 - 24;
-
-            let targetVx = 0;
-            if (isLeft) targetVx -= player.speed;
-            if (isRight) targetVx += player.speed;
-            player.vx += (targetVx - player.vx) * 0.25;
-            player.x += player.vx;
-
-            player.vy += 0.7;
-            player.y += player.vy;
-
-            if (player.y >= groundY) {
-              player.y = groundY;
+            player.vx += (inputX * player.speed - player.vx) * acceleration;
+            player.x += player.vx * deltaSeconds;
+            player.vy += 900 * deltaSeconds;
+            player.y += player.vy * deltaSeconds;
+            player.isGrounded = player.y >= 456;
+            if (player.isGrounded) {
+              player.y = 456;
               player.vy = 0;
-              player.isGrounded = true;
-            } else {
+            }
+            if (isJump && !previousJump && player.isGrounded) {
+              player.vy = -480;
               player.isGrounded = false;
             }
 
-            if (isJump && player.isGrounded) {
-              player.vy = -14;
-              player.isGrounded = false;
-
+            if (isJump && !previousJump && wasGrounded) {
               for (let i = 0; i < 10; i++) {
                 sparks.push({
                   x: player.x + (Math.random() - 0.5) * 20,
@@ -308,8 +426,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               }
             }
           }
+          previousJump = isJump;
 
+          if (authoritativePlayer) {
+            const correction = 1 - Math.pow(0.65, frameFactor);
+            player.x += (authoritativePlayer.position.x - player.x) * correction;
+            player.y += (authoritativePlayer.position.y - player.y) * correction;
+            player.vx += (authoritativePlayer.position.vx - player.vx) * correction;
+            player.vy += (authoritativePlayer.position.vy - player.vy) * correction;
+          }
           playerContainer.position.set(player.x, player.y);
+          syncRemotePlayers();
 
           playerAura.clear();
           playerAura.circle(0, 0, 30);
@@ -380,6 +507,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
     return () => {
       isCleanedUp = true;
+      joinedRef.current = false;
+      socket.close();
+      if (socketRef.current === socket) socketRef.current = null;
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       if (app) {
@@ -391,6 +521,17 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       }
     };
   }, [selectedGod, heroName]);
+
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (joinedRef.current && socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({
+        type: 'SWITCH_VIEW_REQUEST',
+        timestamp: Date.now(),
+        viewMode
+      }));
+    }
+  }, [viewMode]);
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: '#0b0f19' }}>
@@ -479,6 +620,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
             </div>
             <div style={{ fontSize: 14, fontWeight: 'bold', color: '#facc15', fontFamily: 'Cinzel, serif' }}>
               {server.name} ({server.realm.toUpperCase()})
+            </div>
+            <div style={{ fontSize: 11, color: networkStatus === 'Connecté' ? '#4ade80' : '#fbbf24' }}>
+              Réseau : {networkStatus}
             </div>
           </div>
 

@@ -1,4 +1,4 @@
-﻿export type RealmType = "olympus" | "elysium" | "tartarus";
+export type RealmType = "olympus" | "elysium" | "tartarus";
 
 export interface ServerInfo {
   id: string;
@@ -124,6 +124,19 @@ export interface BasePacket {
   timestamp: number;
 }
 
+export interface JoinRequestPacket extends BasePacket {
+  type: PacketType.JOIN_REQUEST;
+  roomId: string;
+  username: string;
+  god: GodAffinity;
+}
+
+export interface JoinResponsePacket extends BasePacket {
+  type: PacketType.JOIN_RESPONSE;
+  playerId: string;
+  players: Record<string, PlayerState>;
+}
+
 export interface PlayerInputPacket extends BasePacket {
   type: PacketType.PLAYER_INPUT;
   keys: {
@@ -135,8 +148,18 @@ export interface PlayerInputPacket extends BasePacket {
   };
 }
 
+export interface SwitchViewRequestPacket extends BasePacket {
+  type: PacketType.SWITCH_VIEW_REQUEST;
+  viewMode: ViewMode;
+}
+
 export interface WorldTickPacket extends BasePacket {
   type: PacketType.WORLD_TICK;
   tickNumber: number;
   players: Record<string, PlayerState>;
+}
+
+export interface ServerErrorPacket extends BasePacket {
+  type: PacketType.ERROR;
+  message: string;
 }
