@@ -42,6 +42,10 @@ const DEFAULT_SERVERS: ServerInfo[] = [
   }
 ];
 
+// meme regle que le serveur : pas de caracteres de controle, 20 caracteres max
+const MAX_NAME_LENGTH = 20;
+const cleanName = (name: string) => name.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, MAX_NAME_LENGTH);
+
 export const App: React.FC = () => {
   const [inGame, setInGame] = useState<boolean>(false);
   const [servers] = useState<ServerInfo[]>(DEFAULT_SERVERS);
@@ -59,14 +63,14 @@ export const App: React.FC = () => {
           selectedGod={selectedGod}
           onSelectGod={setSelectedGod}
           heroName={heroName}
-          onChangeHeroName={setHeroName}
+          onChangeHeroName={(name) => setHeroName(cleanName(name))}
           onEnterGame={() => setInGame(true)}
         />
       ) : (
         <GameCanvas
           server={selectedServer}
           selectedGod={selectedGod}
-          heroName={heroName}
+          heroName={heroName.trim()}
           onLeave={() => setInGame(false)}
         />
       )}

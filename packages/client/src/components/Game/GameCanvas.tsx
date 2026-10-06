@@ -126,8 +126,18 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (keys.hasOwnProperty(e.code)) keys[e.code] = false;
     };
 
+    // si la fenetre perd le focus, on relache toutes les touches
+    const releaseAllKeys = () => {
+      for (const k in keys) keys[k] = false;
+    };
+    const handleVisibility = () => {
+      if (document.hidden) releaseAllKeys();
+    };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', releaseAllKeys);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     const initPixi = async () => {
       try {
@@ -163,6 +173,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         const entityLayer = new Container();
         const fxLayer = new Container();
         const remotePlayers = new Map<string, Container>();
+        const remoteLabels = new Map<string, Text>();
 
         worldContainer.addChild(backgroundLayer);
         worldContainer.addChild(decorLayer);
@@ -217,7 +228,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               body.roundRect(-7, -9, 14, 18, 4);
               body.fill({ color });
               const label = new Text({
-                text: playerState.username,
+                text: `${playerState.username} (${GODS_LORE[playerState.god].name})`,
                 style: new TextStyle({
                   fontFamily: 'Outfit, sans-serif',
                   fontSize: 12,
@@ -231,6 +242,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               remote.addChild(aura, body, label);
               entityLayer.addChild(remote);
               remotePlayers.set(id, remote);
+              remoteLabels.set(id, label);
             }
             remote.position.set(
               remote.x + (playerState.position.x - remote.x) * 0.45,
@@ -243,6 +255,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
               entityLayer.removeChild(remote);
               remote.destroy({ children: true });
               remotePlayers.delete(id);
+              remoteLabels.delete(id);
             }
           }
         };
@@ -438,6 +451,24 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
           playerContainer.position.set(player.x, player.y);
           syncRemotePlayers();
 
+          // on decale les noms vers le haut quand deux joueurs sont proches
+          const tags: { x: number; y: number; text: Text; baseY: number }[] = [
+            { x: player.x, y: player.y, text: nameTag, baseY: -32 }
+          ];
+          for (const [id, remote] of remotePlayers) {
+            const label = remoteLabels.get(id);
+            if (label) tags.push({ x: remote.x, y: remote.y, text: label, baseY: -27 });
+          }
+          tags.sort((a, b) => a.y - b.y);
+          for (let i = 0; i < tags.length; i++) {
+            let decalage = 0;
+            for (let j = 0; j < i; j++) {
+              const proche = Math.abs(tags[i].x - tags[j].x) < 120 && Math.abs(tags[i].y - tags[j].y) < 40;
+              if (proche) decalage++;
+            }
+            tags[i].text.position.y = tags[i].baseY - decalage * 18;
+          }
+
           playerAura.clear();
           playerAura.circle(0, 0, 30);
           playerAura.fill({ color: player.color, alpha: 0.3 });
@@ -512,6 +543,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       if (socketRef.current === socket) socketRef.current = null;
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', releaseAllKeys);
+      document.removeEventListener('visibilitychange', handleVisibility);
       if (app) {
         try {
           app.destroy(true, { children: true });
