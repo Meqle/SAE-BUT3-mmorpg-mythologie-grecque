@@ -7,6 +7,7 @@
     "packages/*"
   ],
   "scripts": {
+    "predev": "npm run build -w @greek-myth/shared",
     "dev": "concurrently -n \"SERVER,CLIENT\" -c \"cyan,magenta\" \"npm run dev -w @greek-myth/server\" \"npm run dev -w @greek-myth/client\"",
     "dev:client": "npm run dev -w @greek-myth/client",
     "dev:server": "npm run dev -w @greek-myth/server",
