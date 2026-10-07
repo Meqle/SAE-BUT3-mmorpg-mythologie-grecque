@@ -1,8 +1,10 @@
 // decor de la vue de profil : interieur de temple avec colonnes et frise
+// regle : un filet dore = on peut marcher dessus, le reste est du decor du fond
 import { Graphics } from 'pixi.js';
 import { MAPS } from '@greek-myth/shared';
 import { COLORS } from './palette';
-import { drawFrame, drawGate, drawSlab } from './props';
+import { drawGateSide } from './gates';
+import { drawFrame, drawSlab } from './props';
 
 const COLUMN_X = [200, 440, 680];
 
@@ -28,9 +30,10 @@ export function drawSideView(background: Graphics, decor: Graphics): void {
     decor.fill({ color: COLORS.sand });
     decor.stroke({ width: 2, color: COLORS.stoneDark });
     decor.rect(x - 28, 90, 56, 16);
-    decor.fill({ color: COLORS.gold });
+    decor.fill({ color: COLORS.sandDark });
+    decor.stroke({ width: 2, color: COLORS.stoneDark });
   }
 
   for (const solid of map.solids) drawSlab(decor, solid);
-  for (const portal of map.portals) drawGate(decor, portal);
+  for (const portal of map.portals) drawGateSide(decor, portal);
 }

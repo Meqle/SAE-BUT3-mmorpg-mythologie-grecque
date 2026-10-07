@@ -1,8 +1,10 @@
 // decor de la vue du dessus : place de temple avec un disque solaire au centre
+// (les tours de porte et le cadre bloquent le joueur, d'ou leur filet dore)
 import { Graphics } from 'pixi.js';
 import { MAPS } from '@greek-myth/shared';
 import { COLORS } from './palette';
-import { drawFrame, drawGate, drawSlab } from './props';
+import { drawGateFromAbove } from './gates';
+import { drawColumnTop, drawFrame, drawSlab } from './props';
 
 const TILE = 40;
 
@@ -36,6 +38,9 @@ export function drawTopDown(background: Graphics, decor: Graphics): void {
   decor.circle(cx, cy, 28);
   decor.fill({ color: COLORS.gold });
 
-  for (const pillar of map.solids) drawSlab(decor, pillar);
-  for (const portal of map.portals) drawGate(decor, portal);
+  for (const solid of map.solids) {
+    if (solid.column) drawColumnTop(decor, solid);
+    else drawSlab(decor, solid);
+  }
+  for (const portal of map.portals) drawGateFromAbove(decor, portal);
 }

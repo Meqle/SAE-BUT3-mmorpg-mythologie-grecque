@@ -15,30 +15,41 @@ export interface Portal extends Rect {
   spawnY: number;
 }
 
+// obstacle qui bloque le joueur ; column = dessine comme une colonne vue de dessus
+export interface Solid extends Rect {
+  column?: boolean;
+}
+
 export interface GameMap {
   width: number;
   height: number;
-  solids: Rect[]; // obstacles qui bloquent le joueur
+  solids: Solid[];
   portals: Portal[];
 }
 
 // ou le joueur apparait en entrant dans le jeu (vue du dessus)
 export const SPAWN_POINT = { x: 480, y: 500 };
 
+// colonne de 40 px centree en (cx, cy)
+const pillar = (cx: number, cy: number): Solid => ({ x: cx - 20, y: cy - 20, w: 40, h: 40, column: true });
+
 export const MAPS: Record<ViewMode, GameMap> = {
-  // vue du dessus : une place avec 4 piliers et une porte de chaque cote
+  // vue du dessus : une place avec 8 colonnes autour du disque central
+  // et une porte (entre deux tours de pierre) au milieu de chaque mur
   'top-down': {
     width: 960,
     height: 600,
     solids: [
-      { x: 310, y: 180, w: 40, h: 40 },
-      { x: 610, y: 180, w: 40, h: 40 },
-      { x: 310, y: 380, w: 40, h: 40 },
-      { x: 610, y: 380, w: 40, h: 40 }
+      pillar(665, 377), pillar(557, 485), pillar(403, 485), pillar(295, 377),
+      pillar(295, 223), pillar(403, 115), pillar(557, 115), pillar(665, 223),
+      { x: 0, y: 236, w: 72, h: 24 }, // tours de la porte gauche
+      { x: 0, y: 340, w: 72, h: 24 },
+      { x: 888, y: 236, w: 72, h: 24 }, // tours de la porte droite
+      { x: 888, y: 340, w: 72, h: 24 }
     ],
     portals: [
-      { x: 24, y: 260, w: 64, h: 80, to: 'side-view', spawnX: 200, spawnY: 456 },
-      { x: 872, y: 260, w: 64, h: 80, to: 'side-view', spawnX: 760, spawnY: 456 }
+      { x: 0, y: 260, w: 72, h: 80, to: 'side-view', spawnX: 200, spawnY: 456 },
+      { x: 888, y: 260, w: 72, h: 80, to: 'side-view', spawnX: 760, spawnY: 456 }
     ]
   },
 
@@ -55,8 +66,8 @@ export const MAPS: Record<ViewMode, GameMap> = {
       { x: 600, y: 412, w: 50, h: 60 } // bloc a sauter
     ],
     portals: [
-      { x: 24, y: 392, w: 64, h: 80, to: 'top-down', spawnX: 170, spawnY: 300 },
-      { x: 872, y: 392, w: 64, h: 80, to: 'top-down', spawnX: 790, spawnY: 300 }
+      { x: 28, y: 384, w: 56, h: 88, to: 'top-down', spawnX: 170, spawnY: 300 },
+      { x: 876, y: 384, w: 56, h: 88, to: 'top-down', spawnX: 790, spawnY: 300 }
     ]
   }
 };

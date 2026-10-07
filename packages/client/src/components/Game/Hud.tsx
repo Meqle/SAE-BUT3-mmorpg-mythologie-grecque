@@ -97,7 +97,7 @@ export function Hud({ server, god, status, viewMode, coords, fps, loadError, onL
           </div>
         )}
         <div style={{ marginTop: 4, color: '#94a3b8', fontSize: 11 }}>
-          • Passez une <b>porte dorée</b> pour changer de vue
+          • Passez une <b>porte</b> pour changer de vue
         </div>
       </div>
 
