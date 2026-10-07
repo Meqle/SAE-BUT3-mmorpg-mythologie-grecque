@@ -45,7 +45,7 @@ export function createDust() {
         p.life--;
         const t = p.life / p.maxLife;
         graphics.circle(p.x, p.y, 2 + (1 - t) * 4);
-        graphics.fill({ color: COLORS.cream, alpha: t * 0.5 });
+        graphics.fill({ color: COLORS.marble, alpha: t * 0.6 });
         if (p.life <= 0) puffs.splice(i, 1);
       }
     }

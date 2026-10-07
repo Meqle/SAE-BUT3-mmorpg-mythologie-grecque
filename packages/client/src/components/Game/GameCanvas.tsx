@@ -53,7 +53,7 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
       app = new Application();
       await app.init({
         resizeTo: window,
-        backgroundColor: COLORS.glaze,
+        backgroundColor: COLORS.sea,
         antialias: true,
         preference: 'webgl',
         autoDensity: true,
@@ -168,7 +168,7 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
         const walking = mode === 'top-down' ? moving : moving && player.isGrounded;
         if (walking) dust.trail(player.x, mode === 'top-down' ? player.y + 8 : player.y + 16);
         dust.update();
-        glow.alpha = 0.6 + 0.3 * Math.sin(performance.now() / 400); // les portes respirent
+        glow.alpha = 0.75 + 0.25 * Math.sin(performance.now() / 400); // les portes respirent
 
         // 5. camera qui suit le joueur sans sortir de la carte
         const map = MAPS[mode];
@@ -214,7 +214,7 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
   }, [viewMode]);
 
   return (
-    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: css(COLORS.glaze) }}>
+    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: css(COLORS.sea) }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
       <Hud
         server={server}

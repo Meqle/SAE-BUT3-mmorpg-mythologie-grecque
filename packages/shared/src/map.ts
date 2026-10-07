@@ -15,9 +15,9 @@ export interface Portal extends Rect {
   spawnY: number;
 }
 
-// obstacle qui bloque le joueur ; column = dessine comme une colonne vue de dessus
+// obstacle qui bloque le joueur ; look = comment le dessiner (bloc de marbre par defaut)
 export interface Solid extends Rect {
-  column?: boolean;
+  look?: 'column' | 'olive';
 }
 
 export interface GameMap {
@@ -30,21 +30,23 @@ export interface GameMap {
 // ou le joueur apparait en entrant dans le jeu (vue du dessus)
 export const SPAWN_POINT = { x: 480, y: 500 };
 
-// colonne de 40 px centree en (cx, cy)
-const pillar = (cx: number, cy: number): Solid => ({ x: cx - 20, y: cy - 20, w: 40, h: 40, column: true });
+// colonne et olivier de 40 px centres en (cx, cy)
+const pillar = (cx: number, cy: number): Solid => ({ x: cx - 20, y: cy - 20, w: 40, h: 40, look: 'column' });
+const olive = (cx: number, cy: number): Solid => ({ x: cx - 20, y: cy - 20, w: 40, h: 40, look: 'olive' });
 
 export const MAPS: Record<ViewMode, GameMap> = {
-  // vue du dessus : une place avec 8 colonnes autour du disque central
-  // et une porte (entre deux tours de pierre) au milieu de chaque mur
+  // vue du dessus : une agora avec 8 colonnes autour de la mosaique centrale,
+  // un olivier dans chaque coin et une porte (entre deux murets) au milieu des cotes
   'top-down': {
     width: 960,
     height: 600,
     solids: [
       pillar(665, 377), pillar(557, 485), pillar(403, 485), pillar(295, 377),
       pillar(295, 223), pillar(403, 115), pillar(557, 115), pillar(665, 223),
-      { x: 0, y: 236, w: 72, h: 24 }, // tours de la porte gauche
+      olive(110, 100), olive(850, 100), olive(110, 500), olive(850, 500),
+      { x: 0, y: 236, w: 72, h: 24 }, // murets de la porte gauche
       { x: 0, y: 340, w: 72, h: 24 },
-      { x: 888, y: 236, w: 72, h: 24 }, // tours de la porte droite
+      { x: 888, y: 236, w: 72, h: 24 }, // murets de la porte droite
       { x: 888, y: 340, w: 72, h: 24 }
     ],
     portals: [
