@@ -1,7 +1,8 @@
-// petites etincelles quand le joueur bouge ou saute
+// petits nuages de poussiere quand le joueur marche, saute ou atterrit
 import { Graphics } from 'pixi.js';
+import { COLORS } from './scenes/palette';
 
-interface Spark {
+interface Puff {
   x: number;
   y: number;
   vx: number;
@@ -10,39 +11,42 @@ interface Spark {
   maxLife: number;
 }
 
-export function createSparks(color: number) {
-  const sparks: Spark[] = [];
+export function createDust() {
+  const puffs: Puff[] = [];
   const graphics = new Graphics();
 
   const add = (x: number, y: number, vx: number, vy: number, life: number) => {
-    sparks.push({ x, y, vx, vy, life, maxLife: life });
+    puffs.push({ x, y, vx, vy, life, maxLife: life });
   };
 
   return {
     graphics,
-    // trainee derriere le joueur
+    // poussiere derriere les pieds
     trail: (x: number, y: number) => {
-      if (Math.random() > 0.4) {
-        add(x + (Math.random() - 0.5) * 16, y, (Math.random() - 0.5) * 1.5, (Math.random() - 0.5) * 1.5, 24);
+      if (Math.random() > 0.75) add(x + (Math.random() - 0.5) * 12, y, (Math.random() - 0.5) * 0.6, -0.3, 22);
+    },
+    // nuage sur les cotes (saut, atterrissage)
+    burst: (x: number, y: number) => {
+      for (let i = 0; i < 8; i++) {
+        const dir = i % 2 === 0 ? 1 : -1;
+        add(x + dir * 6, y, dir * (1 + Math.random() * 1.5), -Math.random() * 0.8, 20);
       }
     },
-    // gerbe au moment du saut
-    burst: (x: number, y: number) => {
-      for (let i = 0; i < 10; i++) {
-        add(x + (Math.random() - 0.5) * 20, y, (Math.random() - 0.5) * 5, Math.random() * -3, 20);
-      }
+    // efface tout (changement de vue)
+    clear: () => {
+      puffs.length = 0;
     },
     update: () => {
       graphics.clear();
-      for (let i = sparks.length - 1; i >= 0; i--) {
-        const s = sparks[i];
-        s.x += s.vx;
-        s.y += s.vy;
-        s.life--;
-        const alpha = s.life / s.maxLife;
-        graphics.circle(s.x, s.y, 3 * alpha);
-        graphics.fill({ color, alpha });
-        if (s.life <= 0) sparks.splice(i, 1);
+      for (let i = puffs.length - 1; i >= 0; i--) {
+        const p = puffs[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life--;
+        const t = p.life / p.maxLife;
+        graphics.circle(p.x, p.y, 2 + (1 - t) * 4);
+        graphics.fill({ color: COLORS.cream, alpha: t * 0.5 });
+        if (p.life <= 0) puffs.splice(i, 1);
       }
     }
   };

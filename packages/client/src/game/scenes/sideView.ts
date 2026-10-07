@@ -1,39 +1,39 @@
-// decor de la vue de profil : interieur de temple avec colonnes et frise
-// regle : un filet dore = on peut marcher dessus, le reste est du decor du fond
+// decor de la vue de profil : la scene est peinte comme sur un vase
+// noir + contour creme = on peut marcher dessus, terre cuite foncee = decor du fond
 import { Graphics } from 'pixi.js';
 import { MAPS } from '@greek-myth/shared';
 import { COLORS } from './palette';
 import { drawGateSide } from './gates';
-import { drawFrame, drawSlab } from './props';
+import { drawFrame, drawMeander, drawSlab } from './props';
 
-const COLUMN_X = [200, 440, 680];
+const COLUMN_X = [230, 450, 750];
 
-export function drawSideView(background: Graphics, decor: Graphics): void {
+export function drawSideView(background: Graphics, decor: Graphics, glow: Graphics): void {
   const map = MAPS['side-view'];
 
-  // mur du fond
-  background.rect(0, 0, map.width, map.height);
-  background.fill({ color: COLORS.wall });
-
-  // frise en haut : bande de lapis avec des triangles dores
-  background.rect(0, 40, map.width, 30);
-  background.fill({ color: COLORS.lapis });
-  for (let x = 0; x < map.width; x += 30) {
-    background.poly([x + 4, 66, x + 15, 44, x + 26, 66]);
-  }
-  background.fill({ color: COLORS.gold });
+  // mur du fond en terre cuite et frise en meandre en haut
   drawFrame(background, map.width, map.height);
+  background.rect(0, 0, map.width, map.height);
+  background.fill({ color: COLORS.clay });
+  background.rect(0, 30, map.width, 3);
+  background.rect(0, 67, map.width, 3);
+  background.fill({ color: COLORS.clayDark });
+  drawMeander(background, 4, 40, map.width - 8, 5, COLORS.clayDark);
 
-  // colonnes du fond (le joueur passe devant)
+  // colonnes doriques du fond (le joueur passe devant)
   for (const x of COLUMN_X) {
-    decor.rect(x - 18, 100, 36, 372);
-    decor.fill({ color: COLORS.sand });
-    decor.stroke({ width: 2, color: COLORS.stoneDark });
-    decor.rect(x - 28, 90, 56, 16);
-    decor.fill({ color: COLORS.sandDark });
-    decor.stroke({ width: 2, color: COLORS.stoneDark });
+    decor.rect(x - 15, 112, 30, 360);
+    decor.poly([x - 22, 102, x + 22, 102, x + 15, 112, x - 15, 112]);
+    decor.rect(x - 26, 94, 52, 8);
+    decor.fill({ color: COLORS.clayDark });
+    for (const dx of [-7, 0, 7]) decor.moveTo(x + dx, 118).lineTo(x + dx, 466);
+    decor.stroke({ width: 2, color: COLORS.clay, alpha: 0.6 });
   }
 
   for (const solid of map.solids) drawSlab(decor, solid);
-  for (const portal of map.portals) drawGateSide(decor, portal);
+  // frise creme sur le devant du sol, comme le bas d'un vase
+  const ground = map.solids[0];
+  drawMeander(decor, ground.x + 8, ground.y + 18, ground.w - 16, 4, COLORS.cream);
+
+  for (const portal of map.portals) drawGateSide(decor, glow, portal);
 }

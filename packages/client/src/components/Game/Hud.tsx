@@ -1,7 +1,8 @@
-// interface affichee par-dessus le jeu (HTML, pas PixiJS)
+// interface affichee par-dessus le jeu (HTML, pas PixiJS), memes couleurs que la carte
 import { CSSProperties } from 'react';
 import { GodLore, ServerInfo, ViewMode } from '@greek-myth/shared';
 import { ArrowLeft, Eye, Shield, Zap } from 'lucide-react';
+import { COLORS, css } from '../../game/scenes/palette';
 
 interface HudProps {
   server: ServerInfo;
@@ -14,16 +15,23 @@ interface HudProps {
   onLeave: () => void;
 }
 
+const CREAM = css(COLORS.cream);
+const CLAY = css(COLORS.clay);
+const CLAY_LIGHT = css(COLORS.clayLight);
+
+// panneau noir avec un double liseré terre cuite, comme le bord d'un vase
 const panel: CSSProperties = {
   position: 'absolute',
-  background: 'rgba(15, 23, 42, 0.88)',
-  backdropFilter: 'blur(10px)',
-  border: '1px solid rgba(212, 175, 55, 0.3)',
-  borderRadius: 12,
+  background: 'rgba(26, 18, 16, 0.92)',
+  border: `2px solid ${CLAY}`,
+  boxShadow: `inset 0 0 0 3px rgba(26, 18, 16, 0.92), inset 0 0 0 4px ${css(COLORS.clayDark)}`,
+  borderRadius: 4,
+  color: CREAM,
   zIndex: 10
 };
-const smallTitle: CSSProperties = { fontSize: 11, textTransform: 'uppercase', color: '#94a3b8', letterSpacing: 1 };
-const separator: CSSProperties = { height: 24, width: 1, background: 'rgba(255,255,255,0.1)' };
+const smallTitle: CSSProperties = { fontSize: 11, textTransform: 'uppercase', color: CLAY_LIGHT, letterSpacing: 2 };
+const title: CSSProperties = { fontSize: 14, fontWeight: 'bold', fontFamily: 'Cinzel, serif' };
+const separator: CSSProperties = { height: 28, width: 1, background: CLAY };
 
 export function Hud({ server, god, status, viewMode, coords, fps, loadError, onLeave }: HudProps) {
   const topDown = viewMode === 'top-down';
@@ -50,26 +58,24 @@ export function Hud({ server, god, status, viewMode, coords, fps, loadError, onL
       {/* en haut a gauche : quitter, serveur, dieu */}
       <div style={{ ...panel, top: 16, left: 20, display: 'flex', alignItems: 'center', gap: 16, padding: '10px 18px' }}>
         <button onClick={onLeave} style={{
-          background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.15)',
-          borderRadius: 8, color: '#f8fafc', padding: '6px 12px', display: 'flex', alignItems: 'center',
-          gap: 6, cursor: 'pointer', fontSize: 13, fontFamily: 'Outfit, sans-serif'
+          background: 'transparent', border: `1px solid ${CLAY}`, borderRadius: 3, color: CREAM,
+          padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+          fontSize: 13, fontFamily: 'Cinzel, serif'
         }}>
           <ArrowLeft size={16} /> Quitter vers Lobby
         </button>
         <div style={separator} />
         <div>
           <div style={smallTitle}>Serveur Actif</div>
-          <div style={{ fontSize: 14, fontWeight: 'bold', color: '#facc15', fontFamily: 'Cinzel, serif' }}>
-            {server.name} ({server.realm.toUpperCase()})
-          </div>
-          <div style={{ fontSize: 11, color: status === 'Connecté' ? '#4ade80' : '#fbbf24' }}>
+          <div style={title}>{server.name} ({server.realm.toUpperCase()})</div>
+          <div style={{ fontSize: 11, color: status === 'Connecté' ? CREAM : CLAY_LIGHT }}>
             Réseau : {status}
           </div>
         </div>
         <div style={separator} />
         <div>
           <div style={smallTitle}>Affinité Divine</div>
-          <div style={{ fontSize: 14, fontWeight: 'bold', color: god.color, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ ...title, color: god.color, display: 'flex', alignItems: 'center', gap: 6 }}>
             <Zap size={14} /> {god.name}
           </div>
         </div>
@@ -77,15 +83,13 @@ export function Hud({ server, god, status, viewMode, coords, fps, loadError, onL
 
       {/* en haut a droite : vue actuelle (elle change avec les portes de la carte) */}
       <div style={{ ...panel, top: 16, right: 20, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px' }}>
-        <Eye size={16} color="#facc15" />
-        <span style={{ fontSize: 13, fontWeight: 'bold', color: '#facc15', fontFamily: 'Cinzel, serif' }}>
-          {topDown ? 'Vue du dessus' : 'Vue de profil'}
-        </span>
+        <Eye size={16} color={CLAY_LIGHT} />
+        <span style={title}>{topDown ? 'Vue du dessus' : 'Vue de profil'}</span>
       </div>
 
       {/* en bas a gauche : aide des touches */}
-      <div style={{ ...panel, bottom: 20, left: 20, padding: '12px 18px', fontSize: 13, color: '#cbd5e1', pointerEvents: 'none', borderRadius: 10 }}>
-        <div style={{ fontWeight: 'bold', color: '#facc15', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ ...panel, bottom: 20, left: 20, padding: '12px 18px', fontSize: 13, pointerEvents: 'none' }}>
+        <div style={{ ...title, fontSize: 13, color: CLAY_LIGHT, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
           <Shield size={14} /> Contrôles ({topDown ? 'Top-Down' : 'Side-View'})
         </div>
         {topDown ? (
@@ -96,18 +100,18 @@ export function Hud({ server, god, status, viewMode, coords, fps, loadError, onL
             • <b>ESPACE</b> ou <b>Flèche Haut</b> : Sauter avec gravité
           </div>
         )}
-        <div style={{ marginTop: 4, color: '#94a3b8', fontSize: 11 }}>
+        <div style={{ marginTop: 4, color: CLAY_LIGHT, fontSize: 11 }}>
           • Passez une <b>porte</b> pour changer de vue
         </div>
       </div>
 
       {/* en bas a droite : infos techniques */}
-      <div style={{ ...panel, bottom: 20, right: 20, padding: '10px 16px', fontSize: 12, color: '#94a3b8', display: 'flex', gap: 16, pointerEvents: 'none', borderRadius: 10 }}>
-        <div>X: <span style={{ color: '#fff' }}>{coords.x}</span> Y: <span style={{ color: '#fff' }}>{coords.y}</span></div>
-        <div>FPS: <span style={{ color: '#4ade80' }}>{fps}</span></div>
+      <div style={{ ...panel, bottom: 20, right: 20, padding: '10px 16px', fontSize: 12, color: CLAY_LIGHT, display: 'flex', gap: 16, pointerEvents: 'none' }}>
+        <div>X: <span style={{ color: CREAM }}>{coords.x}</span> Y: <span style={{ color: CREAM }}>{coords.y}</span></div>
+        <div>FPS: <span style={{ color: CREAM }}>{fps}</span></div>
         {/* ping fictif pour l'instant (valeur de la liste des serveurs) */}
-        <div>Ping: <span style={{ color: '#38bdf8' }}>{server.pingMs || 15} ms</span></div>
-        <div>Rendu: <span style={{ color: '#facc15' }}>PixiJS WebGL</span></div>
+        <div>Ping: <span style={{ color: CREAM }}>{server.pingMs || 15} ms</span></div>
+        <div>Rendu: <span style={{ color: CREAM }}>PixiJS WebGL</span></div>
       </div>
     </>
   );

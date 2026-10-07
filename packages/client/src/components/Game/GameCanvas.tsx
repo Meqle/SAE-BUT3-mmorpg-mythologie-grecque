@@ -3,11 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Application, Container, Graphics } from 'pixi.js';
 import { GodAffinity, GODS_LORE, MAPS, portalAt, ServerInfo, SPAWN_POINT, stepMovement, ViewMode } from '@greek-myth/shared';
 import { cameraOffset } from '../../game/camera';
-import { createSparks } from '../../game/effects';
+import { createDust } from '../../game/effects';
 import { createKeyboard } from '../../game/input';
 import { connect } from '../../game/network';
 import { createHero, hexColor, HeroSprite, stackLabels } from '../../game/players';
-import { COLORS } from '../../game/scenes/palette';
+import { COLORS, css } from '../../game/scenes/palette';
 import { drawWorld } from '../../game/scenes';
 import { Hud } from './Hud';
 
@@ -53,7 +53,7 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
       app = new Application();
       await app.init({
         resizeTo: window,
-        backgroundColor: COLORS.void,
+        backgroundColor: COLORS.glaze,
         antialias: true,
         preference: 'webgl',
         autoDensity: true,
@@ -66,17 +66,17 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
       app.canvas.style.display = 'block';
       containerRef.current.appendChild(app.canvas);
 
-      // calques : fond, decor, personnages, effets
+      // calques : fond, decor, lumiere des portes, personnages, poussiere
       const world = new Container();
       const background = new Graphics();
       const decor = new Graphics();
+      const glow = new Graphics();
       const entities = new Container();
-      const color = hexColor(godLore.color);
-      const sparks = createSparks(color);
-      world.addChild(background, decor, entities, sparks.graphics);
+      const dust = createDust();
+      world.addChild(background, decor, glow, entities, dust.graphics);
       app.stage.addChild(world);
 
-      const hero = createHero(`${heroName} (${godLore.name})`, color, true);
+      const hero = createHero(`${heroName} (${godLore.name})`, hexColor(godLore.color), true);
       entities.addChild(hero.container);
       const others = new Map<string, HeroSprite>();
 
@@ -84,7 +84,7 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
       const player = { x: SPAWN_POINT.x, y: SPAWN_POINT.y, vx: 0, vy: 0, isGrounded: false };
 
       // ajoute / deplace / retire les autres joueurs selon le dernier etat serveur
-      const syncOthers = () => {
+      const syncOthers = (mode: ViewMode) => {
         const myId = connection.getPlayerId();
         for (const [id, state] of connection.players) {
           if (id === myId) continue;
@@ -96,6 +96,8 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
             others.set(id, other);
           }
           const c = other.container;
+          other.setView(mode);
+          other.face(state.position.x - c.x);
           c.position.set(c.x + (state.position.x - c.x) * 0.45, c.y + (state.position.y - c.y) * 0.45);
         }
         for (const [id, other] of others) {
@@ -107,7 +109,7 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
         stackLabels([hero, ...others.values()]);
       };
 
-      drawWorld(background, decor, viewModeRef.current);
+      drawWorld(background, decor, glow, viewModeRef.current);
       let snapCamera = true; // true = la camera saute directement au joueur (debut, portail)
       let inputTimer = 0;
       let previousJump = false;
@@ -140,7 +142,9 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
           right: keyboard.isRight(),
           jumpStarted
         }, viewModeRef.current, dt);
-        if (viewModeRef.current === 'side-view' && jumpStarted && wasGrounded) sparks.burst(player.x, player.y + 12);
+        const jumped = jumpStarted && wasGrounded;
+        const landed = !wasGrounded && player.isGrounded;
+        if (viewModeRef.current === 'side-view' && (jumped || landed)) dust.burst(player.x, player.y + 16);
         previousJump = jump;
 
         // 3. porte : on change de vue et on repart de l'autre cote
@@ -149,18 +153,22 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
           viewModeRef.current = portal.to;
           setViewMode(portal.to);
           Object.assign(player, { x: portal.spawnX, y: portal.spawnY, vx: 0, vy: 0 });
-          drawWorld(background, decor, portal.to);
+          drawWorld(background, decor, glow, portal.to);
+          dust.clear();
           snapCamera = true;
         }
         const mode = viewModeRef.current;
 
         // 4. affichage
+        hero.setView(mode);
+        hero.face(player.vx);
         hero.container.position.set(player.x, player.y);
-        syncOthers();
-        if (Math.abs(player.vx) > 0.5 || Math.abs(player.vy) > 0.5) {
-          sparks.trail(player.x, player.y + (mode === 'top-down' ? 14 : 18));
-        }
-        sparks.update();
+        syncOthers(mode);
+        const moving = Math.abs(player.vx) + Math.abs(player.vy) > 0.5;
+        const walking = mode === 'top-down' ? moving : moving && player.isGrounded;
+        if (walking) dust.trail(player.x, mode === 'top-down' ? player.y + 8 : player.y + 16);
+        dust.update();
+        glow.alpha = 0.6 + 0.3 * Math.sin(performance.now() / 400); // les portes respirent
 
         // 5. camera qui suit le joueur sans sortir de la carte
         const map = MAPS[mode];
@@ -206,7 +214,7 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
   }, [viewMode]);
 
   return (
-    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: '#1b1410' }}>
+    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: css(COLORS.glaze) }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
       <Hud
         server={server}
