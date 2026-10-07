@@ -11,13 +11,11 @@ export interface Keyboard {
 
 const WATCHED_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyS', 'KeyA', 'KeyD', 'Space'];
 
-// onToggleView est appele quand on appuie sur V
-export function createKeyboard(onToggleView: () => void): Keyboard {
+export function createKeyboard(): Keyboard {
   const keys: Record<string, boolean> = {};
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (WATCHED_KEYS.includes(e.code)) keys[e.code] = true;
-    if (e.code === 'KeyV') onToggleView();
   };
   const onKeyUp = (e: KeyboardEvent) => {
     if (WATCHED_KEYS.includes(e.code)) keys[e.code] = false;

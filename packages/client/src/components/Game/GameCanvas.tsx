@@ -1,12 +1,14 @@
 // ecran de jeu : assemble PixiJS, le clavier, le reseau et le HUD
 import { useEffect, useRef, useState } from 'react';
 import { Application, Container, Graphics } from 'pixi.js';
-import { GodAffinity, GODS_LORE, GROUND_Y, ServerInfo, stepMovement, ViewMode } from '@greek-myth/shared';
+import { GodAffinity, GODS_LORE, MAPS, portalAt, ServerInfo, SPAWN_POINT, stepMovement, ViewMode } from '@greek-myth/shared';
+import { cameraOffset } from '../../game/camera';
+import { createSparks } from '../../game/effects';
 import { createKeyboard } from '../../game/input';
 import { connect } from '../../game/network';
-import { drawWorld } from '../../game/world';
 import { createHero, hexColor, HeroSprite, stackLabels } from '../../game/players';
-import { createSparks } from '../../game/effects';
+import { COLORS } from '../../game/scenes/palette';
+import { drawWorld } from '../../game/scenes';
 import { Hud } from './Hud';
 
 interface GameCanvasProps {
@@ -23,7 +25,7 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
   const [viewMode, setViewMode] = useState<ViewMode>('top-down');
   const [status, setStatus] = useState('Connexion…');
   const [fps, setFps] = useState(60);
-  const [coords, setCoords] = useState({ x: 400, y: 300 });
+  const [coords, setCoords] = useState({ x: 0, y: 0 });
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // le ticker PixiJS lit la vue via une ref (pas de re-rendu React a chaque image)
@@ -32,7 +34,6 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
   const connectionRef = useRef<ReturnType<typeof connect> | null>(null);
 
   const godLore = GODS_LORE[god];
-  const toggleView = () => setViewMode((v) => (v === 'top-down' ? 'side-view' : 'top-down'));
 
   useEffect(() => {
     let app: Application | null = null;
@@ -46,13 +47,13 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
       onStatus: (s) => { if (!cleanedUp) setStatus(s); }
     });
     connectionRef.current = connection;
-    const keyboard = createKeyboard(toggleView);
+    const keyboard = createKeyboard();
 
     const start = async () => {
       app = new Application();
       await app.init({
         resizeTo: window,
-        backgroundColor: 0x0b0f19,
+        backgroundColor: COLORS.void,
         antialias: true,
         preference: 'webgl',
         autoDensity: true,
@@ -79,8 +80,8 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
       entities.addChild(hero.container);
       const others = new Map<string, HeroSprite>();
 
-      // position predite localement, corrigee ensuite par le serveur
-      const player = { x: 400, y: 300, vx: 0, vy: 0, isGrounded: false };
+      // position du joueur local : calculee ici (le serveur ne connait pas encore les murs)
+      const player = { x: SPAWN_POINT.x, y: SPAWN_POINT.y, vx: 0, vy: 0, isGrounded: false };
 
       // ajoute / deplace / retire les autres joueurs selon le dernier etat serveur
       const syncOthers = () => {
@@ -106,8 +107,8 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
         stackLabels([hero, ...others.values()]);
       };
 
-      drawWorld(background, decor, viewModeRef.current, color);
-      let lastMode = viewModeRef.current;
+      drawWorld(background, decor, viewModeRef.current);
+      let snapCamera = true; // true = la camera saute directement au joueur (debut, portail)
       let inputTimer = 0;
       let previousJump = false;
       let frames = 0;
@@ -127,18 +128,7 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
           });
         }
 
-        // 2. changement de vue : on redessine le decor
-        const mode = viewModeRef.current;
-        if (mode !== lastMode) {
-          lastMode = mode;
-          drawWorld(background, decor, mode, color);
-          if (mode === 'side-view') {
-            player.y = GROUND_Y;
-            player.vy = 0;
-          }
-        }
-
-        // 3. prediction locale (memes regles que le serveur)
+        // 2. deplacement local avec collisions (shared/physics)
         const dt = Math.min(ticker.deltaMS / 1000, 0.05);
         const jump = keyboard.isJump();
         const jumpStarted = jump && !previousJump;
@@ -149,22 +139,22 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
           left: keyboard.isLeft(),
           right: keyboard.isRight(),
           jumpStarted
-        }, mode, dt);
-        if (mode === 'side-view' && jumpStarted && wasGrounded) sparks.burst(player.x, player.y + 12);
+        }, viewModeRef.current, dt);
+        if (viewModeRef.current === 'side-view' && jumpStarted && wasGrounded) sparks.burst(player.x, player.y + 12);
         previousJump = jump;
 
-        // 4. correction douce vers la position du serveur
-        const myId = connection.getPlayerId();
-        const me = myId ? connection.players.get(myId) : undefined;
-        if (me) {
-          const k = 1 - Math.pow(0.65, dt * 60);
-          player.x += (me.position.x - player.x) * k;
-          player.y += (me.position.y - player.y) * k;
-          player.vx += (me.position.vx - player.vx) * k;
-          player.vy += (me.position.vy - player.vy) * k;
+        // 3. porte : on change de vue et on repart de l'autre cote
+        const portal = portalAt(player, viewModeRef.current);
+        if (portal) {
+          viewModeRef.current = portal.to;
+          setViewMode(portal.to);
+          Object.assign(player, { x: portal.spawnX, y: portal.spawnY, vx: 0, vy: 0 });
+          drawWorld(background, decor, portal.to);
+          snapCamera = true;
         }
+        const mode = viewModeRef.current;
 
-        // 5. affichage
+        // 4. affichage
         hero.container.position.set(player.x, player.y);
         syncOthers();
         if (Math.abs(player.vx) > 0.5 || Math.abs(player.vy) > 0.5) {
@@ -172,13 +162,15 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
         }
         sparks.update();
 
-        // 6. camera qui suit le joueur
-        const camX = window.innerWidth / 2 - player.x;
-        const camY = window.innerHeight / 2 - player.y + (mode === 'top-down' ? 0 : 60);
-        world.x += (camX - world.x) * 0.1;
-        world.y += (camY - world.y) * 0.1;
+        // 5. camera qui suit le joueur sans sortir de la carte
+        const map = MAPS[mode];
+        const camX = cameraOffset(player.x, map.width, window.innerWidth);
+        const camY = cameraOffset(player.y, map.height, window.innerHeight);
+        world.x = snapCamera ? camX : world.x + (camX - world.x) * 0.1;
+        world.y = snapCamera ? camY : world.y + (camY - world.y) * 0.1;
+        snapCamera = false;
 
-        // 7. FPS et coordonnees pour le HUD (2 fois par seconde)
+        // 6. FPS et coordonnees pour le HUD (2 fois par seconde)
         frames++;
         const now = performance.now();
         if (now - lastFpsTime >= 500) {
@@ -208,13 +200,13 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
     };
   }, [server.id, god, heroName]);
 
-  // previent le serveur quand on change de vue
+  // previent le serveur quand la vue change (porte)
   useEffect(() => {
     connectionRef.current?.sendViewMode(viewMode);
   }, [viewMode]);
 
   return (
-    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: '#0b0f19' }}>
+    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: '#1b1410' }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
       <Hud
         server={server}
@@ -224,7 +216,6 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
         coords={coords}
         fps={fps}
         loadError={loadError}
-        onToggleView={toggleView}
         onLeave={onLeave}
       />
     </div>

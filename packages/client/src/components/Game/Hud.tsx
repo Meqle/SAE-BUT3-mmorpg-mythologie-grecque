@@ -11,7 +11,6 @@ interface HudProps {
   coords: { x: number; y: number };
   fps: number;
   loadError: string | null;
-  onToggleView: () => void;
   onLeave: () => void;
 }
 
@@ -26,7 +25,7 @@ const panel: CSSProperties = {
 const smallTitle: CSSProperties = { fontSize: 11, textTransform: 'uppercase', color: '#94a3b8', letterSpacing: 1 };
 const separator: CSSProperties = { height: 24, width: 1, background: 'rgba(255,255,255,0.1)' };
 
-export function Hud({ server, god, status, viewMode, coords, fps, loadError, onToggleView, onLeave }: HudProps) {
+export function Hud({ server, god, status, viewMode, coords, fps, loadError, onLeave }: HudProps) {
   const topDown = viewMode === 'top-down';
 
   return (
@@ -76,18 +75,12 @@ export function Hud({ server, god, status, viewMode, coords, fps, loadError, onT
         </div>
       </div>
 
-      {/* en haut a droite : changer de vue */}
-      <div style={{ ...panel, top: 16, right: 20, display: 'flex', alignItems: 'center', gap: 12, padding: '8px 14px' }}>
-        <span style={{ ...smallTitle, fontSize: 12 }}>Mode Caméra (Touche V) :</span>
-        <button onClick={onToggleView} style={{
-          background: topDown ? 'linear-gradient(135deg, #d4af37, #ca8a04)' : 'linear-gradient(135deg, #6366f1, #4338ca)',
-          border: 'none', borderRadius: 8, color: '#000', fontWeight: 'bold', padding: '6px 14px',
-          display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontFamily: 'Cinzel, serif',
-          fontSize: 13, boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
-        }}>
-          <Eye size={16} color="#000" />
-          {topDown ? 'Vue du Dessus (Top-Down)' : 'Vue Profil (Side-View)'}
-        </button>
+      {/* en haut a droite : vue actuelle (elle change avec les portes de la carte) */}
+      <div style={{ ...panel, top: 16, right: 20, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px' }}>
+        <Eye size={16} color="#facc15" />
+        <span style={{ fontSize: 13, fontWeight: 'bold', color: '#facc15', fontFamily: 'Cinzel, serif' }}>
+          {topDown ? 'Vue du dessus' : 'Vue de profil'}
+        </span>
       </div>
 
       {/* en bas a gauche : aide des touches */}
@@ -104,7 +97,7 @@ export function Hud({ server, god, status, viewMode, coords, fps, loadError, onT
           </div>
         )}
         <div style={{ marginTop: 4, color: '#94a3b8', fontSize: 11 }}>
-          • Appuyez sur <b>V</b> pour basculer la perspective
+          • Passez une <b>porte dorée</b> pour changer de vue
         </div>
       </div>
 

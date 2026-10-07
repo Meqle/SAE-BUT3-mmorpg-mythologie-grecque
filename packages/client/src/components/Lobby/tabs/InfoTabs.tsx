@@ -26,7 +26,7 @@ export function OptionsTab() {
           <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, lineHeight: 1.5 }}>
             • <b>Z, Q, S, D</b> ou <b>Flèches</b> : Déplacement 8 directions<br />
             • En vue de profil : <b>Q, D</b> pour courir, <b>ESPACE</b> pour sauter<br />
-            • <b>Touche V</b> : Basculer entre Top-Down et Profil
+            • Les <b>portes dorées</b> de la carte changent la vue
           </div>
         </div>
         <div style={{ ...box, display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
