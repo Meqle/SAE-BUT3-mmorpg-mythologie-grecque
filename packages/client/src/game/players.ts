@@ -1,8 +1,10 @@
-// dessin des personnages : un hoplite (casque de bronze, tunique et bouclier
-// a la couleur du dieu choisi) ; un dessin pour chaque vue
-import { Container, Graphics, Text, TextStyle } from 'pixi.js';
+// personnages : un hoplite (casque corinthien, cape, cimier et bouclier a la couleur du dieu choisi)
+// le dessin de chaque vue est dans hero/side.ts (profil) et hero/above.ts (dessus)
+import { Container, Text, TextStyle } from 'pixi.js';
 import { ViewMode } from '@greek-myth/shared';
 import { COLORS } from './scenes/palette';
+import { createAboveHero } from './hero/above';
+import { createSideHero } from './hero/side';
 
 export interface HeroSprite {
   container: Container;
@@ -13,101 +15,52 @@ export interface HeroSprite {
   animate: (moving: boolean, airborne: boolean, time: number) => void; // pas, saut (time en secondes)
 }
 
-const SKIN = 0xd9a67a;
-const OUTLINE = { width: 1.5, color: COLORS.ink };
-
-// vu de dessus : epaules, casque avec cimier, bouclier rond
-function drawFromAbove(color: number, isLocal: boolean): Graphics {
-  const g = new Graphics();
-  g.ellipse(4, 6, 15, 11);
-  g.fill({ color: COLORS.shadow, alpha: 0.2 });
-  if (isLocal) {
-    g.circle(0, 0, 19);
-    g.stroke({ width: 2, color: COLORS.gold });
-  }
-  g.ellipse(0, 0, 13, 9); // epaules
-  g.fill({ color });
-  g.stroke(OUTLINE);
-  g.circle(0, 0, 7.5); // casque
-  g.fill({ color: COLORS.bronze });
-  g.stroke(OUTLINE);
-  g.roundRect(-2, -9, 4, 18, 2); // cimier
-  g.fill({ color: COLORS.tile });
-  g.circle(-12, 3, 6.5); // bouclier
-  g.fill({ color });
-  g.stroke({ width: 2, color: COLORS.bronze });
-  return g;
-}
-
-// vu de profil (tourne vers la droite) : les pieds sont en bas de la hitbox (y = 16)
-function drawFromSide(color: number, isLocal: boolean): Graphics {
-  const g = new Graphics();
-  g.ellipse(0, 16, 12, 3);
-  g.fill({ color: COLORS.shadow, alpha: 0.25 });
-  if (isLocal) {
-    g.ellipse(0, 16, 15, 4);
-    g.stroke({ width: 2, color: COLORS.gold });
-  }
-  g.moveTo(10, -20).lineTo(10, 16); // lance
-  g.stroke({ width: 2, color: COLORS.ink });
-  g.poly([10, -25, 12.5, -19, 7.5, -19]);
-  g.fill({ color: COLORS.bronze });
-  g.rect(-5, 6, 4, 10); // jambes
-  g.rect(1, 6, 4, 10);
-  g.fill({ color: SKIN });
-  g.stroke(OUTLINE);
-  g.poly([-6, -6, 6, -6, 7, 8, -7, 8]); // tunique
-  g.fill({ color });
-  g.stroke(OUTLINE);
-  g.circle(1, -11, 5.5); // casque
-  g.fill({ color: COLORS.bronze });
-  g.stroke(OUTLINE);
-  g.poly([-6, -13, -3, -20, 5, -20, 7, -15, 1, -15]); // cimier
-  g.fill({ color: COLORS.tile });
-  g.circle(4, 0, 7); // bouclier
-  g.fill({ color });
-  g.stroke({ width: 2, color: COLORS.bronze });
-  g.circle(4, 0, 2);
-  g.fill({ color: COLORS.bronze });
-  return g;
-}
-
-// le joueur local a un anneau dore a ses pieds
-export function createHero(name: string, color: number, isLocal: boolean): HeroSprite {
-  const above = drawFromAbove(color, isLocal);
-  const side = drawFromSide(color, isLocal);
-
+// nom au-dessus de la tete : lettres gravees claires avec contour bleu nuit et petite ombre
+function createLabel(name: string, isLocal: boolean): Text {
   const label = new Text({
     text: name,
+    resolution: 3,
     style: new TextStyle({
       fontFamily: 'Cinzel, serif',
-      fontSize: isLocal ? 14 : 12,
+      fontSize: isLocal ? 11 : 10,
       fontWeight: '700',
-      fill: COLORS.marble,
-      stroke: { color: COLORS.ink, width: 4 }
+      letterSpacing: 0.4,
+      fill: isLocal ? 0xffe7a3 : COLORS.marbleLit,
+      stroke: { color: COLORS.ink, width: 3, join: 'round' },
+      dropShadow: { color: COLORS.shadow, alpha: 0.45, blur: 1.5, distance: 1.2, angle: Math.PI / 3 }
     })
   });
   label.anchor.set(0.5, 1);
+  return label;
+}
 
+export function createHero(name: string, color: number, isLocal: boolean): HeroSprite {
+  const above = createAboveHero(color, isLocal);
+  const side = createSideHero(color, isLocal);
+  const label = createLabel(name, isLocal);
   const container = new Container();
-  container.addChild(above, side, label);
+  container.addChild(above.view, side.view, label);
+  let mode: ViewMode = 'top-down';
 
   const hero: HeroSprite = {
     container,
     label,
     labelY: 0,
-    setView: (mode) => {
-      above.visible = mode === 'top-down';
-      side.visible = mode === 'side-view';
-      hero.labelY = mode === 'top-down' ? -22 : -24;
+    setView: (m) => {
+      mode = m;
+      above.view.visible = m === 'top-down';
+      side.view.visible = m === 'side-view';
+      hero.labelY = m === 'top-down' ? -20 : -33;
       label.position.y = hero.labelY;
     },
     face: (dx) => {
-      if (dx > 0.5) side.scale.x = 1;
-      if (dx < -0.5) side.scale.x = -1;
+      if (Math.abs(dx) < 0.5) return;
+      side.face(Math.sign(dx));
+      above.face(Math.sign(dx));
     },
     animate: (moving, airborne, time) => {
-      side.y = moving && !airborne ? -Math.abs(Math.sin(time * 12)) * 2 : 0;
+      if (mode === 'top-down') above.animate(moving, time);
+      else side.animate(moving, airborne, time);
     }
   };
   hero.setView('top-down');
@@ -124,7 +77,7 @@ export function stackLabels(heroes: HeroSprite[]): void {
       const close = Math.abs(hero.container.x - other.x) < 120 && Math.abs(hero.container.y - other.y) < 40;
       if (close) shift++;
     }
-    hero.label.position.y = hero.labelY - shift * 18;
+    hero.label.position.y = hero.labelY - shift * 14;
   });
 }
 
