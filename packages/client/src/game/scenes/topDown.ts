@@ -1,6 +1,8 @@
 // decor de la vue du dessus : une agora sur une ile, entouree par la mer Egee
 // marbre + contour bleu nuit = solide (colonnes, oliviers, murets) ; le sol et la mosaique = decor
-import { Graphics } from 'pixi.js';
+import { Container, Graphics } from 'pixi.js';
+import { placeLayer, View } from '../camera';
+import type { Scene } from '.';
 import { MAPS } from '@greek-myth/shared';
 import { COLORS } from './palette';
 import { drawGateFromAbove } from './gates';
@@ -10,7 +12,7 @@ const SEA = 700; // largeur de mer dessinee autour de la carte
 const TILE_W = 60;
 const TILE_H = 40;
 
-export function drawTopDown(background: Graphics, decor: Graphics, glow: Graphics): void {
+function drawTopDown(background: Graphics, decor: Graphics, glow: Graphics): void {
   const map = MAPS['top-down'];
   const cx = map.width / 2;
   const cy = map.height / 2;
@@ -48,7 +50,7 @@ export function drawTopDown(background: Graphics, decor: Graphics, glow: Graphic
   }
   decor.fill({ color: COLORS.ink });
   decor.circle(cx, cy, 118);
-  decor.fill({ color: COLORS.skyLight });
+  decor.fill({ color: COLORS.foam });
   decor.circle(cx, cy, 70);
   decor.fill({ color: COLORS.sky });
   drawLaurel(decor, cx, cy, 92, COLORS.olive);
@@ -61,4 +63,22 @@ export function drawTopDown(background: Graphics, decor: Graphics, glow: Graphic
     else drawSlab(decor, solid);
   }
   for (const portal of map.portals) drawGateFromAbove(decor, glow, portal);
+}
+
+// version provisoire : une seule couche
+export function createTopDown(): Scene {
+  const back = new Container();
+  const background = new Graphics();
+  const decor = new Graphics();
+  const glow = new Graphics();
+  back.addChild(background, decor, glow);
+  drawTopDown(background, decor, glow);
+  return {
+    back,
+    front: new Container(),
+    update: (view: View, time: number) => {
+      placeLayer(back, view);
+      glow.alpha = 0.75 + 0.25 * Math.sin(time * 2.5);
+    }
+  };
 }

@@ -10,6 +10,7 @@ export interface HeroSprite {
   labelY: number;
   setView: (mode: ViewMode) => void;
   face: (dx: number) => void; // regarde a gauche (dx < 0) ou a droite (dx > 0)
+  animate: (moving: boolean, airborne: boolean, time: number) => void; // pas, saut (time en secondes)
 }
 
 const SKIN = 0xd9a67a;
@@ -104,6 +105,9 @@ export function createHero(name: string, color: number, isLocal: boolean): HeroS
     face: (dx) => {
       if (dx > 0.5) side.scale.x = 1;
       if (dx < -0.5) side.scale.x = -1;
+    },
+    animate: (moving, airborne, time) => {
+      side.y = moving && !airborne ? -Math.abs(Math.sin(time * 12)) * 2 : 0;
     }
   };
   hero.setView('top-down');

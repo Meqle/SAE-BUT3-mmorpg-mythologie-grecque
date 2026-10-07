@@ -11,7 +11,7 @@ export function drawGateFromAbove(decor: Graphics, glow: Graphics, p: Portal): v
   const cy = p.y + p.h / 2;
 
   decor.circle(cx, cy, 30);
-  decor.fill({ color: COLORS.skyLight });
+  decor.fill({ color: COLORS.foam });
   decor.stroke({ width: 3, color: COLORS.seaLight });
 
   glow.circle(cx, cy, 24);
@@ -41,7 +41,7 @@ export function drawGateSide(glow: Graphics, p: Portal): void {
   glow.poly(archPoints(cx, p.y + radius, radius, floor));
   glow.fill({ color: COLORS.gold, alpha: 0.3 });
   glow.poly(archPoints(cx, p.y + radius, radius - 8, floor));
-  glow.fill({ color: COLORS.skyLight, alpha: 0.5 });
+  glow.fill({ color: COLORS.foam, alpha: 0.5 });
   glow.poly(archPoints(cx, p.y + radius, radius, floor));
   glow.stroke({ width: 3, color: COLORS.gold });
   drawLaurel(glow, cx, p.y - 16, 14, COLORS.gold);

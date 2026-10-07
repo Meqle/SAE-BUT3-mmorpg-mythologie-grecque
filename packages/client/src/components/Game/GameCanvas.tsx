@@ -1,14 +1,14 @@
 // ecran de jeu : assemble PixiJS, le clavier, le reseau et le HUD
 import { useEffect, useRef, useState } from 'react';
-import { Application, Container, Graphics } from 'pixi.js';
+import { Application, Container } from 'pixi.js';
 import { GodAffinity, GODS_LORE, MAPS, portalAt, ServerInfo, SPAWN_POINT, stepMovement, ViewMode } from '@greek-myth/shared';
-import { cameraOffset } from '../../game/camera';
+import { placeLayer, View, viewAround } from '../../game/camera';
 import { createDust } from '../../game/effects';
 import { createKeyboard } from '../../game/input';
 import { connect } from '../../game/network';
 import { createHero, hexColor, HeroSprite, stackLabels } from '../../game/players';
 import { COLORS, css } from '../../game/scenes/palette';
-import { drawWorld } from '../../game/scenes';
+import { createScene, Scene } from '../../game/scenes';
 import { Hud } from './Hud';
 
 interface GameCanvasProps {
@@ -66,15 +66,22 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
       app.canvas.style.display = 'block';
       containerRef.current.appendChild(app.canvas);
 
-      // calques : fond, decor, lumiere des portes, personnages, poussiere
-      const world = new Container();
-      const background = new Graphics();
-      const decor = new Graphics();
-      const glow = new Graphics();
+      // calques : decor de la scene (derriere), joueurs + poussiere, premier plan de la scene
+      const actors = new Container();
       const entities = new Container();
       const dust = createDust();
-      world.addChild(background, decor, glow, entities, dust.graphics);
-      app.stage.addChild(world);
+      actors.addChild(entities, dust.graphics);
+      let scene: Scene = createScene(viewModeRef.current);
+      app.stage.addChild(scene.back, actors, scene.front);
+
+      // change le decor quand on passe une porte
+      const changeScene = (mode: ViewMode) => {
+        app?.stage.removeChildren();
+        scene.back.destroy({ children: true });
+        scene.front.destroy({ children: true });
+        scene = createScene(mode);
+        app?.stage.addChild(scene.back, actors, scene.front);
+      };
 
       const hero = createHero(`${heroName} (${godLore.name})`, hexColor(godLore.color), true);
       entities.addChild(hero.container);
@@ -84,7 +91,7 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
       const player = { x: SPAWN_POINT.x, y: SPAWN_POINT.y, vx: 0, vy: 0, isGrounded: false };
 
       // ajoute / deplace / retire les autres joueurs selon le dernier etat serveur
-      const syncOthers = (mode: ViewMode) => {
+      const syncOthers = (mode: ViewMode, time: number) => {
         const myId = connection.getPlayerId();
         for (const [id, state] of connection.players) {
           if (id === myId) continue;
@@ -96,8 +103,11 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
             others.set(id, other);
           }
           const c = other.container;
+          const dx = state.position.x - c.x;
+          const dy = state.position.y - c.y;
           other.setView(mode);
-          other.face(state.position.x - c.x);
+          other.face(dx);
+          other.animate(Math.abs(dx) + Math.abs(dy) > 1, mode === 'side-view' && Math.abs(dy) > 1, time);
           c.position.set(c.x + (state.position.x - c.x) * 0.45, c.y + (state.position.y - c.y) * 0.45);
         }
         for (const [id, other] of others) {
@@ -109,8 +119,7 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
         stackLabels([hero, ...others.values()]);
       };
 
-      drawWorld(background, decor, glow, viewModeRef.current);
-      let snapCamera = true; // true = la camera saute directement au joueur (debut, portail)
+      let view: View | null = null; // null = la camera saute directement au joueur (debut, portail)
       let inputTimer = 0;
       let previousJump = false;
       let frames = 0;
@@ -153,30 +162,30 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
           viewModeRef.current = portal.to;
           setViewMode(portal.to);
           Object.assign(player, { x: portal.spawnX, y: portal.spawnY, vx: 0, vy: 0 });
-          drawWorld(background, decor, glow, portal.to);
+          changeScene(portal.to);
           dust.clear();
-          snapCamera = true;
+          view = null;
         }
         const mode = viewModeRef.current;
 
-        // 4. affichage
+        // 4. personnages et poussiere
+        const time = performance.now() / 1000;
+        const moving = Math.abs(player.vx) + Math.abs(player.vy) > 0.5;
+        const airborne = mode === 'side-view' && !player.isGrounded;
         hero.setView(mode);
         hero.face(player.vx);
+        hero.animate(moving, airborne, time);
         hero.container.position.set(player.x, player.y);
-        syncOthers(mode);
-        const moving = Math.abs(player.vx) + Math.abs(player.vy) > 0.5;
-        const walking = mode === 'top-down' ? moving : moving && player.isGrounded;
-        if (walking) dust.trail(player.x, mode === 'top-down' ? player.y + 8 : player.y + 16);
+        syncOthers(mode, time);
+        if (moving && !airborne) dust.trail(player.x, mode === 'top-down' ? player.y + 8 : player.y + 16);
         dust.update();
-        glow.alpha = 0.75 + 0.25 * Math.sin(performance.now() / 400); // les portes respirent
 
-        // 5. camera qui suit le joueur sans sortir de la carte
-        const map = MAPS[mode];
-        const camX = cameraOffset(player.x, map.width, window.innerWidth);
-        const camY = cameraOffset(player.y, map.height, window.innerHeight);
-        world.x = snapCamera ? camX : world.x + (camX - world.x) * 0.1;
-        world.y = snapCamera ? camY : world.y + (camY - world.y) * 0.1;
-        snapCamera = false;
+        // 5. camera qui suit le joueur sans sortir de la carte, puis decor (parallaxe, animations)
+        const margin = mode === 'top-down' ? 48 : 0; // en vue du dessus on voit le muret autour de la place
+        const target = viewAround(player.x, player.y, MAPS[mode], window.innerWidth, window.innerHeight, margin);
+        view = view ? { ...target, x: view.x + (target.x - view.x) * 0.1, y: view.y + (target.y - view.y) * 0.1 } : target;
+        scene.update(view, time);
+        placeLayer(actors, view);
 
         // 6. FPS et coordonnees pour le HUD (2 fois par seconde)
         frames++;

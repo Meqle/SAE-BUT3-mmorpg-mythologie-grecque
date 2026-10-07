@@ -1,14 +1,16 @@
-// dessine le decor de la vue demandee
-import { Graphics } from 'pixi.js';
+// une scene = tout le decor d'une vue, en couches (fond en parallaxe, decor, premier plan)
+import { Container } from 'pixi.js';
 import { ViewMode } from '@greek-myth/shared';
-import { drawSideView } from './sideView';
-import { drawTopDown } from './topDown';
+import { View } from '../camera';
+import { createSideView } from './sideView';
+import { createTopDown } from './topDown';
 
-// background = sol et murs, decor = objets, glow = lumiere des portes (animee)
-export function drawWorld(background: Graphics, decor: Graphics, glow: Graphics, mode: ViewMode): void {
-  background.clear();
-  decor.clear();
-  glow.clear();
-  if (mode === 'top-down') drawTopDown(background, decor, glow);
-  else drawSideView(background, decor, glow);
+export interface Scene {
+  back: Container; // derriere les joueurs : fond, decor, objets solides
+  front: Container; // devant les joueurs : premier plan
+  update: (view: View, time: number) => void; // place les couches et anime (time en secondes)
+}
+
+export function createScene(mode: ViewMode): Scene {
+  return mode === 'top-down' ? createTopDown() : createSideView();
 }

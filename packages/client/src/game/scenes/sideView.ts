@@ -1,6 +1,8 @@
 // decor de la vue de profil : bord de mer avec un temple au loin
 // marbre + contour bleu nuit = on peut marcher dessus ; ciel, mer, ile et oliviers du fond = decor
-import { Graphics } from 'pixi.js';
+import { Container, Graphics } from 'pixi.js';
+import { placeLayer, View } from '../camera';
+import type { Scene } from '.';
 import { MAPS } from '@greek-myth/shared';
 import { COLORS } from './palette';
 import { drawGateSide } from './gates';
@@ -40,7 +42,7 @@ function drawFarOlive(g: Graphics, x: number, ground: number): void {
   g.fill({ color: mix(COLORS.olive, COLORS.sky, 0.55) });
 }
 
-export function drawSideView(background: Graphics, decor: Graphics, glow: Graphics): void {
+function drawSideView(background: Graphics, decor: Graphics, glow: Graphics): void {
   const map = MAPS['side-view'];
   const ground = map.solids[0];
 
@@ -49,7 +51,7 @@ export function drawSideView(background: Graphics, decor: Graphics, glow: Graphi
   for (let i = 0; i < SKY_BANDS; i++) {
     const h = HORIZON / SKY_BANDS;
     background.rect(0, i * h, map.width, h + 1);
-    background.fill({ color: mix(COLORS.sky, COLORS.skyLight, i / (SKY_BANDS - 1)) });
+    background.fill({ color: mix(COLORS.sky, COLORS.foam, i / (SKY_BANDS - 1)) });
   }
   background.rect(0, HORIZON, map.width, ground.y - HORIZON);
   background.fill({ color: COLORS.sea });
@@ -76,4 +78,22 @@ export function drawSideView(background: Graphics, decor: Graphics, glow: Graphi
   drawMeander(decor, ground.x + 8, ground.y + 22, ground.w - 16, 4, COLORS.ink);
 
   for (const portal of map.portals) drawGateSide(glow, portal);
+}
+
+// version provisoire : une seule couche
+export function createSideView(): Scene {
+  const back = new Container();
+  const background = new Graphics();
+  const decor = new Graphics();
+  const glow = new Graphics();
+  back.addChild(background, decor, glow);
+  drawSideView(background, decor, glow);
+  return {
+    back,
+    front: new Container(),
+    update: (view: View, time: number) => {
+      placeLayer(back, view);
+      glow.alpha = 0.75 + 0.25 * Math.sin(time * 2.5);
+    }
+  };
 }
