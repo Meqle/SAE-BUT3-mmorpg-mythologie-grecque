@@ -48,6 +48,33 @@ SELECT effectuer_echange(1);   -- Persée donne son bouclier et 50 pièces, Atal
 SELECT * FROM v_classement_saison;
 ```
 
+## Utiliser la base depuis le serveur (TypeScript)
+
+| Fichier | Rôle |
+|---|---|
+| `client.ts` | Ouvre la connexion (un *pool* de connexions) et exporte `db` |
+| `schema.ts` | Décrit les tables pour Drizzle, afin d'écrire des requêtes typées |
+| `requetes.ts` | Fonctions prêtes à l'emploi : lister les classes, les personnages d'un compte, faire un échange... |
+| `verifier.ts` | Script de vérification de la connexion |
+
+Le reste du serveur n'écrit pas de SQL : il importe les fonctions de `requetes.ts`.
+
+```ts
+import { listerPersonnagesDuCompte } from './db/requetes.js';
+const personnages = await listerPersonnagesDuCompte(1);
+```
+
+Vérifier que le serveur arrive à joindre la base (la base doit tourner dans Docker) :
+
+```bash
+npm run db:verifier
+```
+
+En local, la connexion utilise les valeurs du fichier `.env` à la racine (dont `POSTGRES_PORT`).
+Dans Docker, elle utilise `DATABASE_URL`, définie dans `docker-compose.yml`.
+
+`schema.sql` reste la référence : si on le modifie, il faut mettre `schema.ts` à jour en même temps.
+
 ## Lien avec les autres bases
 
 - `progression_quete.quete_id` pointe vers un document de quête dans **MongoDB**.
