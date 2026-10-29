@@ -4,15 +4,11 @@
 //   (définie dans docker-compose.yml).
 // - En local (npm run dev) : on lit le fichier .env à la racine du dépôt et on
 //   se connecte à la base Docker par le port publié sur la machine (POSTGRES_PORT).
-import path from 'path';
-import { config } from 'dotenv';
+import '../env.js';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { sql } from 'drizzle-orm';
 import { Pool } from 'pg';
 import * as schema from './schema.js';
-
-// Racine du dépôt : packages/server/src/db (ou dist/db) -> 4 niveaux au-dessus.
-config({ path: path.resolve(__dirname, '../../../../.env'), quiet: true });
 
 function adresseBase(): string {
   if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
