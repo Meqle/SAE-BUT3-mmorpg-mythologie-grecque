@@ -6,6 +6,8 @@ services:
     environment:
       PORT: 3001
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      # Utilisée par la couche base de données (packages/server/src/db)
+      DATABASE_URL: postgres://${POSTGRES_USER:-mythologia}:${POSTGRES_PASSWORD:-mythologia}@postgres:5432/${POSTGRES_DB:-mythologia}
     restart: unless-stopped
     healthcheck:
       test:
@@ -28,3 +30,31 @@ services:
     ports:
       - "${CLIENT_PORT:-8080}:80"
     restart: unless-stopped
+
+  # Base relationnelle : comptes, personnages, inventaire, échanges.
+  # Au premier démarrage (volume vide), les scripts de packages/server/src/db
+  # sont exécutés dans l'ordre : schéma, données de départ, données de démo.
+  # Pour tout recréer : docker compose down -v && docker compose up --build
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mythologia}
+      POSTGRES_USER: ${POSTGRES_USER:-mythologia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mythologia}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./packages/server/src/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./packages/server/src/db/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+      - ./packages/server/src/db/demo.sql:/docker-entrypoint-initdb.d/03_demo.sql:ro
+    ports:
+      # Accessible uniquement depuis la machine (pour psql, DBeaver, pgAdmin...)
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pg_data:
