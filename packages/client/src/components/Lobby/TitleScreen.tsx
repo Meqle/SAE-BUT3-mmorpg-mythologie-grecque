@@ -5,6 +5,7 @@ import { PlayTab } from './tabs/PlayTab';
 import { ServerTab } from './tabs/ServerTab';
 import { HeroTab } from './tabs/HeroTab';
 import { CreditsTab, FriendsTab, OptionsTab } from './tabs/InfoTabs';
+import { useScreen } from '../../game/useScreen';
 
 interface TitleScreenProps {
   servers: ServerInfo[];
@@ -32,6 +33,83 @@ const MENU: { id: MenuTab; label: string; top: string }[] = [
 
 export function TitleScreen(props: TitleScreenProps) {
   const [tab, setTab] = useState<MenuTab>('play');
+  const { compact } = useScreen();
+
+  // contenu de l'onglet actif (le meme sur ordinateur et sur telephone)
+  const content = (
+    <>
+      {tab === 'play' && (
+        <PlayTab
+          heroName={props.heroName}
+          god={GODS_LORE[props.selectedGod]}
+          server={props.selectedServer}
+          onEnterGame={props.onEnterGame}
+        />
+      )}
+      {tab === 'serveur' && (
+        <ServerTab servers={props.servers} selected={props.selectedServer} onSelect={props.onSelectServer} />
+      )}
+      {tab === 'perso' && (
+        <HeroTab
+          heroName={props.heroName}
+          onChangeHeroName={props.onChangeHeroName}
+          selectedGod={props.selectedGod}
+          onSelectGod={props.onSelectGod}
+        />
+      )}
+      {tab === 'amis' && <FriendsTab />}
+      {tab === 'option' && <OptionsTab />}
+      {tab === 'credits' && <CreditsTab />}
+    </>
+  );
+
+  // telephone : onglets en barre horizontale en haut, contenu defilant en dessous
+  if (compact) {
+    return (
+      <div style={{
+        width: '100vw',
+        height: '100dvh',
+        backgroundColor: '#18202d',
+        backgroundImage: "url('/assets/lobby-bg.png')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        imageRendering: 'pixelated',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: 'env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)'
+      }}>
+        <div style={{ display: 'flex', gap: 6, padding: 8, overflowX: 'auto', background: 'rgba(20, 14, 10, 0.85)', flexShrink: 0 }}>
+          {MENU.map((btn) => {
+            const active = tab === btn.id;
+            return (
+              <button
+                key={btn.id}
+                onClick={() => setTab(btn.id)}
+                style={{
+                  flex: '1 1 0',
+                  minWidth: 0,
+                  minHeight: 44,
+                  padding: '0 2px',
+                  background: active ? '#facc15' : '#3a2a20',
+                  color: active ? '#1a1406' : '#e2e8f0',
+                  border: '2px solid #241812',
+                  borderRadius: 4,
+                  fontFamily: 'Silkscreen, monospace',
+                  fontSize: 10,
+                  cursor: 'pointer'
+                }}
+              >
+                {btn.label}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: 10, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+          <div style={{ margin: 'auto 0', width: '100%', maxWidth: 560, alignSelf: 'center' }}>{content}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -99,28 +177,7 @@ export function TitleScreen(props: TitleScreenProps) {
           justifyContent: 'center',
           zIndex: 10
         }}>
-          {tab === 'play' && (
-            <PlayTab
-              heroName={props.heroName}
-              god={GODS_LORE[props.selectedGod]}
-              server={props.selectedServer}
-              onEnterGame={props.onEnterGame}
-            />
-          )}
-          {tab === 'serveur' && (
-            <ServerTab servers={props.servers} selected={props.selectedServer} onSelect={props.onSelectServer} />
-          )}
-          {tab === 'perso' && (
-            <HeroTab
-              heroName={props.heroName}
-              onChangeHeroName={props.onChangeHeroName}
-              selectedGod={props.selectedGod}
-              onSelectGod={props.onSelectGod}
-            />
-          )}
-          {tab === 'amis' && <FriendsTab />}
-          {tab === 'option' && <OptionsTab />}
-          {tab === 'credits' && <CreditsTab />}
+          {content}
         </div>
       </div>
     </div>

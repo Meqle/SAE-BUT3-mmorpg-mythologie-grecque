@@ -5,11 +5,13 @@ import { GodAffinity, GODS_LORE, MAPS, portalAt, ServerInfo, SPAWN_POINT, stepMo
 import { placeLayer, View, viewAround } from '../../game/camera';
 import { createDust } from '../../game/effects';
 import { createKeyboard } from '../../game/input';
+import { useScreen } from '../../game/useScreen';
 import { connect } from '../../game/network';
 import { createHero, hexColor, HeroSprite, stackLabels } from '../../game/players';
 import { COLORS, css } from '../../game/scenes/palette';
 import { createScene, Scene } from '../../game/scenes';
 import { Hud } from './Hud';
+import { TouchControls } from './TouchControls';
 
 interface GameCanvasProps {
   server: ServerInfo;
@@ -22,6 +24,7 @@ const INPUT_INTERVAL_MS = 50; // envoi des touches 20 fois par seconde
 
 export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const screen = useScreen();
   const [viewMode, setViewMode] = useState<ViewMode>('top-down');
   const [status, setStatus] = useState('Connexion…');
   const [fps, setFps] = useState(60);
@@ -223,7 +226,7 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
   }, [viewMode]);
 
   return (
-    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', background: css(COLORS.sea) }}>
+    <div style={{ position: 'relative', width: '100vw', height: '100dvh', overflow: 'hidden', background: css(COLORS.sea), touchAction: 'none' }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
       <Hud
         server={server}
@@ -233,8 +236,11 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
         coords={coords}
         fps={fps}
         loadError={loadError}
+        compact={screen.compact}
+        touch={screen.touch}
         onLeave={onLeave}
       />
+      {screen.touch && <TouchControls viewMode={viewMode} />}
     </div>
   );
 }

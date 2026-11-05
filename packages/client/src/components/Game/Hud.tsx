@@ -12,6 +12,8 @@ interface HudProps {
   coords: { x: number; y: number };
   fps: number;
   loadError: string | null;
+  compact: boolean; // petit ecran : une seule barre en haut
+  touch: boolean; // ecran tactile : pas d'aide clavier
   onLeave: () => void;
 }
 
@@ -33,8 +35,9 @@ const smallTitle: CSSProperties = { fontSize: 11, textTransform: 'uppercase', co
 const title: CSSProperties = { fontSize: 14, fontWeight: 'bold', fontFamily: 'Cinzel, serif' };
 const separator: CSSProperties = { height: 28, width: 1, background: SKY };
 
-export function Hud({ server, god, status, viewMode, coords, fps, loadError, onLeave }: HudProps) {
+export function Hud({ server, god, status, viewMode, coords, fps, loadError, compact, touch, onLeave }: HudProps) {
   const topDown = viewMode === 'top-down';
+  const viewName = topDown ? 'Vue du dessus' : 'Vue de profil';
 
   return (
     <>
@@ -42,7 +45,7 @@ export function Hud({ server, god, status, viewMode, coords, fps, loadError, onL
         <div style={{
           position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
           background: 'rgba(239, 68, 68, 0.9)', padding: '20px 30px', borderRadius: 12,
-          color: '#fff', textAlign: 'center', maxWidth: 400, zIndex: 100
+          color: '#fff', textAlign: 'center', width: 'min(400px, 90vw)', zIndex: 100
         }}>
           <h3>Erreur de chargement du moteur 2D</h3>
           <p style={{ marginTop: 8, fontSize: 13 }}>{loadError}</p>
@@ -55,8 +58,31 @@ export function Hud({ server, god, status, viewMode, coords, fps, loadError, onL
         </div>
       )}
 
+      {/* petit ecran : une seule barre en haut (quitter, serveur, dieu, vue) */}
+      {compact && (
+        <div style={{
+          ...panel, top: 'calc(8px + env(safe-area-inset-top))', left: 8, right: 8,
+          display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', fontSize: 11
+        }}>
+          <button onClick={onLeave} aria-label="Quitter vers le lobby" style={{
+            background: 'transparent', border: `1px solid ${SKY}`, borderRadius: 3, color: MARBLE,
+            width: 36, height: 36, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+          }}>
+            <ArrowLeft size={18} />
+          </button>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ ...title, fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{server.name}</div>
+            <div style={{ fontSize: 10, color: status === 'Connecté' ? MARBLE : GOLD }}>{status}</div>
+          </div>
+          <div style={{ ...title, fontSize: 12, color: god.color, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Zap size={12} /> {god.name}
+          </div>
+          <Eye size={14} color={GOLD} aria-label={viewName} />
+        </div>
+      )}
+
       {/* en haut a gauche : quitter, serveur, dieu */}
-      <div style={{ ...panel, top: 16, left: 20, display: 'flex', alignItems: 'center', gap: 16, padding: '10px 18px' }}>
+      {!compact && <div style={{ ...panel, top: 16, left: 20, display: 'flex', alignItems: 'center', gap: 16, padding: '10px 18px' }}>
         <button onClick={onLeave} style={{
           background: 'transparent', border: `1px solid ${SKY}`, borderRadius: 3, color: MARBLE,
           padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
@@ -79,16 +105,16 @@ export function Hud({ server, god, status, viewMode, coords, fps, loadError, onL
             <Zap size={14} /> {god.name}
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* en haut a droite : vue actuelle (elle change avec les portes de la carte) */}
-      <div style={{ ...panel, top: 16, right: 20, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px' }}>
+      {!compact && <div style={{ ...panel, top: 16, right: 20, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px' }}>
         <Eye size={16} color={GOLD} />
-        <span style={title}>{topDown ? 'Vue du dessus' : 'Vue de profil'}</span>
-      </div>
+        <span style={title}>{viewName}</span>
+      </div>}
 
-      {/* en bas a gauche : aide des touches */}
-      <div style={{ ...panel, bottom: 20, left: 20, padding: '12px 18px', fontSize: 13, pointerEvents: 'none' }}>
+      {/* en bas a gauche : aide des touches (clavier seulement) */}
+      {!touch && <div style={{ ...panel, bottom: 20, left: 20, padding: '12px 18px', fontSize: 13, pointerEvents: 'none' }}>
         <div style={{ ...title, fontSize: 13, color: GOLD, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
           <Shield size={14} /> Contrôles ({topDown ? 'Top-Down' : 'Side-View'})
         </div>
@@ -103,16 +129,16 @@ export function Hud({ server, god, status, viewMode, coords, fps, loadError, onL
         <div style={{ marginTop: 4, color: SKY, fontSize: 11 }}>
           • Passez une <b>porte</b> pour changer de vue
         </div>
-      </div>
+      </div>}
 
-      {/* en bas a droite : infos techniques */}
-      <div style={{ ...panel, bottom: 20, right: 20, padding: '10px 16px', fontSize: 12, color: SKY, display: 'flex', gap: 16, pointerEvents: 'none' }}>
+      {/* en bas a droite : infos techniques (pas sur petit ecran) */}
+      {!compact && <div style={{ ...panel, bottom: 20, right: 20, padding: '10px 16px', fontSize: 12, color: SKY, display: 'flex', gap: 16, pointerEvents: 'none' }}>
         <div>X: <span style={{ color: MARBLE }}>{coords.x}</span> Y: <span style={{ color: MARBLE }}>{coords.y}</span></div>
         <div>FPS: <span style={{ color: MARBLE }}>{fps}</span></div>
         {/* ping fictif pour l'instant (valeur de la liste des serveurs) */}
         <div>Ping: <span style={{ color: MARBLE }}>{server.pingMs || 15} ms</span></div>
         <div>Rendu: <span style={{ color: MARBLE }}>PixiJS WebGL</span></div>
-      </div>
+      </div>}
     </>
   );
 }

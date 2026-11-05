@@ -9,7 +9,7 @@ export function Panel({ title, icon, children }: { title?: string; icon?: ReactN
       background: 'rgba(20, 28, 43, 0.95)',
       border: '3px solid #241812',
       boxShadow: 'inset 2px 2px 0 #4a5c78, inset -2px -2px 0 #0f1622, 0 6px 0 rgba(0,0,0,0.6)',
-      padding: '22px 26px',
+      padding: 'clamp(12px, 3vw, 22px) clamp(12px, 3vw, 26px)',
       borderRadius: 4
     }}>
       {title && (

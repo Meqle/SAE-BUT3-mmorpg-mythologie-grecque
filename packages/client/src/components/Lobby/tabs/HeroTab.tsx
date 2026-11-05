@@ -17,7 +17,7 @@ export function HeroTab({ heroName, onChangeHeroName, selectedGod, onSelectGod }
 
   return (
     <Panel>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}>
         <div style={{ fontSize: 14, color: '#facc15', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 'bold' }}>
           <Shield size={16} /> Allégeance Divine
         </div>
@@ -37,7 +37,8 @@ export function HeroTab({ heroName, onChangeHeroName, selectedGod, onSelectGod }
               padding: '5px 8px',
               borderRadius: 4,
               outline: 'none',
-              width: 150
+              width: 150,
+              maxWidth: '100%'
             }}
           />
         </div>
