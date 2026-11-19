@@ -90,8 +90,8 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
       entities.addChild(hero.container);
       const others = new Map<string, HeroSprite>();
 
-      // position du joueur local : calculee ici (le serveur ne connait pas encore les murs)
       const player = { x: SPAWN_POINT.x, y: SPAWN_POINT.y, vx: 0, vy: 0, isGrounded: false };
+      let hasServerPosition = false;
 
       // ajoute / deplace / retire les autres joueurs selon le dernier etat serveur
       const syncOthers = (mode: ViewMode, time: number) => {
@@ -170,6 +170,21 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
           view = null;
         }
         const mode = viewModeRef.current;
+
+        const playerId = connection.getPlayerId();
+        const serverPlayer = playerId ? connection.players.get(playerId) : undefined;
+        if (serverPlayer?.viewMode === mode) {
+          if (!hasServerPosition) {
+            Object.assign(player, serverPlayer.position);
+            hasServerPosition = true;
+          } else {
+            const dx = serverPlayer.position.x - player.x;
+            const dy = serverPlayer.position.y - player.y;
+            const correction = Math.hypot(dx, dy) > 64 ? 1 : 0.2;
+            player.x += dx * correction;
+            player.y += dy * correction;
+          }
+        }
 
         // 4. personnages et poussiere
         const time = performance.now() / 1000;
