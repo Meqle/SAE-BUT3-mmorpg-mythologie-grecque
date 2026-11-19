@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { CheckCircle2, Coins, Heart, ScrollText, ShoppingBag, X } from 'lucide-react';
 import { ITEMS, RARITY_COLOR } from '../../game/data/items';
 import type { InventorySlot, NpcDialogueView } from '../../game/state/gameState';
@@ -13,6 +14,7 @@ interface DialogueModalProps {
   onCompleteQuest: (questId: string) => void;
   onHeal: () => void;
   onBuyItem: (itemId: string) => void;
+  onSellItem?: (itemId: string) => void;
   onClose: () => void;
 }
 
@@ -30,9 +32,15 @@ export function DialogueModal({
   onCompleteQuest,
   onHeal,
   onBuyItem,
+  onSellItem,
   onClose
 }: DialogueModalProps) {
+  const [shopTab, setShopTab] = useState<'buy' | 'sell'>('buy');
   const quest = view.readyQuest ?? view.availableQuest ?? view.activeQuest;
+  const sellable = inventory.filter((s) => {
+    const def = ITEMS[s.itemId];
+    return Boolean(def && def.price > 0 && !s.equipped);
+  });
 
   return (
     <div style={{
@@ -127,61 +135,139 @@ export function DialogueModal({
 
         {view.shopItems.length > 0 && (
           <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 11, color: SKY, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <ShoppingBag size={13} /> Échoppe ({gold} drachmes)
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
-              {view.shopItems.map((itemId) => {
-                const item = ITEMS[itemId];
-                if (!item) return null;
-                const owned = !item.stackable && inventory.some((s) => s.itemId === itemId);
-                const canAfford = gold >= item.price && !owned;
-                return (
-                  <div
-                    key={itemId}
-                    style={{
-                      background: 'rgba(12, 22, 38, 0.72)',
-                      border: '1px solid rgba(143,195,230,0.35)',
-                      borderRadius: 4,
-                      padding: '8px 10px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      gap: 8
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: RARITY_COLOR[item.rarity] }}>{item.name}</div>
-                      <div style={{ fontSize: 10.5, color: '#94a3b8' }}>
-                        {item.bonusAttack ? `+${item.bonusAttack} ATQ ` : ''}
-                        {item.bonusHp ? `+${item.bonusHp} PV ` : ''}
-                        {!item.bonusAttack && !item.bonusHp ? item.description : ''}
-                      </div>
-                    </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
+              <div style={{ fontSize: 11, color: SKY, letterSpacing: 1, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <ShoppingBag size={13} /> Échoppe ({gold} drachmes)
+              </div>
+              {onSellItem && (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {(['buy', 'sell'] as const).map((t) => (
                     <button
-                      onClick={() => onBuyItem(itemId)}
-                      disabled={!canAfford}
+                      key={t}
+                      onClick={() => setShopTab(t)}
                       style={{
-                        background: owned ? 'transparent' : canAfford ? 'rgba(233, 195, 90, 0.2)' : 'rgba(71, 85, 105, 0.2)',
-                        border: `1px solid ${owned ? '#4ade80' : canAfford ? GOLD : '#475569'}`,
-                        color: owned ? '#4ade80' : canAfford ? GOLD : '#64748b',
+                        background: shopTab === t ? GOLD : 'rgba(12, 22, 38, 0.72)',
+                        color: shopTab === t ? '#1f3550' : MARBLE,
+                        border: `1px solid ${shopTab === t ? GOLD : SKY}`,
                         borderRadius: 4,
-                        padding: '5px 9px',
+                        padding: '3px 10px',
                         fontSize: 11,
                         fontWeight: 700,
-                        cursor: canAfford ? 'pointer' : 'default',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        flexShrink: 0
+                        cursor: 'pointer'
                       }}
                     >
-                      {owned ? 'Possédé' : <><Coins size={11} /> {item.price}</>}
+                      {t === 'buy' ? 'Acheter' : `Vendre (${sellable.length})`}
                     </button>
-                  </div>
-                );
-              })}
+                  ))}
+                </div>
+              )}
             </div>
+
+            {shopTab === 'buy' ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+                {view.shopItems.map((itemId) => {
+                  const item = ITEMS[itemId];
+                  if (!item) return null;
+                  const owned = !item.stackable && inventory.some((s) => s.itemId === itemId);
+                  const canAfford = gold >= item.price && !owned;
+                  return (
+                    <div
+                      key={itemId}
+                      style={{
+                        background: 'rgba(12, 22, 38, 0.72)',
+                        border: `1px solid ${owned ? '#4ade80' : 'rgba(143,195,230,0.35)'}`,
+                        borderRadius: 4,
+                        padding: '8px 10px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 8
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: RARITY_COLOR[item.rarity] }}>{item.name}</div>
+                        <div style={{ fontSize: 11, color: '#cbd5e1' }}>{item.description}</div>
+                      </div>
+                      <button
+                        disabled={!canAfford}
+                        onClick={() => onBuyItem(itemId)}
+                        style={{
+                          background: owned ? 'rgba(34,197,94,0.2)' : canAfford ? GOLD : 'rgba(100,116,139,0.25)',
+                          color: owned ? '#86efac' : canAfford ? '#1f3550' : '#94a3b8',
+                          border: 'none',
+                          borderRadius: 4,
+                          padding: '5px 9px',
+                          fontSize: 11.5,
+                          fontWeight: 700,
+                          cursor: canAfford ? 'pointer' : 'default',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          flexShrink: 0
+                        }}
+                      >
+                        {owned ? 'Acquis' : <><Coins size={12} /> {item.price}</>}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
+                {sellable.length === 0 ? (
+                  <div style={{ fontSize: 12, color: '#94a3b8', padding: '8px 4px' }}>
+                    Aucun objet vendable (les objets équipés ou reliques de quête ne peuvent pas être vendus).
+                  </div>
+                ) : (
+                  sellable.map((slot) => {
+                    const item = ITEMS[slot.itemId];
+                    if (!item) return null;
+                    const payout = Math.max(1, Math.floor(item.price * 0.5));
+                    return (
+                      <div
+                        key={slot.itemId}
+                        style={{
+                          background: 'rgba(12, 22, 38, 0.72)',
+                          border: '1px solid rgba(143,195,230,0.35)',
+                          borderRadius: 4,
+                          padding: '8px 10px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: 8
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: RARITY_COLOR[item.rarity] }}>
+                            {item.name} {slot.quantity > 1 ? `×${slot.quantity}` : ''}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#cbd5e1' }}>{item.description}</div>
+                        </div>
+                        <button
+                          onClick={() => onSellItem?.(slot.itemId)}
+                          style={{
+                            background: 'rgba(233, 195, 90, 0.18)',
+                            color: GOLD,
+                            border: `1px solid ${GOLD}`,
+                            borderRadius: 4,
+                            padding: '5px 9px',
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            flexShrink: 0
+                          }}
+                        >
+                          <Coins size={12} /> +{payout}
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
           </div>
         )}
 

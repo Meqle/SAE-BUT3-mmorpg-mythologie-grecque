@@ -218,6 +218,60 @@ export const QUESTS: Record<string, QuestDef> = {
     }
   },
 
+  mq_6_hydre: {
+    id: 'mq_6_hydre',
+    title: 'Les Marécages de Lerne',
+    kind: 'main',
+    level: 9,
+    giverNpcId: 'lycos',
+    turnInNpcId: 'lycos',
+    prerequisiteQuestId: 'mq_5_labyrinthe',
+    summary: "Traversez les Marécages de Lerne au sud du Sanctuaire et terrassez l'Hydre pour récupérer le Venin d'Orque.",
+    offerDialogue:
+      "Le Cœur d'Airain résonne déjà, mais un autre Vestige sommeille dans les Marécages de Lerne, au sud du Sanctuaire Brisé. L'Hydre y corrompt les eaux. Purge ses deux autels de soufre et terrasse la bête pour arracher le Venin d'Orque.",
+    progressDialogue:
+      "Le portail des Marécages s'ouvre tout au sud du Sanctuaire Brisé. Garde des potions à portée : son venin ronge le bronze.",
+    completeDialogue:
+      "L'Hydre de Lerne est tombée et le Venin d'Orque est entre tes mains ! Avec ces reliques, le mont Caucase ne pourra bientôt plus retenir Prométhée.",
+    objectives: [
+      { id: 'enter_marecages', label: 'Entrer dans les Marécages de Lerne', type: 'enter_zone', targetId: 'marecages', required: 1 },
+      { id: 'purge_soufre', label: 'Purger les Autels de Soufre', type: 'interact', targetId: 'autel_soufre', required: 2 },
+      { id: 'kill_hydre', label: 'Hydre de Lerne vaincue', type: 'kill', targetId: 'hydre_lerne', required: 1 }
+    ],
+    reward: {
+      xp: 760,
+      gold: 460,
+      items: [
+        { itemId: 'venin_orque', quantity: 1 },
+        { itemId: 'nectar_divin', quantity: 2 }
+      ],
+      unlocksCodex: 'codex_hydre'
+    }
+  },
+  sq_chasse_squelettes: {
+    id: 'sq_chasse_squelettes',
+    title: 'Les Légions du Labyrinthe',
+    kind: 'side',
+    level: 7,
+    giverNpcId: 'theron',
+    turnInNpcId: 'theron',
+    prerequisiteQuestId: 'mq_3_sanctuaire',
+    summary: 'Éliminez 5 Squelettes hoplites dans les couloirs du Labyrinthe des Brumes.',
+    offerDialogue:
+      "Mes éclaireurs ont entendu le cliquetis des boucliers sous le Sanctuaire. D'anciens hoplites relèvent les armes dans le Labyrinthe. Si tu descends là-bas, réduis-en cinq en poussière.",
+    progressDialogue:
+      "Les Squelettes hoplites patrouillent les couloirs du Labyrinthe, au nord du Sanctuaire Brisé.",
+    completeDialogue:
+      "Beau travail. Tant que ces légions restent contenues sous terre, l'Agora peut respirer.",
+    objectives: [
+      { id: 'kill_squelettes', label: 'Squelettes hoplites vaincus', type: 'kill', targetId: 'squelette', required: 5 }
+    ],
+    reward: {
+      xp: 260,
+      gold: 165,
+      items: [{ itemId: 'nectar_divin', quantity: 2 }]
+    }
+  },
   sq_bronze_ruines: {
     id: 'sq_bronze_ruines',
     title: 'Le Bronze des Ruines',
@@ -325,10 +379,12 @@ export const QUEST_ORDER = [
   'mq_3_sanctuaire',
   'mq_4_rivage_epreuve',
   'mq_5_labyrinthe',
+  'mq_6_hydre',
   'sq_bronze_ruines',
   'sq_ambroisie_perdue',
   'sq_ailes_tempete',
-  'sq_portes_chaos'
+  'sq_portes_chaos',
+  'sq_chasse_squelettes'
 ];
 
 export interface NpcDef {
@@ -472,5 +528,11 @@ export const CODEX_ENTRIES: CodexEntry[] = [
     title: 'Le Labyrinthe des Brumes',
     chapter: 'Donjon I — Mid Game',
     text: "Bâti sous les ruines antiques par Dédale et scellé par les dieux, le Labyrinthe des Brumes abritait le Cœur d'Airain sous la garde du Minotaure. Sa chute marque le début de la Voie des Reliques."
+  },
+  {
+    id: 'codex_hydre',
+    title: "L'Hydre de Lerne",
+    chapter: 'Donjon II — Mid Game',
+    text: "Sous les eaux stagnantes de Lerne, le monstre aux têtes multiples veillait sur le Venin d'Orque. Sa défaite brise un second sceau olympien et rapproche les mortels du mont Caucase."
   }
 ];

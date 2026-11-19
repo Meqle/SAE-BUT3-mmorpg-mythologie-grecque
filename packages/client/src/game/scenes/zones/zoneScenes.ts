@@ -752,10 +752,117 @@ function createLabyrintheScene(zone: ZoneDefinition): Scene {
   };
 }
 
+function createMarecagesScene(zone: ZoneDefinition): Scene {
+  const back = new Container();
+  const front = new Container();
+  const W = zone.width;
+  const H = zone.height;
+
+  const ground = new Graphics();
+  // Sol vaseux vert-olive de Lerne
+  ground.rect(0, 0, W, H).fill({ color: 0x3b4d3b });
+  // Zones d'herbe sombre et terre humide
+  for (let x = 0; x < W; x += 64) {
+    for (let y = 0; y < H; y += 64) {
+      const tint = (Math.floor(x / 64) + Math.floor(y / 64)) % 2 === 0 ? 0x445741 : 0x354737;
+      ground.rect(x, y, 64, 64).fill({ color: tint, alpha: 0.45 });
+    }
+  }
+
+  // Etangs toxiques emeraude (decors non-bloquants mais tres lisibles)
+  const pools: [number, number, number, number][] = [
+    [290, 440, 120, 72],
+    [1460, 440, 120, 72],
+    [520, 660, 96, 58],
+    [1240, 660, 96, 58],
+    [290, 760, 110, 64],
+    [1470, 760, 110, 64]
+  ];
+  for (const [px, py, rx, ry] of pools) {
+    ground.ellipse(px, py, rx + 8, ry + 6).fill({ color: 0x263327 });
+    ground.ellipse(px, py, rx, ry).fill({ color: 0x1f6b47 }).stroke({ width: 2, color: COLORS.ink });
+    ground.ellipse(px - rx * 0.2, py - ry * 0.15, rx * 0.55, ry * 0.45).fill({ color: 0x34d399, alpha: 0.25 });
+  }
+
+  // Chaussees antiques en marbre moussu (Nord -> centre -> bassins est/ouest)
+  for (let y = 40; y < 740; y += 54) {
+    drawSlab(ground, 826, y, 54, 52, 0x9aa38f);
+    drawSlab(ground, 880, y, 54, 52, 0x8e9984);
+  }
+  for (let x = 260; x < 1500; x += 56) {
+    drawSlab(ground, x, 286, 54, 50, 0x8e9984);
+  }
+
+  // Bassin central de l'Hydre de Lerne
+  ground.circle(880, 780, 215).fill({ color: 0x1a543a }).stroke({ width: 3, color: COLORS.ink });
+  ground.circle(880, 780, 185).fill({ color: 0x2a6b49 }).stroke({ width: 2, color: 0x4ade80, alpha: 0.5 });
+  ground.circle(880, 780, 115).stroke({ width: 2, color: COLORS.gold, alpha: 0.45 });
+
+  // Brins de roseaux et mousses
+  for (let i = 0; i < 48; i++) {
+    const rx = (i * 197 + 90) % (W - 140) + 70;
+    const ry = (i * 131 + 110) % (H - 140) + 70;
+    ground.moveTo(rx, ry).lineTo(rx - 4, ry - 12).moveTo(rx, ry).lineTo(rx + 4, ry - 10)
+      .stroke({ width: 1.5, color: 0x65a30d, alpha: 0.65 });
+  }
+
+  const shadows = new Graphics();
+  shadows.filters = [new AlphaFilter({ alpha: 0.34 })];
+  const solids = new Graphics();
+  let rockIdx = 0;
+  let cypressIdx = 0;
+  for (const s of zone.solids) {
+    if (s.look === 'column') drawColumn(solids, shadows, { x: s.x, y: s.y, w: s.w, h: s.h, look: 'column' });
+    else if (s.look === 'wall') drawLowWall(solids, shadows, { x: s.x, y: s.y, w: s.w, h: s.h }, s.x < W / 2 ? 1 : -1);
+    else if (s.look === 'ruin') drawRuinWall(solids, shadows, s);
+    else if (s.look === 'rock') drawRock(solids, shadows, s, 60 + rockIdx++);
+    else if (s.look === 'cypress') drawCypress(solids, shadows, s, 180 + cypressIdx++);
+  }
+
+  const portals = zone.portals.map(createPortalMarker);
+  const bubbles = new Graphics();
+  back.addChild(ground, bubbles, ...portals.map((p) => p.floor), shadows, solids);
+
+  const mists: Graphics[] = [];
+  for (let i = 0; i < 16; i++) {
+    const m = new Graphics().ellipse(0, 0, 56 + (i % 3) * 24, 18 + (i % 2) * 8).fill({ color: 0x4ade80, alpha: 0.08 });
+    front.addChild(m);
+    mists.push(m);
+  }
+  front.addChild(...portals.map((p) => p.glow), ...zone.portals.map(makePortalLabel));
+
+  return {
+    back,
+    front,
+    update: (view: View, time: number) => {
+      placeLayer(back, view);
+      placeLayer(front, view);
+      portals.forEach((p) => p.update(time));
+
+      bubbles.clear();
+      for (let i = 0; i < pools.length; i++) {
+        const [px, py] = pools[i];
+        const phase = (time * 1.4 + i * 0.6) % 1;
+        const r = 4 + phase * 18;
+        bubbles.circle(px + Math.sin(i * 3) * 28, py + Math.cos(i * 2) * 16, r)
+          .stroke({ width: 1.5, color: 0x86efac, alpha: (1 - phase) * 0.7 });
+      }
+      const bPhase = (time * 1.1) % 1;
+      bubbles.circle(880 + Math.cos(time) * 65, 780 + Math.sin(time * 1.3) * 45, 5 + bPhase * 20)
+        .stroke({ width: 1.8, color: 0x86efac, alpha: (1 - bPhase) * 0.65 });
+
+      mists.forEach((m, i) => {
+        m.position.set(((i * 233 + time * 14) % (W + 140)) - 70, (i * 157 + Math.sin(time * 0.7 + i) * 22) % H);
+      });
+    }
+  };
+}
+
 export function createZoneScene(zone: ZoneDefinition): Scene {
   if (zone.id === 'agora') return createAgoraScene(zone);
   if (zone.id === 'plaines') return createPlainesScene(zone);
   if (zone.id === 'sanctuaire') return createSanctuaireScene(zone);
   if (zone.id === 'labyrinthe') return createLabyrintheScene(zone);
+  if (zone.id === 'marecages') return createMarecagesScene(zone);
   return createRivageScene(zone);
 }

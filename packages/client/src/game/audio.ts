@@ -105,6 +105,24 @@ class SoundEngine {
     this.tone(480, 960, 0.24, 'triangle', 0.04, 0.05);
   }
 
+  playLoot(rarity: 'commun' | 'rare' | 'epique' | 'legendaire') {
+    if (rarity === 'legendaire') {
+      [523, 659, 784, 1046, 1318].forEach((n, i) => this.tone(n, n, 0.28, 'triangle', 0.075, i * 0.065));
+    } else if (rarity === 'epique') {
+      [440, 554, 659, 880].forEach((n, i) => this.tone(n, n, 0.22, 'triangle', 0.065, i * 0.06));
+    } else if (rarity === 'rare') {
+      this.tone(523, 659, 0.14, 'sine', 0.06, 0);
+      this.tone(659, 880, 0.18, 'triangle', 0.055, 0.07);
+    } else {
+      this.tone(587, 740, 0.1, 'sine', 0.045, 0);
+    }
+  }
+
+  playCoin() {
+    this.tone(880, 1174, 0.08, 'sine', 0.045, 0);
+    this.tone(1174, 1318, 0.1, 'triangle', 0.04, 0.045);
+  }
+
   playChest() {
     this.tone(523, 659, 0.12, 'triangle', 0.06, 0);
     this.tone(659, 784, 0.16, 'triangle', 0.06, 0.08);

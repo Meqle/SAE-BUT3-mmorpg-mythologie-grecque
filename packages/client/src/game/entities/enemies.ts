@@ -4,7 +4,7 @@ import type { EnemyType, ZoneEnemySpawn } from '../data/zones';
 import { BRONZE, BRONZE_LIT, BRONZE_SHADE, LINE, WOOD, dome, shaded } from '../hero/look';
 import { COLORS } from '../scenes/palette';
 
-export type EnemyAttackStyle = 'lunge' | 'ranged_fan' | 'charge' | 'fire_slam' | 'boss_burst' | 'poseidon' | 'minotaur';
+export type EnemyAttackStyle = 'lunge' | 'ranged_fan' | 'charge' | 'fire_slam' | 'boss_burst' | 'poseidon' | 'minotaur' | 'venom_spit' | 'hydra';
 
 export interface EnemyArchetype {
   type: EnemyType;
@@ -148,6 +148,37 @@ export const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     goldReward: 260,
     radius: 30,
     isBoss: true
+  },
+  serpent_lerne: {
+    type: 'serpent_lerne',
+    name: 'Vipère de Lerne',
+    maxHp: 195,
+    attack: 22,
+    speed: 118,
+    aggroRange: 270,
+    attackRange: 210,
+    attackCooldown: 1.7,
+    windupDuration: 0.48,
+    attackStyle: 'venom_spit',
+    xpReward: 135,
+    goldReward: 68,
+    radius: 17
+  },
+  hydre_lerne: {
+    type: 'hydre_lerne',
+    name: 'Hydre de Lerne',
+    maxHp: 680,
+    attack: 32,
+    speed: 90,
+    aggroRange: 360,
+    attackRange: 265,
+    attackCooldown: 1.85,
+    windupDuration: 0.68,
+    attackStyle: 'hydra',
+    xpReward: 560,
+    goldReward: 320,
+    radius: 34,
+    isBoss: true
   }
 };
 
@@ -254,6 +285,36 @@ function drawEnemyVisual(type: EnemyType, mode: ViewMode): Container {
     g.moveTo(16, -18).lineTo(16, 18).stroke({ width: 3.2, color: WOOD, cap: 'round' });
     g.poly([16, -12, 27, -18, 25, -4, 16, -8]).fill(shaded(BRONZE_LIT, BRONZE_SHADE)).stroke(LINE);
     g.poly([16, -12, 5, -18, 7, -4, 16, -8]).fill(shaded(BRONZE_LIT, BRONZE_SHADE)).stroke(LINE);
+  } else if (type === 'serpent_lerne') {
+    // corps sinueux de vipere emeraude
+    g.ellipse(0, 6, 15, 9).fill(shaded(0x3f8f4d, 0x1e4d2b)).stroke({ ...LINE, width: 1.5 });
+    g.moveTo(-12, 6).quadraticCurveTo(0, -14, 10, -6).stroke({ width: 7, color: 0x2f7d42, cap: 'round' });
+    g.moveTo(-12, 6).quadraticCurveTo(0, -14, 10, -6).stroke({ width: 1.4, color: COLORS.ink, cap: 'round' });
+    // tete triangulaire + yeux dores + langue
+    g.poly([4, -12, 16, -8, 12, -1, 3, -5]).fill(shaded(0x4ade80, 0x166534)).stroke(LINE);
+    g.circle(11, -8, 1.6).fill(COLORS.gold);
+    g.moveTo(16, -7).lineTo(22, -9).moveTo(16, -7).lineTo(21, -4).stroke({ width: 1.2, color: 0xef4444 });
+  } else if (type === 'hydre_lerne') {
+    // corps massif ecailleux dans le marais
+    g.ellipse(0, 8, 28, 18).fill(shaded(0x2d7a47, 0x123822)).stroke({ ...LINE, width: 2 });
+    g.ellipse(0, 10, 18, 10).fill({ color: 0x4ade80, alpha: 0.25 });
+    // trois cous et trois tetes serpentines
+    const heads = [
+      { cx: -20, cy: -16, neckX: -12, neckY: -2 },
+      { cx: 0, cy: -24, neckX: 0, neckY: -6 },
+      { cx: 20, cy: -16, neckX: 12, neckY: -2 }
+    ];
+    for (const h of heads) {
+      g.moveTo(h.neckX * 0.5, 4).quadraticCurveTo(h.neckX, h.neckY, h.cx, h.cy)
+        .stroke({ width: 8.5, color: 0x1e5c34, cap: 'round' });
+      g.moveTo(h.neckX * 0.5, 4).quadraticCurveTo(h.neckX, h.neckY, h.cx, h.cy)
+        .stroke({ width: 1.4, color: COLORS.ink, cap: 'round' });
+      // tete et crete venimeuse
+      g.ellipse(h.cx, h.cy, 8.5, 6.5).fill(dome(0x4ade80, 0x227541, 0x11361f)).stroke({ ...LINE, width: 1.5 });
+      g.poly([h.cx - 4, h.cy - 6, h.cx, h.cy - 12, h.cx + 4, h.cy - 6]).fill(COLORS.gold).stroke({ ...LINE, width: 0.8 });
+      g.circle(h.cx - 2.6, h.cy - 1, 1.8).fill(0xfef08a);
+      g.circle(h.cx + 2.6, h.cy - 1, 1.8).fill(0xfef08a);
+    }
   }
 
   c.addChild(g);

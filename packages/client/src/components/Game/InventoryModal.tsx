@@ -1,13 +1,16 @@
 import { useState } from 'react';
-import { Backpack, BookOpen, Coins, ScrollText, Shield, Sparkles, Swords, X } from 'lucide-react';
+import { Backpack, BookOpen, Coins, ScrollText, Shield, Skull, Sparkles, Swords, X } from 'lucide-react';
 import { GODS_LORE } from '@greek-myth/shared';
 import { HERO_CLASSES } from '../../game/data/classes';
-import { ITEMS, RARITY_COLOR } from '../../game/data/items';
+import { ITEMS, RARITY_COLOR, RARITY_LABEL } from '../../game/data/items';
+import { formatDropChance, MONSTER_LOOT_TABLES } from '../../game/data/loot';
+import { ENEMY_ARCHETYPES } from '../../game/entities/enemies';
+import type { EnemyType } from '../../game/data/zones';
 import { CODEX_ENTRIES, QUEST_ORDER, QUESTS } from '../../game/data/story';
 import { GameProgressState, getComputedStats } from '../../game/state/gameState';
 import { COLORS, css } from '../../game/scenes/palette';
 
-export type ModalTab = 'inventory' | 'quests' | 'codex';
+export type ModalTab = 'inventory' | 'quests' | 'codex' | 'bestiary';
 
 interface InventoryModalProps {
   state: GameProgressState;
@@ -84,6 +87,7 @@ export function InventoryModal({ state, initialTab, onUseConsumable, onEquipItem
             {tabBtn('inventory', 'Sac & Héros', <Backpack size={15} />)}
             {tabBtn('quests', 'Quêtes', <ScrollText size={15} />)}
             {tabBtn('codex', 'Chroniques', <BookOpen size={15} />)}
+            {tabBtn('bestiary', 'Bestiaire', <Skull size={15} />)}
           </div>
           <button
             onClick={onClose}
@@ -285,6 +289,83 @@ export function InventoryModal({ state, initialTab, onUseConsumable, onEquipItem
                     <p style={{ fontSize: 12.5, lineHeight: 1.6, color: unlocked ? '#e2e8f0' : '#64748b' }}>
                       {unlocked ? entry.text : 'Poursuivez la quête de Prométhée pour révéler ce fragment d’histoire.'}
                     </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {tab === 'bestiary' && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
+              {(
+                [
+                  { type: 'satyre', zone: 'Plaines Foudroyées' },
+                  { type: 'harpie', zone: 'Plaines & Marécages' },
+                  { type: 'centaure', zone: 'Plaines Foudroyées' },
+                  { type: 'automate', zone: 'Sanctuaire Brisé' },
+                  { type: 'squelette', zone: 'Labyrinthe des Brumes' },
+                  { type: 'serpent_lerne', zone: 'Marécages de Lerne' },
+                  { type: 'gardien_airain', zone: 'Sanctuaire Brisé (Boss)' },
+                  { type: 'sentinelle_poseidon', zone: "Rivage d'Égée (Boss)" },
+                  { type: 'minotaure', zone: 'Labyrinthe des Brumes (Boss)' },
+                  { type: 'hydre_lerne', zone: 'Marécages de Lerne (Boss)' }
+                ] as { type: EnemyType; zone: string }[]
+              ).map(({ type, zone }) => {
+                const arch = ENEMY_ARCHETYPES[type];
+                const kills = state.bestiaryKills?.[type] ?? 0;
+                const drops = MONSTER_LOOT_TABLES[type] ?? [];
+                return (
+                  <div
+                    key={type}
+                    style={{
+                      background: 'rgba(12, 22, 38, 0.76)',
+                      border: `1px solid ${arch.isBoss ? GOLD : 'rgba(143,195,230,0.38)'}`,
+                      borderRadius: 4,
+                      padding: '11px 13px'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontFamily: 'Cinzel, serif', fontSize: 13.5, fontWeight: 700, color: arch.isBoss ? GOLD : MARBLE }}>
+                        {arch.name}
+                      </span>
+                      <span style={{ fontSize: 10.5, color: kills > 0 ? '#4ade80' : '#94a3b8', fontWeight: 600 }}>
+                        Vaincus : {kills}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: SKY, marginBottom: 8 }}>
+                      {zone} • {arch.maxHp} PV • {arch.attack} ATK
+                    </div>
+                    <div style={{ fontSize: 10.5, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 5 }}>
+                      Butin possible
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {drops.map((entry) => {
+                        const def = ITEMS[entry.itemId];
+                        if (!def) return null;
+                        return (
+                          <div
+                            key={entry.itemId}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              fontSize: 11.5,
+                              background: 'rgba(24, 42, 66, 0.55)',
+                              padding: '3px 7px',
+                              borderRadius: 3
+                            }}
+                          >
+                            <span style={{ color: RARITY_COLOR[def.rarity], fontWeight: 600 }}>
+                              {def.name}{' '}
+                              <span style={{ fontSize: 10, opacity: 0.75 }}>({RARITY_LABEL[def.rarity]})</span>
+                            </span>
+                            <span style={{ color: '#cbd5e1', fontWeight: 700, fontSize: 11 }}>
+                              {formatDropChance(entry.chance)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 );
               })}

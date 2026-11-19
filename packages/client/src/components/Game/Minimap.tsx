@@ -5,7 +5,7 @@ import { COLORS, css } from '../../game/scenes/palette';
 export interface MinimapMarker {
   x: number;
   y: number;
-  kind: 'player' | 'npc' | 'npc_quest' | 'enemy' | 'boss' | 'portal' | 'interact';
+  kind: 'player' | 'npc' | 'npc_quest' | 'enemy' | 'boss' | 'portal' | 'interact' | 'loot';
   angle?: number;
 }
 
@@ -106,6 +106,25 @@ export function Minimap({ zone, markers, onOpenWorldMap }: MinimapProps) {
       ctx.strokeStyle = '#c08a3e';
       ctx.lineWidth = 1;
       ctx.stroke();
+    } else if (zone.id === 'marecages') {
+      ctx.fillStyle = '#354737';
+      ctx.fillRect(0, 0, mapW, mapH);
+      ctx.fillStyle = '#8e9984';
+      ctx.fillRect(826 * sx, 40 * sy, 108 * sx, 700 * sy);
+      ctx.fillRect(260 * sx, 286 * sy, 1240 * sx, 50 * sy);
+      ctx.fillStyle = '#1f6b47';
+      for (const [px, py, rx, ry] of [[290, 440, 120, 72], [1460, 440, 120, 72], [290, 760, 110, 64], [1470, 760, 110, 64]]) {
+        ctx.beginPath();
+        ctx.ellipse(px * sx, py * sy, rx * sx, ry * sy, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.beginPath();
+      ctx.arc(880 * sx, 780 * sy, 200 * sx, 0, Math.PI * 2);
+      ctx.fillStyle = '#1a543a';
+      ctx.fill();
+      ctx.strokeStyle = '#4ade80';
+      ctx.lineWidth = 1;
+      ctx.stroke();
     } else {
       // vue de profil Rivage d'Egee
       ctx.fillStyle = '#7bb4db';
@@ -169,6 +188,18 @@ export function Minimap({ zone, markers, onOpenWorldMap }: MinimapProps) {
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.arc(mx, my, m.kind === 'npc_quest' ? 3.5 : 2.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (m.kind === 'loot') {
+        ctx.fillStyle = '#facc15';
+        ctx.strokeStyle = '#1f3550';
+        ctx.lineWidth = 0.9;
+        ctx.beginPath();
+        ctx.moveTo(mx, my - 3.6);
+        ctx.lineTo(mx + 3.4, my);
+        ctx.lineTo(mx, my + 3.6);
+        ctx.lineTo(mx - 3.4, my);
+        ctx.closePath();
         ctx.fill();
         ctx.stroke();
       } else if (m.kind === 'enemy' || m.kind === 'boss') {

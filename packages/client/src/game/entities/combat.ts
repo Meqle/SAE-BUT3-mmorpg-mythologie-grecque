@@ -13,7 +13,7 @@ export interface Projectile {
   fromPlayer: boolean;
   life: number;
   color: number;
-  style: 'arrow' | 'orb' | 'wave' | 'feather' | 'fireball';
+  style: 'arrow' | 'orb' | 'wave' | 'feather' | 'fireball' | 'venom';
   piercing?: boolean;
   hitIds: Set<string>;
 }
@@ -40,6 +40,21 @@ export interface SlashFx {
   kind: 'arc' | 'ring' | 'bolt';
 }
 
+export interface GroundLootDrop {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  itemId: string;
+  label: string;
+  rarity: 'commun' | 'rare' | 'epique' | 'legendaire';
+  color: number;
+  life: number;
+  age: number;
+  node: Text;
+}
+
 export interface FloatingTextItem {
   node: Text;
   vy: number;
@@ -57,6 +72,8 @@ export function createCombatFxLayer() {
   const hazards: HazardZone[] = [];
   const slashes: SlashFx[] = [];
   const texts: FloatingTextItem[] = [];
+  const lootDrops: GroundLootDrop[] = [];
+  let nextLootId = 1;
 
   const spawnText = (x: number, y: number, message: string, color: number, size = 13) => {
     const node = new Text({
@@ -86,6 +103,60 @@ export function createCombatFxLayer() {
 
   const spawnHazard = (x: number, y: number, radius: number, delay: number, damage: number, color: number = COLORS.seaLight) => {
     hazards.push({ x, y, radius, delay, maxDelay: delay, damage, color, triggered: false });
+  };
+
+  const spawnLootDrop = (
+    x: number,
+    y: number,
+    itemId: string,
+    label: string,
+    rarity: 'commun' | 'rare' | 'epique' | 'legendaire',
+    color: number
+  ) => {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 55 + Math.random() * 45;
+    const node = new Text({
+      text: label,
+      resolution: 3,
+      style: new TextStyle({
+        fontFamily: 'Outfit, sans-serif',
+        fontSize: rarity === 'legendaire' ? 11.5 : 10,
+        fontWeight: '700',
+        fill: color,
+        stroke: { color: COLORS.ink, width: 3, join: 'round' }
+      })
+    });
+    node.anchor.set(0.5, 1);
+    node.position.set(x, y - 16);
+    textLayer.addChild(node);
+    lootDrops.push({
+      id: nextLootId++,
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      itemId,
+      label,
+      rarity,
+      color,
+      life: 45,
+      age: 0,
+      node
+    });
+  };
+
+  const collectNearbyLoot = (px: number, py: number, radius = 40): GroundLootDrop[] => {
+    const picked: GroundLootDrop[] = [];
+    for (let i = lootDrops.length - 1; i >= 0; i--) {
+      const drop = lootDrops[i];
+      if (drop.age < 0.32) continue;
+      if (Math.hypot(drop.x - px, drop.y - py) <= radius) {
+        drop.node.destroy();
+        picked.push(drop);
+        lootDrops.splice(i, 1);
+      }
+    }
+    return picked;
   };
 
   const clear = () => {
@@ -153,6 +224,10 @@ export function createCombatFxLayer() {
           p.x - cx * 10, p.y - sy * 10,
           p.x - cx * 4 - px * 4, p.y - sy * 4 - py * 4
         ]).fill({ color: 0x38bdf8 }).stroke({ width: 1, color: COLORS.ink });
+      } else if (p.style === 'venom') {
+        gfx.circle(p.x, p.y, p.radius + 3).fill({ color: 0x22c55e, alpha: 0.35 });
+        gfx.circle(p.x, p.y, p.radius).fill({ color: 0x4ade80 }).stroke(LINE);
+        gfx.circle(p.x - 1.5, p.y - 1.5, p.radius * 0.4).fill({ color: 0xfef08a });
       } else if (p.style === 'fireball') {
         gfx.circle(p.x, p.y, p.radius + 4).fill({ color: 0xea580c, alpha: 0.35 });
         gfx.circle(p.x, p.y, p.radius).fill({ color: 0xf97316 }).stroke({ width: 1.2, color: COLORS.ink });
@@ -168,7 +243,49 @@ export function createCombatFxLayer() {
       }
     }
 
-    for (let i = texts.length - 1; i >= 0; i--) {
+    for (let i = lootDrops.length - 1; i >= 0; i--) {
+      const d = lootDrops[i];
+      d.age += dt;
+      d.life -= dt;
+      if (d.age < 0.36) {
+        d.x += d.vx * dt;
+        d.y += d.vy * dt;
+        d.vx *= 0.88;
+        d.vy *= 0.88;
+      }
+      if (d.life <= 0) {
+        d.node.destroy();
+        lootDrops.splice(i, 1);
+        continue;
+      }
+      const bob = Math.sin(d.age * 5 + d.id) * 2.5;
+      const bounce = d.age < 0.32 ? Math.sin((d.age / 0.32) * Math.PI) * 16 : 0;
+      const oy = d.y - bounce + bob;
+      const blink = d.life < 6 ? (Math.sin(d.age * 14) > 0 ? 1 : 0.35) : 1;
+
+      // ombre au sol
+      gfx.ellipse(d.x, d.y + 6, 8, 3.8).fill({ color: COLORS.ink, alpha: 0.3 * blink });
+
+      // pilier lumineux selon la rarete
+      if (d.rarity === 'legendaire' || d.rarity === 'epique' || d.rarity === 'rare') {
+        const beamH = d.rarity === 'legendaire' ? 56 : d.rarity === 'epique' ? 40 : 26;
+        const beamW = d.rarity === 'legendaire' ? 10 : d.rarity === 'epique' ? 7 : 5;
+        gfx.rect(d.x - beamW / 2, d.y - beamH, beamW, beamH).fill({ color: d.color, alpha: 0.22 * blink });
+        gfx.circle(d.x, d.y + 3, 12 + Math.sin(d.age * 6) * 2).stroke({ width: 1.5, color: d.color, alpha: 0.6 * blink });
+      }
+
+      // orbe / gemme de butin
+      const r = d.rarity === 'legendaire' ? 7.5 : d.rarity === 'epique' ? 6.5 : 5.5;
+      gfx.poly([d.x, oy - r, d.x + r, oy, d.x, oy + r, d.x - r, oy])
+        .fill({ color: d.color, alpha: blink })
+        .stroke({ width: 1.4, color: COLORS.ink, alpha: blink });
+      gfx.circle(d.x - 1.5, oy - 1.8, r * 0.28).fill({ color: 0xffffff, alpha: 0.85 * blink });
+
+      d.node.position.set(d.x, oy - r - 6);
+      d.node.alpha = blink;
+    }
+
+        for (let i = texts.length - 1; i >= 0; i--) {
       const item = texts[i];
       item.life -= dt;
       item.node.y += item.vy * dt;
@@ -185,10 +302,13 @@ export function createCombatFxLayer() {
     container,
     projectiles,
     hazards,
+    lootDrops,
     spawnText,
     spawnSlash,
     spawnProjectile,
     spawnHazard,
+    spawnLootDrop,
+    collectNearbyLoot,
     clear,
     render
   };

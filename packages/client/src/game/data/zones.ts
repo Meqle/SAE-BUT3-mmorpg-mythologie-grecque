@@ -1,7 +1,7 @@
 import { MAPS, GRAVITY, JUMP_VELOCITY, MAX_FALL_SPEED, PLAYER_HALF, PLAYER_SPEED } from '@greek-myth/shared';
 import type { MoveInput, MovingBody, Rect, ViewMode } from '@greek-myth/shared';
 
-export type ZoneId = 'agora' | 'plaines' | 'sanctuaire' | 'rivage' | 'labyrinthe';
+export type ZoneId = 'agora' | 'plaines' | 'sanctuaire' | 'rivage' | 'labyrinthe' | 'marecages';
 
 export type ZoneSolidLook =
   | 'column'
@@ -63,7 +63,9 @@ export type EnemyType =
   | 'gardien_airain'
   | 'sentinelle_poseidon'
   | 'squelette'
-  | 'minotaure';
+  | 'minotaure'
+  | 'serpent_lerne'
+  | 'hydre_lerne';
 
 export interface ZoneEnemySpawn {
   id: string;
@@ -308,6 +310,8 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
       { x: 1528, y: 560, w: 72, h: 26, look: 'wall' },
       { x: 716, y: 0, w: 26, h: 64, look: 'wall' },
       { x: 858, y: 0, w: 26, h: 64, look: 'wall' },
+      { x: 716, y: 956, w: 26, h: 64, look: 'wall' },
+      { x: 858, y: 956, w: 26, h: 64, look: 'wall' },
       ruin(185, 190, 210, 26),
       ruin(185, 800, 210, 26),
       { x: 265, y: 250, w: 60, h: 38, look: 'altar' },
@@ -351,6 +355,17 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
         spawnX: 165,
         spawnY: 985,
         label: 'Labyrinthe des Brumes'
+      },
+      {
+        id: 'sanctuaire_to_marecages',
+        x: 742,
+        y: 956,
+        w: 116,
+        h: 64,
+        toZone: 'marecages',
+        spawnX: 880,
+        spawnY: 115,
+        label: 'Marécages de Lerne'
       }
     ],
     npcs: [
@@ -483,6 +498,75 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
       { id: 'lb_aut_1', type: 'automate', x: 810, y: 315, level: 8, patrolRadius: 60, respawnSeconds: 28 },
       { id: 'lb_sq_4', type: 'squelette', x: 580, y: 930, level: 8, patrolRadius: 70, respawnSeconds: 26 },
       { id: 'lb_boss', type: 'minotaure', x: 1340, y: 560, level: 9, patrolRadius: 85, respawnSeconds: 75 }
+    ]
+  }
+,
+  marecages: {
+    id: 'marecages',
+    name: 'Marécages de Lerne',
+    subtitle: 'Antre Toxique de l’Hydre',
+    realm: 'elysium',
+    viewMode: 'top-down',
+    recommendedLevel: 'Niv. 7 - 10',
+    safeZone: false,
+    width: 1760,
+    height: 1140,
+    cameraMargin: 28,
+    defaultSpawn: { x: 880, y: 115 },
+    solids: [
+      { x: 796, y: 0, w: 26, h: 64, look: 'wall' },
+      { x: 938, y: 0, w: 26, h: 64, look: 'wall' },
+      ruin(210, 210, 175, 26),
+      ruin(1360, 210, 175, 26),
+      ruin(220, 820, 170, 26),
+      ruin(1360, 820, 170, 26),
+      pillar(640, 290),
+      pillar(1120, 290),
+      pillar(560, 620),
+      pillar(1200, 620),
+      pillar(690, 960),
+      pillar(1070, 960),
+      rock(380, 440, 74, 48),
+      rock(1310, 440, 74, 48),
+      rock(420, 720, 66, 44),
+      rock(1290, 720, 66, 44),
+      cypress(160, 140),
+      cypress(1570, 140),
+      cypress(150, 560),
+      cypress(1580, 560),
+      cypress(180, 980),
+      cypress(1550, 980)
+    ],
+    portals: [
+      {
+        id: 'marecages_to_sanctuaire',
+        x: 822,
+        y: 0,
+        w: 116,
+        h: 64,
+        toZone: 'sanctuaire',
+        spawnX: 800,
+        spawnY: 905,
+        label: 'Sanctuaire Brisé'
+      }
+    ],
+    npcs: [],
+    interactables: [
+      { id: 'autel_soufre_1', targetId: 'autel_soufre', label: 'Autel de Soufre (Ouest)', kind: 'stele', x: 295, y: 315, radius: 52 },
+      { id: 'autel_soufre_2', targetId: 'autel_soufre', label: 'Autel de Soufre (Est)', kind: 'stele', x: 1455, y: 315, radius: 52 },
+      { id: 'coffre_marecages_1', targetId: 'chest_loot', label: 'Coffre englouti', kind: 'chest', x: 280, y: 920, radius: 42 },
+      { id: 'coffre_marecages_2', targetId: 'chest_loot', label: 'Coffre de Lerne', kind: 'chest', x: 1470, y: 920, radius: 42 }
+    ],
+    spawns: [
+      { id: 'mar_vip_1', type: 'serpent_lerne', x: 520, y: 250, level: 7, patrolRadius: 105, respawnSeconds: 18 },
+      { id: 'mar_vip_2', type: 'serpent_lerne', x: 1240, y: 250, level: 7, patrolRadius: 105, respawnSeconds: 18 },
+      { id: 'mar_vip_3', type: 'serpent_lerne', x: 340, y: 560, level: 8, patrolRadius: 105, respawnSeconds: 19 },
+      { id: 'mar_vip_4', type: 'serpent_lerne', x: 1410, y: 560, level: 8, patrolRadius: 105, respawnSeconds: 19 },
+      { id: 'mar_vip_5', type: 'serpent_lerne', x: 520, y: 890, level: 8, patrolRadius: 105, respawnSeconds: 19 },
+      { id: 'mar_vip_6', type: 'serpent_lerne', x: 1230, y: 890, level: 8, patrolRadius: 105, respawnSeconds: 19 },
+      { id: 'mar_har_1', type: 'harpie', x: 740, y: 440, level: 7, patrolRadius: 105, respawnSeconds: 20 },
+      { id: 'mar_har_2', type: 'harpie', x: 1020, y: 440, level: 7, patrolRadius: 105, respawnSeconds: 20 },
+      { id: 'mar_boss_hydre', type: 'hydre_lerne', x: 880, y: 780, level: 9, patrolRadius: 85, respawnSeconds: 45 }
     ]
   }
 };

@@ -3,7 +3,8 @@ import { Application, Container } from 'pixi.js';
 import { GODS_LORE, ServerInfo, ViewMode } from '@greek-myth/shared';
 import { placeLayer, View, viewAround } from '../../game/camera';
 import { DIVINE_SKILLS, HERO_CLASSES } from '../../game/data/classes';
-import { ITEMS } from '../../game/data/items';
+import { ITEMS, RARITY_HEX, RARITY_LABEL } from '../../game/data/items';
+import { rollMonsterLoot } from '../../game/data/loot';
 import { NPCS } from '../../game/data/story';
 import { stepZoneMovement, ZoneDefinition, ZoneId, zonePortalAt, ZONES } from '../../game/data/zones';
 import { sound } from '../../game/audio';
@@ -27,10 +28,13 @@ import {
   getComputedStats,
   getNpcBadge,
   grantXp,
+  markZoneDiscovered,
   NpcDialogueView,
+  recordBestiaryKill,
   recordQuestEvent,
   resolveNpcDialogue,
-  saveGameState
+  saveGameState,
+  sellItem
 } from '../../game/state/gameState';
 import { useScreen } from '../../game/useScreen';
 import { PrologueOverlay } from '../Story/PrologueOverlay';
@@ -86,7 +90,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
     potion: (itemId?: string) => void;
     interact: () => void;
     refreshNpcBadges: () => void;
-    travelToAgora: () => void;
+    travelToZone: (zoneId: ZoneId) => void;
   } | null>(null);
 
   const showToast = useCallback((message: string) => {
@@ -242,6 +246,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
 
       const loadZone = (zoneId: ZoneId, spawnX?: number, spawnY?: number) => {
         stateRef.current.zoneId = zoneId;
+        markZoneDiscovered(stateRef.current, zoneId);
         const zone = ZONES[zoneId];
 
         setBossInfo(null);
@@ -337,10 +342,19 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
             }
           }
 
+          recordBestiaryKill(stateRef.current, enemy.type);
           const readyQuests = recordQuestEvent(stateRef.current, 'kill', enemy.type);
-          if (!arch.isBoss && Math.random() < 0.18) {
-            addItemToState(stateRef.current, 'potion_ambroisie', 1);
-            if (settingsRef.current.showDamageNumbers) fx.spawnText(enemy.x, enemy.y - 30, '+1 Potion', 0x4ade80, 11);
+          const lootDrops = rollMonsterLoot(enemy.type);
+          if (lootDrops.length > 0) {
+            let bestRarity: 'commun' | 'rare' | 'epique' | 'legendaire' = 'commun';
+            const rank = { commun: 0, rare: 1, epique: 2, legendaire: 3 };
+            for (const drop of lootDrops) {
+              const def = ITEMS[drop.itemId];
+              if (!def) continue;
+              fx.spawnLootDrop(enemy.x, enemy.y, def.id, def.name, def.rarity, RARITY_HEX[def.rarity]);
+              if (rank[def.rarity] > rank[bestRarity]) bestRarity = def.rarity;
+            }
+            sound.playLoot(bestRarity);
           }
           if (leveledUp) {
             sound.playLevelUp();
@@ -583,8 +597,8 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         if (!stateRef.current.collectedInteractables.includes(def.id)) {
           stateRef.current.collectedInteractables.push(def.id);
           if (def.kind === 'chest') {
-            const goldLoot = stateRef.current.zoneId === 'labyrinthe' ? 75 : stateRef.current.zoneId === 'sanctuaire' ? 60 : 40;
-            const bonusItem = stateRef.current.zoneId === 'labyrinthe' ? 'nectar_divin' : 'potion_ambroisie';
+            const goldLoot = stateRef.current.zoneId === 'marecages' ? 90 : stateRef.current.zoneId === 'labyrinthe' ? 75 : stateRef.current.zoneId === 'sanctuaire' ? 60 : 40;
+            const bonusItem = stateRef.current.zoneId === 'labyrinthe' || stateRef.current.zoneId === 'marecages' ? 'nectar_divin' : 'potion_ambroisie';
             stateRef.current.gold += goldLoot;
             addItemToState(stateRef.current, bonusItem, 1);
             sound.playChest();
@@ -610,7 +624,13 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         potion: performPotion,
         interact: performInteract,
         refreshNpcBadges,
-        travelToAgora: () => loadZone('agora', ZONES.agora.defaultSpawn.x, ZONES.agora.defaultSpawn.y)
+        travelToZone: (targetZone: ZoneId) => {
+          if (stateRef.current.zoneId !== targetZone) {
+            const dest = ZONES[targetZone];
+            loadZone(targetZone, dest.defaultSpawn.x, dest.defaultSpawn.y);
+            showToast(`Voyage rapide : ${dest.name}`);
+          }
+        }
       };
 
       const onPointerDown = (e: PointerEvent) => {
@@ -924,6 +944,54 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
                   enemy.state = 'cooldown';
                   enemy.stateTimer = arch.attackCooldown;
                 }
+              } else if (arch.attackStyle === 'venom_spit') {
+                fx.spawnProjectile({
+                  x: enemy.x,
+                  y: enemy.y - 6,
+                  vx: Math.cos(a) * 285,
+                  vy: Math.sin(a) * 285,
+                  damage: arch.attack,
+                  radius: 6,
+                  fromPlayer: false,
+                  life: 1.4,
+                  color: 0x4ade80,
+                  style: 'venom'
+                });
+                fx.spawnHazard(player.x, player.y, 32, 0.95, Math.round(arch.attack * 0.75), 0x4ade80);
+                enemy.state = 'cooldown';
+                enemy.stateTimer = arch.attackCooldown;
+              } else if (arch.attackStyle === 'hydra') {
+                const step = enemy.patternStep;
+                enemy.patternStep = (enemy.patternStep + 1) % 3;
+                if (step === 0) {
+                  for (const offset of [-0.42, -0.21, 0, 0.21, 0.42]) {
+                    const ang = a + offset;
+                    fx.spawnProjectile({
+                      x: enemy.x,
+                      y: enemy.y - 10,
+                      vx: Math.cos(ang) * 295,
+                      vy: Math.sin(ang) * 295,
+                      damage: Math.round(arch.attack * 0.8),
+                      radius: 6.5,
+                      fromPlayer: false,
+                      life: 1.5,
+                      color: 0x4ade80,
+                      style: 'venom'
+                    });
+                  }
+                } else if (step === 1) {
+                  for (const offset of [-0.35, 0, 0.35]) {
+                    fx.spawnSlash(enemy.x, enemy.y - 4, a + offset, 118, 0x4ade80, 'arc');
+                  }
+                  cameraShake = Math.max(cameraShake, 6);
+                  if (dist <= 122) damagePlayer(arch.attack, enemy.x);
+                } else {
+                  for (const [ox, oy] of [[0, 0], [82, -40], [-82, -40], [0, 78]]) {
+                    fx.spawnHazard(player.x + ox, player.y + oy, 44, 1.0, 24, 0x4ade80);
+                  }
+                }
+                enemy.state = 'cooldown';
+                enemy.stateTimer = arch.attackCooldown;
               } else {
                 // poseidon coup de trident rapproche
                 fx.spawnSlash(enemy.x, enemy.y - 10, a, 76, COLORS.seaLight, 'arc');
@@ -1051,6 +1119,21 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         hero.container.position.set(player.x, player.y);
         syncOthers(mode, time);
         if (moving && !airborne) dust.trail(player.x, mode === 'top-down' ? player.y + 8 : player.y + 16);
+        const pickedLoot = fx.collectNearbyLoot(player.x, player.y, 44);
+        if (pickedLoot.length > 0) {
+          for (const drop of pickedLoot) {
+            const def = ITEMS[drop.itemId];
+            if (!def) continue;
+            addItemToState(stateRef.current, def.id, 1);
+            fx.spawnText(player.x, player.y - 28, `+1 ${def.name}`, RARITY_HEX[def.rarity], def.rarity === 'legendaire' ? 14 : 11.5);
+            if (def.rarity !== 'commun') {
+              showToast(`Butin ${RARITY_LABEL[def.rarity]} : ${def.name}`);
+            }
+          }
+          sound.playCoin();
+          syncUi(true);
+        }
+
         dust.update();
         fx.render(dt);
 
@@ -1131,7 +1214,8 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
                 x: e.x,
                 y: e.y,
                 kind: ENEMY_ARCHETYPES[e.type].isBoss ? 'boss' : 'enemy'
-              }))
+              })),
+            ...fx.lootDrops.map((d): MinimapMarker => ({ x: d.x, y: d.y, kind: 'loot' }))
           ];
           setMinimapMarkers(markers);
         }
@@ -1202,6 +1286,16 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
     sound.playChest();
     syncUi(true);
     showToast(`${item.name} acquis`);
+  };
+
+  const handleSellItem = (itemId: string) => {
+    const item = ITEMS[itemId];
+    const payout = sellItem(stateRef.current, itemId);
+    if (payout > 0 && item) {
+      sound.playCoin();
+      syncUi(true);
+      showToast(`${item.name} vendu (+${payout} drachmes)`);
+    }
   };
 
   const handleEquipItem = (itemId: string) => {
@@ -1283,6 +1377,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           onCompleteQuest={handleCompleteQuest}
           onHeal={handleHeal}
           onBuyItem={handleBuyItem}
+          onSellItem={handleSellItem}
           onClose={() => setDialogue(null)}
         />
       )}
@@ -1300,9 +1395,10 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
       {worldMapOpen && !showPrologue && !pauseOpen && (
         <WorldMapModal
           currentZone={uiState.zoneId}
-          onFastTravelAgora={() => {
+          discoveredZones={uiState.discoveredZones ?? ['agora']}
+          onFastTravel={(targetZone) => {
             setWorldMapOpen(false);
-            actionsRef.current?.travelToAgora();
+            actionsRef.current?.travelToZone(targetZone);
           }}
           onClose={() => setWorldMapOpen(false)}
         />

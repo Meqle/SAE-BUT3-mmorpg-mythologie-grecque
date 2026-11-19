@@ -33,6 +33,8 @@ export interface GameProgressState {
   activatedTrialSteles: string[];
   unlockedCodex: string[];
   defeatedBosses: string[];
+  bestiaryKills: Record<string, number>;
+  discoveredZones: ZoneId[];
 }
 
 export interface ComputedHeroStats {
@@ -118,7 +120,9 @@ export function createNewGameState(
     collectedInteractables: [],
     activatedTrialSteles: [],
     unlockedCodex: CODEX_ENTRIES.filter((c) => c.unlockedByDefault).map((c) => c.id),
-    defeatedBosses: []
+    defeatedBosses: [],
+    bestiaryKills: {},
+    discoveredZones: ['agora']
   };
   state.hp = getComputedStats(state).maxHp;
   return state;
@@ -141,6 +145,13 @@ export function loadGameState(heroName: string): GameProgressState | null {
     const baseQuests = buildInitialQuests();
     for (const id of QUEST_ORDER) {
       if (!parsed.quests[id]) parsed.quests[id] = baseQuests[id];
+    }
+    if (!parsed.bestiaryKills) parsed.bestiaryKills = {};
+    if (!Array.isArray(parsed.discoveredZones) || parsed.discoveredZones.length === 0) {
+      parsed.discoveredZones = ['agora'];
+      if (parsed.zoneId && !parsed.discoveredZones.includes(parsed.zoneId)) {
+        parsed.discoveredZones.push(parsed.zoneId);
+      }
     }
     return parsed;
   } catch {
@@ -408,4 +419,29 @@ export function equipItem(state: GameProgressState, itemId: string): boolean {
   const stats = getComputedStats(state);
   if (state.hp > stats.maxHp) state.hp = stats.maxHp;
   return true;
+}
+
+export function sellItem(state: GameProgressState, itemId: string): number {
+  const idx = state.inventory.findIndex((s) => s.itemId === itemId);
+  if (idx < 0) return 0;
+  const slot = state.inventory[idx];
+  const def = ITEMS[itemId];
+  if (!def || def.price <= 0 || slot.equipped) return 0;
+  const payout = Math.max(1, Math.floor(def.price * 0.5));
+  slot.quantity -= 1;
+  if (slot.quantity <= 0) state.inventory.splice(idx, 1);
+  state.gold += payout;
+  return payout;
+}
+
+export function recordBestiaryKill(state: GameProgressState, enemyType: string): void {
+  if (!state.bestiaryKills) state.bestiaryKills = {};
+  state.bestiaryKills[enemyType] = (state.bestiaryKills[enemyType] ?? 0) + 1;
+}
+
+export function markZoneDiscovered(state: GameProgressState, zoneId: ZoneId): void {
+  if (!state.discoveredZones) state.discoveredZones = ['agora'];
+  if (!state.discoveredZones.includes(zoneId)) {
+    state.discoveredZones.push(zoneId);
+  }
 }
