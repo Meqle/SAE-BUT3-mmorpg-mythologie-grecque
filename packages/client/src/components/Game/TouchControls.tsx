@@ -1,115 +1,88 @@
-// commandes tactiles : joystick a gauche, bouton de saut a droite (vue de profil)
-import { PointerEvent, useRef, useState } from 'react';
+import { CSSProperties, PointerEvent } from 'react';
 import { ViewMode } from '@greek-myth/shared';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Flame, Hand, Swords } from 'lucide-react';
 import { touch } from '../../game/input';
+import { COLORS, css } from '../../game/scenes/palette';
 
-const STICK_SIZE = 130;
-const KNOB_SIZE = 56;
+const MARBLE = css(COLORS.marble);
+const GOLD = css(COLORS.gold);
 
-const base = {
-  position: 'absolute' as const,
-  bottom: 'calc(20px + env(safe-area-inset-bottom))',
-  zIndex: 20,
-  touchAction: 'none' as const
+const buttonStyle: CSSProperties = {
+  width: 50,
+  height: 50,
+  borderRadius: '50%',
+  background: 'rgba(31, 53, 80, 0.82)',
+  border: `2px solid ${MARBLE}`,
+  boxShadow: `inset 0 0 0 2px rgba(31, 53, 80, 0.82), inset 0 0 0 3px ${GOLD}, 0 4px 10px rgba(0, 0, 0, 0.35)`,
+  color: MARBLE,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  touchAction: 'none',
+  cursor: 'pointer'
 };
 
+type Key = keyof typeof touch;
+
+function PadButton({ field, label, children, style }: { field: Key; label: string; children: React.ReactNode; style?: CSSProperties }) {
+  const down = (e: PointerEvent) => {
+    e.preventDefault();
+    touch[field] = true;
+  };
+  const up = () => {
+    touch[field] = false;
+  };
+  return (
+    <button
+      aria-label={label}
+      style={{ ...buttonStyle, ...style }}
+      onPointerDown={down}
+      onPointerUp={up}
+      onPointerCancel={up}
+      onPointerLeave={up}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function TouchControls({ viewMode }: { viewMode: ViewMode }) {
-  const [knob, setKnob] = useState({ x: 0, y: 0 });
-  const [jumping, setJumping] = useState(false);
-  const stickRef = useRef<HTMLDivElement>(null);
-  const sideView = viewMode === 'side-view';
-
-  const stopStick = () => {
-    touch.up = touch.down = touch.left = touch.right = false;
-    setKnob({ x: 0, y: 0 });
-  };
-
-  // position du doigt par rapport au centre du joystick
-  const moveStick = (e: PointerEvent<HTMLDivElement>) => {
-    const box = stickRef.current!.getBoundingClientRect();
-    const max = STICK_SIZE / 2;
-    let dx = e.clientX - (box.left + max);
-    let dy = e.clientY - (box.top + max);
-    const len = Math.hypot(dx, dy);
-    if (len > max) {
-      dx = (dx / len) * max;
-      dy = (dy / len) * max;
-    }
-    // le rond jaune reste dans le cercle (l'ecart sert quand meme au calcul)
-    const lim = max - KNOB_SIZE / 2;
-    const k = len > lim ? lim / len : 1;
-    setKnob({ x: dx * k, y: dy * k });
-    const dead = max * 0.3;
-    touch.left = dx < -dead;
-    touch.right = dx > dead;
-    // en vue de profil on saute avec le bouton, pas avec le joystick
-    touch.up = !sideView && dy < -dead;
-    touch.down = !sideView && dy > dead;
-  };
-
-  const jump = (down: boolean) => {
-    touch.jump = down;
-    setJumping(down);
-  };
+  const bottom = 'calc(18px + env(safe-area-inset-bottom))';
+  const side = 'calc(16px + env(safe-area-inset-left))';
+  const right = 'calc(16px + env(safe-area-inset-right))';
 
   return (
     <>
-      <div
-        ref={stickRef}
-        onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); moveStick(e); }}
-        onPointerMove={(e) => { if (e.currentTarget.hasPointerCapture(e.pointerId)) moveStick(e); }}
-        onPointerUp={stopStick}
-        onPointerCancel={stopStick}
-        onContextMenu={(e) => e.preventDefault()}
-        style={{
-          ...base,
-          left: 'calc(20px + env(safe-area-inset-left))',
-          width: STICK_SIZE,
-          height: STICK_SIZE,
-          borderRadius: '50%',
-          background: 'rgba(31, 53, 80, 0.55)',
-          border: '3px solid rgba(244, 236, 216, 0.7)'
-        }}
-      >
+      {viewMode === 'side-view' ? (
+        <div style={{ position: 'absolute', bottom, left: side, display: 'flex', gap: 12, zIndex: 25 }}>
+          <PadButton field="left" label="Gauche"><ArrowLeft size={22} /></PadButton>
+          <PadButton field="right" label="Droite"><ArrowRight size={22} /></PadButton>
+        </div>
+      ) : (
         <div style={{
-          position: 'absolute',
-          left: STICK_SIZE / 2 - KNOB_SIZE / 2 + knob.x - 3,
-          top: STICK_SIZE / 2 - KNOB_SIZE / 2 + knob.y - 3,
-          width: KNOB_SIZE,
-          height: KNOB_SIZE,
-          borderRadius: '50%',
-          background: 'rgba(212, 175, 55, 0.9)',
-          border: '3px solid #1f3550',
-          pointerEvents: 'none'
-        }} />
-      </div>
-
-      {sideView && (
-        <div
-          onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); jump(true); }}
-          onPointerUp={() => jump(false)}
-          onPointerCancel={() => jump(false)}
-          onContextMenu={(e) => e.preventDefault()}
-          style={{
-            ...base,
-            right: 'calc(20px + env(safe-area-inset-right))',
-            width: 84,
-            height: 84,
-            borderRadius: '50%',
-            background: jumping ? 'rgba(212, 175, 55, 0.95)' : 'rgba(212, 175, 55, 0.7)',
-            border: '3px solid #1f3550',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#1f3550',
-            fontFamily: 'Cinzel, serif',
-            fontWeight: 'bold',
-            fontSize: 14
-          }}
-        >
-          SAUT
+          position: 'absolute', bottom, left: side, zIndex: 25,
+          display: 'grid', gridTemplateColumns: 'repeat(3, 48px)', gridTemplateRows: 'repeat(3, 48px)', gap: 4
+        }}>
+          <div />
+          <PadButton field="up" label="Haut" style={{ width: 48, height: 48 }}><ArrowUp size={20} /></PadButton>
+          <div />
+          <PadButton field="left" label="Gauche" style={{ width: 48, height: 48 }}><ArrowLeft size={20} /></PadButton>
+          <div />
+          <PadButton field="right" label="Droite" style={{ width: 48, height: 48 }}><ArrowRight size={20} /></PadButton>
+          <div />
+          <PadButton field="down" label="Bas" style={{ width: 48, height: 48 }}><ArrowDown size={20} /></PadButton>
+          <div />
         </div>
       )}
+
+      <div style={{ position: 'absolute', bottom, right, display: 'flex', gap: 10, zIndex: 25, alignItems: 'flex-end' }}>
+        <PadButton field="interact" label="Interagir"><Hand size={20} color={GOLD} /></PadButton>
+        <PadButton field="special" label="Pouvoir divin"><Flame size={20} color="#f97316" /></PadButton>
+        <PadButton field="attack" label="Attaquer" style={{ width: 58, height: 58 }}><Swords size={24} color={GOLD} /></PadButton>
+        {viewMode === 'side-view' && (
+          <PadButton field="jump" label="Sauter" style={{ width: 58, height: 58 }}><ArrowUp size={24} /></PadButton>
+        )}
+      </div>
     </>
   );
 }

@@ -1,5 +1,3 @@
-// personnages : un hoplite (casque corinthien, cape, cimier et bouclier a la couleur du dieu choisi)
-// le dessin de chaque vue est dans hero/side.ts (profil) et hero/above.ts (dessus)
 import { Container, Text, TextStyle } from 'pixi.js';
 import { ViewMode } from '@greek-myth/shared';
 import { COLORS } from './scenes/palette';
@@ -11,11 +9,12 @@ export interface HeroSprite {
   label: Text;
   labelY: number;
   setView: (mode: ViewMode) => void;
-  face: (dx: number) => void; // regarde a gauche (dx < 0) ou a droite (dx > 0)
-  animate: (moving: boolean, airborne: boolean, time: number) => void; // pas, saut (time en secondes)
+  face: (dx: number) => void;
+  animate: (moving: boolean, airborne: boolean, time: number) => void;
+  setHitFlash: (active: boolean) => void;
+  pulseAttack: () => void;
 }
 
-// nom au-dessus de la tete : lettres gravees claires avec contour bleu nuit et petite ombre
 function createLabel(name: string, isLocal: boolean): Text {
   const label = new Text({
     text: name,
@@ -38,9 +37,12 @@ export function createHero(name: string, color: number, isLocal: boolean): HeroS
   const above = createAboveHero(color, isLocal);
   const side = createSideHero(color, isLocal);
   const label = createLabel(name, isLocal);
+  const bodyWrap = new Container();
+  bodyWrap.addChild(above.view, side.view);
   const container = new Container();
-  container.addChild(above.view, side.view, label);
+  container.addChild(bodyWrap, label);
   let mode: ViewMode = 'top-down';
+  let attackKick = 0;
 
   const hero: HeroSprite = {
     container,
@@ -61,13 +63,25 @@ export function createHero(name: string, color: number, isLocal: boolean): HeroS
     animate: (moving, airborne, time) => {
       if (mode === 'top-down') above.animate(moving, time);
       else side.animate(moving, airborne, time);
+      if (attackKick > 0) {
+        attackKick = Math.max(0, attackKick - 0.14);
+        const s = 1 + attackKick * 0.18;
+        bodyWrap.scale.set(s);
+      } else {
+        bodyWrap.scale.set(1);
+      }
+    },
+    setHitFlash: (active) => {
+      bodyWrap.tint = active ? 0xffb4b4 : 0xffffff;
+    },
+    pulseAttack: () => {
+      attackKick = 1;
     }
   };
   hero.setView('top-down');
   return hero;
 }
 
-// decale les noms vers le haut quand des joueurs sont proches (sinon ils se chevauchent)
 export function stackLabels(heroes: HeroSprite[]): void {
   const sorted = [...heroes].sort((a, b) => a.container.y - b.container.y);
   sorted.forEach((hero, i) => {
@@ -81,5 +95,4 @@ export function stackLabels(heroes: HeroSprite[]): void {
   });
 }
 
-// "#facc15" -> 0xfacc15
 export const hexColor = (color: string) => parseInt(color.replace('#', ''), 16);
