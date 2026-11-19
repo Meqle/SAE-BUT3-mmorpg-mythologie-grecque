@@ -1,15 +1,17 @@
+import type { GameSettings } from './settings';
+
 export interface Keyboard {
   isUp: () => boolean;
   isDown: () => boolean;
   isLeft: () => boolean;
   isRight: () => boolean;
   isJump: () => boolean;
-  isAttackHeld: () => boolean;
   consumeAttack: () => boolean;
   consumeSpecial: () => boolean;
   consumeInteract: () => boolean;
   consumeDash: () => boolean;
   consumePotion: () => boolean;
+  updateSettings: (settings: GameSettings) => void;
   setBlocked: (blocked: boolean) => void;
   dispose: () => void;
 }
@@ -25,14 +27,9 @@ export const touch = {
   interact: false
 };
 
-const WATCHED_KEYS = [
-  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-  'KeyW', 'KeyS', 'KeyA', 'KeyD', 'Space',
-  'KeyE', 'KeyJ', 'KeyK', 'KeyR', 'ShiftLeft', 'ShiftRight'
-];
-
-export function createKeyboard(): Keyboard {
-  const keys: Record<string, boolean> = {};
+export function createKeyboard(initialSettings: GameSettings): Keyboard {
+  let settings = initialSettings;
+  const pressed = new Set<string>();
   let blocked = false;
   let attackQueued = false;
   let specialQueued = false;
@@ -40,27 +37,30 @@ export function createKeyboard(): Keyboard {
   let dashQueued = false;
   let potionQueued = false;
 
+  const matches = (code: string, action: keyof GameSettings['keys']) =>
+    settings.keys[action].code === code ||
+    (action === 'dash' && settings.keys.dash.code === 'ShiftLeft' && code === 'ShiftRight');
+
   const onKeyDown = (e: KeyboardEvent) => {
     if (blocked) return;
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-    if (WATCHED_KEYS.includes(e.code)) {
-      if (!keys[e.code]) {
-        if (e.code === 'KeyJ') attackQueued = true;
-        if (e.code === 'KeyK') specialQueued = true;
-        if (e.code === 'KeyE') interactQueued = true;
-        if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') dashQueued = true;
-        if (e.code === 'KeyR') potionQueued = true;
-      }
-      keys[e.code] = true;
+    const isRepeat = pressed.has(e.code);
+    pressed.add(e.code);
+    if (!isRepeat) {
+      if (matches(e.code, 'attack')) attackQueued = true;
+      if (matches(e.code, 'special')) specialQueued = true;
+      if (matches(e.code, 'interact')) interactQueued = true;
+      if (matches(e.code, 'dash')) dashQueued = true;
+      if (matches(e.code, 'potion')) potionQueued = true;
     }
   };
 
   const onKeyUp = (e: KeyboardEvent) => {
-    if (WATCHED_KEYS.includes(e.code)) keys[e.code] = false;
+    pressed.delete(e.code);
   };
 
   const releaseAll = () => {
-    for (const k in keys) keys[k] = false;
+    pressed.clear();
     touch.up = touch.down = touch.left = touch.right = touch.jump = false;
     touch.attack = touch.special = touch.interact = false;
   };
@@ -74,15 +74,17 @@ export function createKeyboard(): Keyboard {
   window.addEventListener('blur', releaseAll);
   document.addEventListener('visibilitychange', onVisibility);
 
-  const isUp = () => !blocked && !!(keys.ArrowUp || keys.KeyW || touch.up);
+  const isUp = () => !blocked && (pressed.has(settings.keys.up.code) || pressed.has('ArrowUp') || touch.up);
+  const isDown = () => !blocked && (pressed.has(settings.keys.down.code) || pressed.has('ArrowDown') || touch.down);
+  const isLeft = () => !blocked && (pressed.has(settings.keys.left.code) || pressed.has('ArrowLeft') || touch.left);
+  const isRight = () => !blocked && (pressed.has(settings.keys.right.code) || pressed.has('ArrowRight') || touch.right);
 
   return {
     isUp,
-    isDown: () => !blocked && !!(keys.ArrowDown || keys.KeyS || touch.down),
-    isLeft: () => !blocked && !!(keys.ArrowLeft || keys.KeyA || touch.left),
-    isRight: () => !blocked && !!(keys.ArrowRight || keys.KeyD || touch.right),
-    isJump: () => !blocked && (!!keys.Space || touch.jump || isUp()),
-    isAttackHeld: () => !blocked && !!(keys.KeyJ || touch.attack),
+    isDown,
+    isLeft,
+    isRight,
+    isJump: () => !blocked && (pressed.has(settings.keys.jump.code) || touch.jump || isUp()),
     consumeAttack: () => {
       if (blocked) return false;
       const v = attackQueued || touch.attack;
@@ -116,7 +118,10 @@ export function createKeyboard(): Keyboard {
       potionQueued = false;
       return v;
     },
-    setBlocked: (b: boolean) => {
+    updateSettings: (next) => {
+      settings = next;
+    },
+    setBlocked: (b) => {
       blocked = b;
       if (b) releaseAll();
     },

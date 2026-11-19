@@ -4,6 +4,8 @@ import type { EnemyType, ZoneEnemySpawn } from '../data/zones';
 import { BRONZE, BRONZE_LIT, BRONZE_SHADE, LINE, WOOD, dome, shaded } from '../hero/look';
 import { COLORS } from '../scenes/palette';
 
+export type EnemyAttackStyle = 'lunge' | 'ranged_fan' | 'charge' | 'fire_slam' | 'boss_burst' | 'poseidon';
+
 export interface EnemyArchetype {
   type: EnemyType;
   name: string;
@@ -14,6 +16,7 @@ export interface EnemyArchetype {
   attackRange: number;
   attackCooldown: number;
   windupDuration: number;
+  attackStyle: EnemyAttackStyle;
   xpReward: number;
   goldReward: number;
   radius: number;
@@ -25,72 +28,77 @@ export const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
   satyre: {
     type: 'satyre',
     name: 'Satyre belliqueux',
-    maxHp: 58,
-    attack: 9,
-    speed: 108,
-    aggroRange: 210,
-    attackRange: 34,
-    attackCooldown: 1.25,
-    windupDuration: 0.35,
-    xpReward: 34,
-    goldReward: 14,
+    maxHp: 60,
+    attack: 10,
+    speed: 105,
+    aggroRange: 215,
+    attackRange: 95,
+    attackCooldown: 1.4,
+    windupDuration: 0.42,
+    attackStyle: 'lunge',
+    xpReward: 36,
+    goldReward: 16,
     radius: 15
   },
   harpie: {
     type: 'harpie',
     name: 'Harpie des tempêtes',
-    maxHp: 48,
-    attack: 11,
-    speed: 138,
-    aggroRange: 250,
-    attackRange: 38,
-    attackCooldown: 1.35,
-    windupDuration: 0.38,
-    xpReward: 42,
-    goldReward: 18,
+    maxHp: 50,
+    attack: 10,
+    speed: 132,
+    aggroRange: 270,
+    attackRange: 215,
+    attackCooldown: 1.85,
+    windupDuration: 0.45,
+    attackStyle: 'ranged_fan',
+    xpReward: 44,
+    goldReward: 20,
     radius: 15,
     flying: true
   },
   centaure: {
     type: 'centaure',
     name: 'Centaure corrompu',
-    maxHp: 175,
-    attack: 19,
-    speed: 122,
-    aggroRange: 270,
-    attackRange: 50,
-    attackCooldown: 1.6,
-    windupDuration: 0.55,
-    xpReward: 115,
-    goldReward: 55,
+    maxHp: 185,
+    attack: 22,
+    speed: 118,
+    aggroRange: 280,
+    attackRange: 200,
+    attackCooldown: 2.1,
+    windupDuration: 0.68,
+    attackStyle: 'charge',
+    xpReward: 120,
+    goldReward: 65,
     radius: 22
   },
   automate: {
     type: 'automate',
     name: "Automate d'Héphaïstos",
-    maxHp: 150,
+    maxHp: 155,
     attack: 20,
-    speed: 82,
-    aggroRange: 230,
-    attackRange: 44,
-    attackCooldown: 1.75,
-    windupDuration: 0.6,
+    speed: 78,
+    aggroRange: 250,
+    attackRange: 190,
+    attackCooldown: 1.9,
+    windupDuration: 0.62,
+    attackStyle: 'fire_slam',
     xpReward: 95,
-    goldReward: 42,
+    goldReward: 48,
     radius: 20
   },
   gardien_airain: {
     type: 'gardien_airain',
     name: "Gardien d'Airain",
-    maxHp: 310,
+    maxHp: 320,
     attack: 25,
-    speed: 92,
-    aggroRange: 290,
-    attackRange: 56,
-    attackCooldown: 1.7,
-    windupDuration: 0.62,
-    xpReward: 210,
-    goldReward: 110,
+    speed: 88,
+    aggroRange: 300,
+    attackRange: 220,
+    attackCooldown: 1.8,
+    windupDuration: 0.65,
+    attackStyle: 'boss_burst',
+    xpReward: 220,
+    goldReward: 120,
     radius: 26,
     isBoss: true
   },
@@ -99,13 +107,14 @@ export const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     name: 'Sentinelle de Poséidon',
     maxHp: 460,
     attack: 26,
-    speed: 95,
+    speed: 92,
     aggroRange: 520,
-    attackRange: 64,
+    attackRange: 72,
     attackCooldown: 1.85,
     windupDuration: 0.65,
-    xpReward: 340,
-    goldReward: 180,
+    attackStyle: 'poseidon',
+    xpReward: 350,
+    goldReward: 200,
     radius: 28,
     isBoss: true
   }
@@ -129,9 +138,15 @@ export interface EnemyEntity {
   respawnSeconds: number;
   patrolRadius: number;
   patrolAngle: number;
-  state: 'patrol' | 'chase' | 'windup' | 'cooldown';
+  state: 'patrol' | 'chase' | 'windup' | 'dashing' | 'cooldown';
   stateTimer: number;
+  aimAngle: number;
+  dashVx: number;
+  dashVy: number;
+  dashHitDone: boolean;
+  patternStep: number;
   waveCooldown: number;
+  skyCooldown: number;
   hitFlash: number;
   stunTimer: number;
   shielded: boolean;
@@ -149,13 +164,11 @@ function drawEnemyVisual(type: EnemyType, mode: ViewMode): Container {
   if (type === 'satyre') {
     g.ellipse(0, 0, 9.5, 7.5).fill(shaded(0x9a6338, 0x5c361c)).stroke(LINE);
     g.circle(0, -1, 5.5).fill(dome(0xb87a4b, 0x87532d, 0x4f2e18)).stroke(LINE);
-    // cornes recourbees
     g.moveTo(-3, -4).quadraticCurveTo(-8, -10, -10, -5).stroke({ width: 2.2, color: COLORS.marbleShade, cap: 'round' });
     g.moveTo(3, -4).quadraticCurveTo(8, -10, 10, -5).stroke({ width: 2.2, color: COLORS.marbleShade, cap: 'round' });
-    // gourdin
     g.moveTo(7, 2).lineTo(14, -6).stroke({ width: 3, color: WOOD, cap: 'round' });
   } else if (type === 'harpie') {
-    const wing = mode === 'side-view' ? 16 : 18;
+    const wing = mode === 'side-view' ? 16 : 19;
     g.poly([0, -2, -wing, -10, -wing + 4, 4, 0, 3]).fill(shaded(0x475569, 0x1e293b)).stroke(LINE);
     g.poly([0, -2, wing, -10, wing - 4, 4, 0, 3]).fill(shaded(0x475569, 0x1e293b)).stroke(LINE);
     g.ellipse(0, 0, 7, 9).fill(shaded(COLORS.tile, 0x7c2d12)).stroke(LINE);
@@ -166,11 +179,10 @@ function drawEnemyVisual(type: EnemyType, mode: ViewMode): Container {
     g.ellipse(6, -1, 9, 10).fill(shaded(BRONZE_LIT, BRONZE_SHADE)).stroke(LINE);
     g.circle(8, -2, 6).fill(dome(BRONZE_LIT, BRONZE, BRONZE_SHADE)).stroke(LINE);
     g.ellipse(8, -2, 2.2, 8).fill(0xdc2626).stroke({ ...LINE, width: 0.7 });
-    // grande lance de guerre
-    g.moveTo(2, 9).lineTo(24, 9).stroke({ width: 2.8, color: WOOD, cap: 'round' });
-    g.poly([23, 6, 30, 9, 23, 12]).fill(BRONZE_LIT).stroke(LINE);
+    g.moveTo(2, 9).lineTo(25, 9).stroke({ width: 2.8, color: WOOD, cap: 'round' });
+    g.poly([24, 6, 31, 9, 24, 12]).fill(BRONZE_LIT).stroke(LINE);
   } else if (type === 'automate' || type === 'gardien_airain') {
-    const sc = type === 'gardien_airain' ? 1.3 : 1;
+    const sc = type === 'gardien_airain' ? 1.32 : 1;
     g.scale.set(sc);
     g.roundRect(-12, -11, 24, 22, 6).fill(shaded(BRONZE_LIT, BRONZE_SHADE)).stroke({ ...LINE, width: 1.5 });
     g.circle(0, 0, 6.5).fill(0xf97316).stroke(LINE);
@@ -178,16 +190,12 @@ function drawEnemyVisual(type: EnemyType, mode: ViewMode): Container {
     g.roundRect(-16, -6, 6, 12, 2).fill(BRONZE).stroke(LINE);
     g.roundRect(10, -6, 6, 12, 2).fill(BRONZE).stroke(LINE);
   } else if (type === 'sentinelle_poseidon') {
-    // grand colosse en vue de profil (marbre marin, bronze et trident lumineux)
     g.roundRect(-14, -34, 28, 36, 6).fill(shaded(COLORS.marbleLit, COLORS.seaLight)).stroke({ ...LINE, width: 1.8 });
     g.roundRect(-16, -34, 32, 10, 4).fill(shaded(BRONZE_LIT, BRONZE_SHADE)).stroke(LINE);
-    // jambes
     g.roundRect(-11, 0, 8, 16, 3).fill(COLORS.marbleShade).stroke(LINE);
     g.roundRect(3, 0, 8, 16, 3).fill(COLORS.marbleShade).stroke(LINE);
-    // tete et couronne
     g.circle(0, -42, 9).fill(dome(COLORS.marbleLit, COLORS.marble, COLORS.seaLight)).stroke(LINE);
     g.poly([-9, -48, -6, -56, -2, -49, 0, -58, 2, -49, 6, -56, 9, -48]).fill(COLORS.gold).stroke(LINE);
-    // trident d'or et d'eau
     g.moveTo(18, -54).lineTo(18, 14).stroke({ width: 3.4, color: COLORS.ink, cap: 'round' });
     g.moveTo(18, -54).lineTo(18, 14).stroke({ width: 2, color: COLORS.gold, cap: 'round' });
     g.moveTo(11, -46).lineTo(11, -57).moveTo(25, -46).lineTo(25, -57).moveTo(11, -46).lineTo(25, -46)
@@ -221,7 +229,7 @@ export function createEnemyEntity(spawn: ZoneEnemySpawn, mode: ViewMode): EnemyE
 
   const body = drawEnemyVisual(spawn.type, mode);
 
-  const barY = spawn.type === 'sentinelle_poseidon' ? -72 : -arch.radius - 16;
+  const barY = spawn.type === 'sentinelle_poseidon' ? -72 : -arch.radius - 15;
   const barW = arch.isBoss ? 56 : 36;
   const hpBg = new Graphics()
     .roundRect(-barW / 2, barY, barW, 5, 2)
@@ -237,7 +245,7 @@ export function createEnemyEntity(spawn: ZoneEnemySpawn, mode: ViewMode): EnemyE
       fontSize: arch.isBoss ? 10 : 8.5,
       fontWeight: '700',
       fill: arch.isBoss ? COLORS.gold : COLORS.marbleLit,
-      stroke: { color: COLORS.ink, width: 2.8, join: 'round' }
+      stroke: { color: COLORS.ink, width: 2.6, join: 'round' }
     })
   });
   label.anchor.set(0.5, 1);
@@ -265,7 +273,13 @@ export function createEnemyEntity(spawn: ZoneEnemySpawn, mode: ViewMode): EnemyE
     patrolAngle: Math.random() * Math.PI * 2,
     state: 'patrol',
     stateTimer: 0,
-    waveCooldown: 3.5,
+    aimAngle: 0,
+    dashVx: 0,
+    dashVy: 0,
+    dashHitDone: false,
+    patternStep: 0,
+    waveCooldown: 3.4,
+    skyCooldown: 5.2,
     hitFlash: 0,
     stunTimer: 0,
     shielded: spawn.type === 'sentinelle_poseidon',
@@ -282,7 +296,7 @@ export function createEnemyEntity(spawn: ZoneEnemySpawn, mode: ViewMode): EnemyE
 
 export function redrawEnemyHp(enemy: EnemyEntity): void {
   const arch = ENEMY_ARCHETYPES[enemy.type];
-  const barY = enemy.type === 'sentinelle_poseidon' ? -72 : -arch.radius - 16;
+  const barY = enemy.type === 'sentinelle_poseidon' ? -72 : -arch.radius - 15;
   const barW = arch.isBoss ? 56 : 36;
   const ratio = Math.max(0, enemy.hp / enemy.maxHp);
   enemy.hpFill.clear();
@@ -311,20 +325,38 @@ export function updateEnemyVisual(enemy: EnemyEntity, time: number, mode: ViewMo
   }
 
   enemy.body.tint = enemy.hitFlash > 0 ? 0xffc7c7 : enemy.stunTimer > 0 ? 0x93c5fd : 0xffffff;
-
   enemy.shieldRing.visible = enemy.shielded;
-  if (enemy.shielded) {
-    enemy.shieldRing.alpha = 0.6 + Math.sin(time * 4) * 0.25;
-  }
+  if (enemy.shielded) enemy.shieldRing.alpha = 0.6 + Math.sin(time * 4) * 0.25;
 
   if (enemy.state === 'windup') {
     enemy.telegraph.visible = true;
     enemy.telegraph.clear();
     const pulse = 0.5 + 0.5 * Math.sin(time * 24);
-    enemy.telegraph
-      .circle(0, 0, arch.attackRange)
-      .fill({ color: 0xef4444, alpha: 0.14 + pulse * 0.12 })
-      .stroke({ width: 2, color: 0xf87171, alpha: 0.85 });
+    const a = enemy.aimAngle;
+    const cx = Math.cos(a);
+    const sy = Math.sin(a);
+    const px = -sy;
+    const py = cx;
+
+    if (arch.attackStyle === 'lunge' || arch.attackStyle === 'charge') {
+      const len = arch.attackStyle === 'charge' ? 210 : 105;
+      const halfW = arch.attackStyle === 'charge' ? 20 : 13;
+      enemy.telegraph.poly([
+        px * halfW, py * halfW,
+        cx * len + px * halfW, sy * len + py * halfW,
+        cx * len - px * halfW, sy * len - py * halfW,
+        -px * halfW, -py * halfW
+      ]).fill({ color: 0xef4444, alpha: 0.16 + pulse * 0.14 }).stroke({ width: 1.8, color: 0xf87171, alpha: 0.9 });
+    } else if (arch.attackStyle === 'ranged_fan') {
+      enemy.telegraph.moveTo(0, 0).arc(0, 0, 120, a - 0.38, a + 0.38).closePath()
+        .fill({ color: 0x38bdf8, alpha: 0.14 + pulse * 0.1 })
+        .stroke({ width: 1.5, color: 0x7dd3fc, alpha: 0.85 });
+    } else {
+      const r = arch.attackStyle === 'boss_burst' ? 105 : 74;
+      enemy.telegraph.circle(0, 0, r)
+        .fill({ color: 0xf97316, alpha: 0.15 + pulse * 0.12 })
+        .stroke({ width: 2, color: 0xfb923c, alpha: 0.9 });
+    }
   } else {
     enemy.telegraph.visible = false;
   }

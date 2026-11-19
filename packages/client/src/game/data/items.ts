@@ -18,7 +18,7 @@ export const ITEMS: Record<string, ItemDef> = {
   epee_bronze: {
     id: 'epee_bronze',
     name: 'Épée de bronze',
-    description: 'Arme de base des hoplites.',
+    description: 'Arme courte des hoplites.',
     category: 'arme',
     rarity: 'commun',
     stackable: false,
@@ -28,7 +28,7 @@ export const ITEMS: Record<string, ItemDef> = {
   arc_olivier: {
     id: 'arc_olivier',
     name: "Arc en bois d'olivier",
-    description: 'Arc souple et léger taillé dans les bosquets sacrés.',
+    description: 'Arc souple taillé dans les bosquets sacrés.',
     category: 'arme',
     rarity: 'commun',
     stackable: false,
@@ -38,7 +38,7 @@ export const ITEMS: Record<string, ItemDef> = {
   baton_oracle: {
     id: 'baton_oracle',
     name: "Bâton de l'oracle",
-    description: 'Canalise les sorts et l’Étincelle des mages.',
+    description: 'Canalise les braises et les sorts.',
     category: 'arme',
     rarity: 'commun',
     stackable: false,
@@ -48,12 +48,33 @@ export const ITEMS: Record<string, ItemDef> = {
   dagues_jumelles: {
     id: 'dagues_jumelles',
     name: 'Dagues jumelles',
-    description: 'Deux lames rapides forgées pour les embuscades.',
+    description: 'Lames courbes rapides et légères.',
     category: 'arme',
     rarity: 'commun',
     stackable: false,
     price: 50,
     bonusAttack: 5
+  },
+  arme_airain: {
+    id: 'arme_airain',
+    name: "Arme forgée d'airain",
+    description: 'Ouvrage renforcé par Damon, équilibré pour le combat.',
+    category: 'arme',
+    rarity: 'rare',
+    stackable: false,
+    price: 130,
+    bonusAttack: 10
+  },
+  cuirasse_hoplite: {
+    id: 'cuirasse_hoplite',
+    name: "Cuirasse d'hoplite",
+    description: 'Plastron en bronze battu résistant aux griffes et flèches.',
+    category: 'armure',
+    rarity: 'rare',
+    stackable: false,
+    price: 160,
+    bonusHp: 60,
+    bonusAttack: 2
   },
   bouclier_hoplite: {
     id: 'bouclier_hoplite',
@@ -69,17 +90,17 @@ export const ITEMS: Record<string, ItemDef> = {
   lame_promethee: {
     id: 'lame_promethee',
     name: 'Arme trempée dans la Braise',
-    description: 'Arme imprégnée du Cœur de Braise, capable de fissurer le marbre divin.',
+    description: 'Imprégnée du Cœur de Braise, fend le marbre divin.',
     category: 'arme',
     rarity: 'epique',
     stackable: false,
     price: 300,
-    bonusAttack: 14
+    bonusAttack: 15
   },
   potion_ambroisie: {
     id: 'potion_ambroisie',
     name: "Potion d'ambroisie",
-    description: 'Rend 45% de vos points de vie maximum.',
+    description: 'Rend 45% des PV maximum.',
     category: 'consommable',
     rarity: 'commun',
     stackable: true,
@@ -89,26 +110,26 @@ export const ITEMS: Record<string, ItemDef> = {
   nectar_divin: {
     id: 'nectar_divin',
     name: 'Nectar divin',
-    description: 'Restaure intégralement vos points de vie.',
+    description: 'Restaure tous les PV.',
     category: 'consommable',
     rarity: 'rare',
     stackable: true,
-    price: 60,
+    price: 55,
     healAmount: 1
   },
   eclat_foudre: {
     id: 'eclat_foudre',
     name: 'Éclat de foudre',
-    description: "Fragment laissé par la colère de Zeus, utile à l'artisanat.",
+    description: 'Fragment cristallisé laissé par un éclair olympien.',
     category: 'ressource',
     rarity: 'epique',
     stackable: true,
-    price: 200
+    price: 180
   },
   fragment_bronze: {
     id: 'fragment_bronze',
     name: 'Fragment de bronze',
-    description: "Débris d'armes antiques récupérés dans les ruines.",
+    description: "Débris d'armes récupérés dans les ruines.",
     category: 'ressource',
     rarity: 'commun',
     stackable: true,
@@ -117,7 +138,7 @@ export const ITEMS: Record<string, ItemDef> = {
   herbe_ambroisie: {
     id: 'herbe_ambroisie',
     name: "Herbe d'ambroisie",
-    description: 'Plante dorée poussant près des oliviers frappés par le feu céleste.',
+    description: 'Plante dorée poussant près des oliviers.',
     category: 'ressource',
     rarity: 'commun',
     stackable: true,
@@ -126,7 +147,7 @@ export const ITEMS: Record<string, ItemDef> = {
   coeur_braise: {
     id: 'coeur_braise',
     name: 'Cœur de Braise',
-    description: 'Fragment incandescent arraché au Gardien d’Airain du Sanctuaire Brisé.',
+    description: "Fragment incandescent arraché au Gardien d'Airain.",
     category: 'artefact',
     rarity: 'epique',
     stackable: false,
@@ -135,12 +156,12 @@ export const ITEMS: Record<string, ItemDef> = {
   vestige_egee: {
     id: 'vestige_egee',
     name: "Vestige d'Égée",
-    description: 'Premier Vestige Primordial des Titans, arraché à la Sentinelle de Poséidon.',
+    description: 'Premier Vestige Primordial, pris à la Sentinelle de Poséidon.',
     category: 'artefact',
     rarity: 'legendaire',
     stackable: false,
     price: 0,
-    bonusHp: 50,
+    bonusHp: 55,
     bonusAttack: 8
   }
 };

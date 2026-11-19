@@ -4,11 +4,10 @@ import { placeLayer, View } from '../../camera';
 import type { Scene } from '../index';
 import { COLORS, mix } from '../palette';
 import { drawMeander, drawLaurel } from '../shapes';
-import { createTopDown } from '../topDown';
 import { createSideView } from '../sideView';
-import { castShadow, random } from '../top/util';
+import { castShadow, random, SHADOW_DX, SHADOW_DY } from '../top/util';
 import { drawColumn, drawLowWall, drawOlive } from '../top/props';
-import { BRONZE_LIT, BRONZE_SHADE, LINE, LINEN, LINEN_SHADE, shaded } from '../../hero/look';
+import { BRONZE, BRONZE_LIT, BRONZE_SHADE, LINE, LINEN, LINEN_SHADE, WOOD, shaded } from '../../hero/look';
 
 function makePortalLabel(portal: ZonePortal): Text {
   const label = new Text({
@@ -25,46 +24,165 @@ function makePortalLabel(portal: ZonePortal): Text {
   label.anchor.set(0.5, 0.5);
   const cx = portal.x + portal.w / 2;
   const cy = portal.y + portal.h / 2;
-  const offsetX = cx < 200 ? 64 : -64;
-  label.position.set(cx + offsetX, cy - 48);
+  const offsetX = cx < 200 ? 68 : -68;
+  label.position.set(cx + offsetX, cy - 52);
   return label;
+}
+
+function drawSlab(g: Graphics, x: number, y: number, w: number, h: number, color: number): void {
+  g.rect(x + 1, y + 1, w - 2, h - 2).fill({ color });
+  g.rect(x + 1, y + 1, w - 2, 1.5).fill({ color: COLORS.marbleLit, alpha: 0.4 });
+  g.rect(x + 1, y + h - 2.5, w - 2, 1.5).fill({ color: COLORS.marbleShadow, alpha: 0.28 });
+}
+
+function drawGrassTuft(g: Graphics, x: number, y: number, rand: () => number, flower = false): void {
+  g.ellipse(x + 1, y + 1, 5.5, 3).fill({ color: COLORS.olive, alpha: 0.3 });
+  for (let i = 0; i < 6; i++) {
+    const a = -Math.PI / 2 + (rand() - 0.5) * 2.3;
+    const len = 3.5 + rand() * 4.5;
+    g.moveTo(x, y).quadraticCurveTo(x + Math.cos(a) * len * 0.5, y + Math.sin(a) * len * 0.5, x + Math.cos(a) * len, y + Math.sin(a) * len);
+  }
+  g.stroke({ width: 1.2, color: COLORS.oliveDark, cap: 'round' });
+  if (flower) {
+    g.circle(x + 2, y - 3, 1.4).fill({ color: COLORS.gold });
+    g.circle(x - 3, y - 2, 1.2).fill({ color: COLORS.marbleLit });
+  }
+}
+
+function drawCypress(g: Graphics, shadows: Graphics, s: ZoneSolid, seed: number): void {
+  const rand = random(seed);
+  const cx = s.x + s.w / 2;
+  const cy = s.y + s.h / 2;
+  shadows.ellipse(cx + SHADOW_DX * 36, cy + SHADOW_DY * 36, 12, 8).fill({ color: 0x000000 });
+  shadows.poly([cx - 6, cy + 4, cx + 6, cy - 4, cx + SHADOW_DX * 44, cy + SHADOW_DY * 44]).fill({ color: 0x000000 });
+
+  g.circle(cx, cy, 14.5).fill({ color: COLORS.ink });
+  g.circle(cx, cy, 12.8).fill({ color: 0x1e3520 });
+  g.circle(cx - 2, cy - 2, 10).fill({ color: COLORS.cypress });
+  g.circle(cx - 4, cy - 4, 6.2).fill({ color: mix(COLORS.cypress, COLORS.olive, 0.5) });
+  for (let i = 0; i < 16; i++) {
+    const a = rand() * Math.PI * 2;
+    const d = 3 + rand() * 8;
+    g.circle(cx + Math.cos(a) * d, cy + Math.sin(a) * d, 1.6).fill({
+      color: Math.cos(a + 0.8) < 0 ? COLORS.olive : 0x1a2e1c,
+      alpha: 0.85
+    });
+  }
+}
+
+function drawHouse(g: Graphics, shadows: Graphics, s: ZoneSolid): void {
+  castShadow(shadows, s.x, s.y, s.w, s.h, 34);
+  const v = s.variant ?? 0;
+  const roofLit = v === 1 ? mix(COLORS.tile, COLORS.bronze, 0.35) : v === 2 ? mix(COLORS.tile, COLORS.sand, 0.2) : COLORS.tile;
+  const roofDark = mix(roofLit, COLORS.ink, 0.32);
+
+  // socle en marbre visible au sud
+  g.rect(s.x, s.y + s.h - 14, s.w, 14).fill(COLORS.marbleShade);
+  g.rect(s.x, s.y + s.h - 14, s.w, 4).fill(COLORS.marbleShadow);
+
+  // toit a deux pans en terre cuite
+  const midY = s.y + (s.h - 12) / 2;
+  g.rect(s.x, s.y, s.w, midY - s.y).fill(roofLit);
+  g.rect(s.x, midY, s.w, s.y + s.h - 12 - midY).fill(roofDark);
+
+  // rangees de tuiles
+  for (let x = s.x + 12; x < s.x + s.w - 4; x += 12) {
+    g.moveTo(x, s.y + 2).lineTo(x, s.y + s.h - 13).stroke({ width: 0.9, color: COLORS.ink, alpha: 0.22 });
+  }
+  for (let y = s.y + 14; y < s.y + s.h - 14; y += 14) {
+    g.moveTo(s.x + 2, y).lineTo(s.x + s.w - 2, y).stroke({ width: 0.8, color: COLORS.marbleLit, alpha: 0.18 });
+  }
+
+  // faitage en marbre/terre cuite claire
+  g.rect(s.x + 4, midY - 3, s.w - 8, 6).fill(COLORS.marbleLit);
+  g.rect(s.x + 4, midY + 1, s.w - 8, 2).fill(COLORS.marbleShadow);
+  g.rect(s.x, s.y, s.w, s.h).stroke({ width: 2, color: COLORS.ink });
+
+  // petite porte d'entree au sud
+  const dx = s.x + s.w / 2 - 10;
+  g.rect(dx, s.y + s.h - 11, 20, 11).fill(WOOD).stroke({ width: 1.2, color: COLORS.ink });
+}
+
+function drawStall(g: Graphics, shadows: Graphics, s: ZoneSolid): void {
+  castShadow(shadows, s.x, s.y, s.w, s.h, 18);
+  const stripes = [COLORS.tile, COLORS.sea, COLORS.bronze];
+  const accent = stripes[(s.variant ?? 0) % stripes.length];
+
+  // auvent raye du marche
+  const bandW = 12;
+  let idx = 0;
+  for (let x = s.x; x < s.x + s.w; x += bandW) {
+    const w = Math.min(bandW, s.x + s.w - x);
+    g.rect(x, s.y, w, s.h).fill(idx % 2 === 0 ? accent : LINEN);
+    idx++;
+  }
+  // ombre sur la partie basse de la toile
+  g.rect(s.x, s.y + s.h - 9, s.w, 9).fill({ color: COLORS.shadow, alpha: 0.22 });
+  g.rect(s.x, s.y, s.w, 3).fill({ color: COLORS.marbleLit, alpha: 0.55 });
+  g.rect(s.x, s.y, s.w, s.h).stroke({ width: 1.8, color: COLORS.ink });
+
+  // amphores et caisses devant l'etal
+  g.circle(s.x + 12, s.y + s.h + 5, 4.5).fill(COLORS.tile).stroke({ width: 1, color: COLORS.ink });
+  g.circle(s.x + 22, s.y + s.h + 4, 3.5).fill(BRONZE).stroke({ width: 1, color: COLORS.ink });
+  g.rect(s.x + s.w - 22, s.y + s.h + 1, 14, 9).fill(WOOD).stroke({ width: 1, color: COLORS.ink });
+}
+
+function drawFountain(g: Graphics, shadows: Graphics, s: ZoneSolid): void {
+  const cx = s.x + s.w / 2;
+  const cy = s.y + s.h / 2;
+  const r = s.w / 2;
+  shadows.circle(cx + SHADOW_DX * 14, cy + SHADOW_DY * 14, r).fill({ color: 0x000000 });
+  g.circle(cx, cy, r).fill(COLORS.marble).stroke({ width: 2, color: COLORS.ink });
+  g.circle(cx, cy, r - 6).fill(COLORS.seaLight).stroke({ width: 1.2, color: COLORS.marbleShadow });
+  g.circle(cx, cy, r - 13).fill({ color: COLORS.sea, alpha: 0.5 });
+  g.circle(cx, cy, 8).fill(COLORS.marbleLit).stroke({ width: 1.2, color: COLORS.ink });
+  g.circle(cx, cy, 3).fill(COLORS.foam);
 }
 
 function drawAnvilProp(g: Graphics, shadows: Graphics, s: ZoneSolid): void {
   castShadow(shadows, s.x, s.y, s.w, s.h, 16);
-  // tapis de pierres et enclume de Damon
-  g.roundRect(s.x, s.y, s.w, s.h, 4).fill(COLORS.marbleShade).stroke({ width: 1.6, color: COLORS.ink });
-  // foyer ardent a droite
-  g.circle(s.x + s.w - 11, s.y + s.h / 2, 8).fill({ color: 0x3b1f14 }).stroke({ width: 1.2, color: COLORS.ink });
-  g.circle(s.x + s.w - 11, s.y + s.h / 2, 5).fill({ color: 0xf97316 });
-  g.circle(s.x + s.w - 11, s.y + s.h / 2, 2.5).fill({ color: 0xfef08a });
-  // enclume en bronze
-  g.roundRect(s.x + 6, s.y + 7, 20, 14, 3).fill(shaded(BRONZE_LIT, BRONZE_SHADE)).stroke(LINE);
+  g.roundRect(s.x, s.y, s.w, s.h, 4).fill(COLORS.marbleShade).stroke({ width: 1.8, color: COLORS.ink });
+  g.circle(s.x + s.w - 14, s.y + s.h / 2, 10).fill({ color: 0x3b1f14 }).stroke({ width: 1.2, color: COLORS.ink });
+  g.circle(s.x + s.w - 14, s.y + s.h / 2, 6.5).fill({ color: 0xf97316 });
+  g.circle(s.x + s.w - 14, s.y + s.h / 2, 3).fill({ color: 0xfef08a });
+  g.roundRect(s.x + 8, s.y + 9, 24, 16, 3).fill(shaded(BRONZE_LIT, BRONZE_SHADE)).stroke(LINE);
 }
 
 function drawHealerTent(g: Graphics, shadows: Graphics, s: ZoneSolid): void {
-  castShadow(shadows, s.x, s.y, s.w, s.h, 20);
-  // auvent de lin des survivants + amphores
+  castShadow(shadows, s.x, s.y, s.w, s.h, 22);
   g.roundRect(s.x, s.y, s.w, s.h, 5).fill(shaded(LINEN, LINEN_SHADE)).stroke({ width: 1.8, color: COLORS.ink });
-  g.moveTo(s.x + 4, s.y + s.h / 2).lineTo(s.x + s.w - 4, s.y + s.h / 2).stroke({ width: 1.4, color: COLORS.olive });
-  drawMeander(g, s.x + 6, s.y + 4, s.w - 12, 1.5, COLORS.olive);
-  g.circle(s.x + s.w - 10, s.y + s.h - 9, 4.5).fill(COLORS.tile).stroke({ width: 1, color: COLORS.ink });
+  g.moveTo(s.x + 4, s.y + s.h / 2).lineTo(s.x + s.w - 4, s.y + s.h / 2).stroke({ width: 1.5, color: COLORS.olive });
+  drawMeander(g, s.x + 6, s.y + 5, s.w - 12, 1.6, COLORS.olive);
+  g.circle(s.x + s.w - 12, s.y + s.h - 10, 5).fill(COLORS.tile).stroke({ width: 1, color: COLORS.ink });
 }
 
 function drawRock(g: Graphics, shadows: Graphics, s: ZoneSolid, seed: number): void {
   const rand = random(seed);
   const cx = s.x + s.w / 2;
   const cy = s.y + s.h / 2;
-  castShadow(shadows, s.x + 4, s.y + 4, s.w - 8, s.h - 8, 18);
+  castShadow(shadows, s.x + 4, s.y + 4, s.w - 8, s.h - 8, 20);
   const pts: number[] = [];
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2;
-    const rx = (s.w / 2) * (0.85 + rand() * 0.25);
-    const ry = (s.h / 2) * (0.85 + rand() * 0.25);
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2;
+    const rx = (s.w / 2) * (0.82 + rand() * 0.28);
+    const ry = (s.h / 2) * (0.82 + rand() * 0.28);
     pts.push(cx + Math.cos(a) * rx, cy + Math.sin(a) * ry);
   }
-  g.poly(pts).fill(shaded(0x9ca3af, 0x4b5563)).stroke({ width: 1.8, color: COLORS.ink });
-  g.ellipse(cx - s.w * 0.12, cy - s.h * 0.14, s.w * 0.22, s.h * 0.16).fill({ color: COLORS.marbleShade, alpha: 0.45 });
+  g.poly(pts).fill(shaded(0xc4b8a3, 0x7b7265)).stroke({ width: 1.8, color: COLORS.ink });
+  // facette eclairee haut-gauche
+  g.poly([
+    cx - s.w * 0.3, cy - s.h * 0.1,
+    cx - s.w * 0.1, cy - s.h * 0.34,
+    cx + s.w * 0.18, cy - s.h * 0.18,
+    cx - s.w * 0.05, cy + s.h * 0.05
+  ]).fill({ color: COLORS.marbleLit, alpha: 0.45 });
+  // facette ombre bas-droite
+  g.poly([
+    cx, cy + s.h * 0.02,
+    cx + s.w * 0.32, cy - s.h * 0.04,
+    cx + s.w * 0.22, cy + s.h * 0.32,
+    cx - s.w * 0.12, cy + s.h * 0.28
+  ]).fill({ color: COLORS.ink, alpha: 0.2 });
 }
 
 function drawRuinWall(g: Graphics, shadows: Graphics, s: ZoneSolid): void {
@@ -92,22 +210,77 @@ function drawAltar(g: Graphics, shadows: Graphics, s: ZoneSolid): void {
   g.circle(s.x + s.w / 2, s.y + s.h / 2 + 2, 3.5).fill({ color: 0xfef08a });
 }
 
+function drawOrganicCrater(g: Graphics, cx: number, cy: number, r: number, seed: number): void {
+  const rand = random(seed);
+  const outer: number[] = [];
+  const inner: number[] = [];
+  const n = 14;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const j1 = 0.78 + rand() * 0.42;
+    const j2 = 0.48 + rand() * 0.25;
+    outer.push(cx + Math.cos(a) * r * j1, cy + Math.sin(a) * r * j1 * 0.78);
+    inner.push(cx + Math.cos(a) * r * j2, cy + Math.sin(a) * r * j2 * 0.78);
+  }
+  g.poly(outer).fill({ color: 0x5c5144, alpha: 0.48 });
+  g.poly(inner).fill({ color: 0x2c241e, alpha: 0.72 });
+  // petits blocs de pierre projetes autour du cratere
+  for (let i = 0; i < 8; i++) {
+    const a = rand() * Math.PI * 2;
+    const d = r * (0.75 + rand() * 0.55);
+    g.ellipse(cx + Math.cos(a) * d, cy + Math.sin(a) * d * 0.78, 3 + rand() * 4, 2 + rand() * 3)
+      .fill({ color: COLORS.marbleShadow, alpha: 0.8 })
+      .stroke({ width: 0.8, color: COLORS.ink, alpha: 0.6 });
+  }
+  // legere braise au fond
+  g.ellipse(cx, cy, r * 0.22, r * 0.14).fill({ color: 0xea580c, alpha: 0.35 });
+}
+
+function drawVolcanicRift(g: Graphics, glowG: Graphics, points: [number, number][], width: number): void {
+  const leftEdge: number[] = [];
+  const rightEdge: number[] = [];
+  const coreLeft: number[] = [];
+  const coreRight: number[] = [];
+
+  for (let i = 0; i < points.length; i++) {
+    const [x, y] = points[i];
+    const [nx, ny] = i < points.length - 1 ? points[i + 1] : points[i - 1];
+    const dx = i < points.length - 1 ? nx - x : x - nx;
+    const dy = i < points.length - 1 ? ny - y : y - ny;
+    const len = Math.hypot(dx, dy) || 1;
+    const px = -dy / len;
+    const py = dx / len;
+    const taper = i === 0 || i === points.length - 1 ? 0.2 : 1;
+    const w = width * taper;
+    leftEdge.push(x + px * w, y + py * w);
+    rightEdge.unshift(x - px * w, y - py * w);
+    coreLeft.push(x + px * (w * 0.42), y + py * (w * 0.42));
+    coreRight.unshift(x - px * (w * 0.42), y - py * (w * 0.42));
+  }
+
+  g.poly([...leftEdge, ...rightEdge]).fill({ color: 0x1c1917 }).stroke({ width: 2, color: COLORS.marbleShadow });
+  glowG.poly([...coreLeft, ...coreRight]).fill({ color: 0xea580c, alpha: 0.85 });
+  const centerLine: number[] = [];
+  for (const [x, y] of points) centerLine.push(x, y);
+  glowG.poly(centerLine, false).stroke({ width: 2.5, color: 0xfef08a, alpha: 0.9, cap: 'round' });
+}
+
 function createPortalMarker(portal: ZonePortal) {
   const cx = portal.x + portal.w / 2;
   const cy = portal.y + portal.h / 2;
   const floor = new Container();
   floor.position.set(cx, cy);
   const g = new Graphics();
-  g.circle(0, 0, 34).fill({ color: COLORS.gold, alpha: 0.18 });
-  g.circle(0, 0, 31).stroke({ width: 1.6, color: COLORS.gold, alpha: 0.9 });
-  drawLaurel(g, 0, 0, 25, 0xd9a93f);
+  g.circle(0, 0, 36).fill({ color: COLORS.gold, alpha: 0.2 });
+  g.circle(0, 0, 32).stroke({ width: 1.6, color: COLORS.gold, alpha: 0.9 });
+  drawLaurel(g, 0, 0, 26, 0xd9a93f);
   g.circle(0, 0, 17).fill({ color: COLORS.gold, alpha: 0.35 });
   floor.addChild(g);
 
   const glow = new Graphics();
   glow.position.set(cx, cy);
   glow.blendMode = 'add';
-  glow.circle(0, 0, 44).fill({ color: COLORS.gold, alpha: 0.25 });
+  glow.circle(0, 0, 48).fill({ color: COLORS.gold, alpha: 0.24 });
 
   return {
     floor,
@@ -120,102 +293,237 @@ function createPortalMarker(portal: ZonePortal) {
 }
 
 function createAgoraScene(zone: ZoneDefinition): Scene {
-  const base = createTopDown();
+  const back = new Container();
+  const front = new Container();
+  const rand = random(42);
+  const W = zone.width;
+  const H = zone.height;
 
-  const overlayShadows = new Graphics();
-  overlayShadows.filters = [new AlphaFilter({ alpha: 0.26 })];
-  const overlayProps = new Graphics();
-
-  // cicatrice de foudre au nord-ouest de l'Agora (rappel du chatiment de Zeus)
-  overlayProps.ellipse(215, 165, 42, 26).fill({ color: 0x292524, alpha: 0.24 });
-  overlayProps.moveTo(188, 152).lineTo(212, 166).lineTo(205, 174).lineTo(238, 180)
-    .stroke({ width: 2.2, color: 0x1c1917, alpha: 0.65 });
-  overlayProps.moveTo(212, 166).lineTo(232, 150).stroke({ width: 1.4, color: 0x1c1917, alpha: 0.5 });
-
-  for (const solid of zone.solids) {
-    if (solid.look === 'anvil') drawAnvilProp(overlayProps, overlayShadows, solid);
-    else if (solid.look === 'tent') drawHealerTent(overlayProps, overlayShadows, solid);
+  // Mer Egee tout autour de la cite (surtout visible a l'ouest et au sud)
+  const sea = new Graphics();
+  sea.rect(-500, -500, W + 1000, H + 1000).fill({ color: COLORS.sea });
+  const waves = new Graphics();
+  for (let i = 0; i < 65; i++) {
+    const wx = -240 + rand() * (W + 480);
+    const wy = -240 + rand() * (H + 480);
+    waves.ellipse(wx, wy, 22 + rand() * 30, 3.5).fill({ color: COLORS.seaLight, alpha: 0.35 });
   }
 
-  base.back.addChild(overlayShadows, overlayProps);
-  for (const p of zone.portals) {
-    base.front.addChild(makePortalLabel(p));
+  // Plage / quai naturel a l'ouest et au sud
+  const ground = new Graphics();
+  ground.roundRect(-24, -24, W + 48, H + 48, 36).fill({ color: COLORS.sand });
+  ground.roundRect(0, 0, W, H, 16).fill({ color: COLORS.stoneJoint });
+
+  // Sol de la cite : dalles variees
+  const tile = 60;
+  for (let y = 0; y < H; y += tile) {
+    for (let x = 0; x < W; x += tile) {
+      const inWestHarbor = x < 240 && y > 780;
+      if (inWestHarbor) {
+        ground.rect(x, y, tile, tile).fill({ color: COLORS.seaLight });
+        continue;
+      }
+      const inGarden = x > 320 && x < 860 && y > 840 && y < 1300;
+      const onNSRoad = x >= 990 && x < 1170;
+      const onEWRoad = y >= 610 && y < 770;
+      let color: number;
+      if (onNSRoad || onEWRoad) {
+        color = mix(COLORS.marble, COLORS.stone, 0.25 + rand() * 0.25);
+      } else if (inGarden) {
+        color = mix(COLORS.grass, COLORS.sand, 0.35 + rand() * 0.25);
+      } else {
+        color = mix(COLORS.stone, COLORS.sand, 0.2 + rand() * 0.45);
+      }
+      drawSlab(ground, x, y, tile, tile, color);
+    }
   }
 
-  return base;
+  // Quais en bois et barques grecques dans le port Sud-Ouest
+  ground.rect(240, 780, 14, 520).fill(COLORS.marbleShade).stroke({ width: 2, color: COLORS.ink });
+  for (const py of [860, 1020, 1180]) {
+    ground.rect(100, py, 142, 34).fill(WOOD).stroke({ width: 1.6, color: COLORS.ink });
+    for (let px = 112; px < 238; px += 14) {
+      ground.moveTo(px, py).lineTo(px, py + 34).stroke({ width: 0.9, color: COLORS.ink, alpha: 0.35 });
+    }
+  }
+  // 2 bateaux amarres
+  for (const [bx, by] of [[125, 925], [140, 1090]]) {
+    ground.poly([bx - 36, by, bx - 16, by - 14, bx + 26, by - 14, bx + 42, by, bx + 26, by + 14, bx - 16, by + 14])
+      .fill(shaded(0xa66a3c, WOOD)).stroke({ width: 1.8, color: COLORS.ink });
+    ground.ellipse(bx + 2, by, 22, 7).fill(0x5c361c);
+    ground.circle(bx + 2, by, 3).fill(COLORS.marbleLit);
+  }
+
+  // Grande Place Centrale de l'Agora (1080, 660) avec mosaique et meandre
+  const cx = 1080;
+  const cy = 660;
+  ground.circle(cx, cy, 240).fill(COLORS.marble).stroke({ width: 2.5, color: COLORS.marbleLit });
+  ground.circle(cx, cy, 175).fill(COLORS.stone).stroke({ width: 2, color: COLORS.gold, alpha: 0.85 });
+  ground.circle(cx, cy, 130).fill(COLORS.marbleShade);
+  drawLaurel(ground, cx, cy, 106, COLORS.bronze);
+  ground.circle(cx, cy, 72).fill(COLORS.marbleLit).stroke({ width: 1.8, color: COLORS.gold });
+  drawMeander(ground, cx - 150, cy - 224, 300, 2.2, COLORS.bronze);
+  drawMeander(ground, cx - 150, cy + 214, 300, 2.2, COLORS.bronze);
+
+  // Place du Marche (Sud-Est) pavee de marbre clair
+  ground.roundRect(1310, 810, 480, 320, 12).fill({ color: COLORS.marble, alpha: 0.55 }).stroke({ width: 1.5, color: COLORS.marbleLit, alpha: 0.6 });
+
+  // Touffes d'herbe et fleurs dans le jardin et au bord des dalles
+  for (let i = 0; i < 65; i++) {
+    const gx = 320 + rand() * 540;
+    const gy = 840 + rand() * 440;
+    drawGrassTuft(ground, gx, gy, rand, i % 3 === 0);
+  }
+  for (let i = 0; i < 40; i++) {
+    const gx = 280 + rand() * (W - 360);
+    const gy = 80 + rand() * (H - 160);
+    if (Math.hypot(gx - cx, gy - cy) < 250) continue;
+    drawGrassTuft(ground, gx, gy, rand, i % 5 === 0);
+  }
+
+  // Cicatrice d'eclair sur la cour nord-ouest
+  drawOrganicCrater(ground, 780, 390, 34, 88);
+
+  // Remparts exterieurs de la cite
+  const shadows = new Graphics();
+  shadows.filters = [new AlphaFilter({ alpha: 0.25 })];
+  const solids = new Graphics();
+
+  // Muret d'enceinte nord et sud
+  solids.rect(0, -18, W, 22).fill(COLORS.marble).stroke({ width: 2, color: COLORS.ink });
+  solids.rect(0, H - 4, W, 22).fill(COLORS.marble).stroke({ width: 2, color: COLORS.ink });
+
+  let oliveIdx = 0;
+  let cypressIdx = 0;
+  for (const s of zone.solids) {
+    if (s.look === 'column') drawColumn(solids, shadows, { x: s.x, y: s.y, w: s.w, h: s.h, look: 'column' });
+    else if (s.look === 'olive') drawOlive(solids, shadows, { x: s.x, y: s.y, w: s.w, h: s.h, look: 'olive' }, 30 + oliveIdx++);
+    else if (s.look === 'cypress') drawCypress(solids, shadows, s, 60 + cypressIdx++);
+    else if (s.look === 'wall') drawLowWall(solids, shadows, { x: s.x, y: s.y, w: s.w, h: s.h }, s.x < W / 2 ? 1 : -1);
+    else if (s.look === 'house') drawHouse(solids, shadows, s);
+    else if (s.look === 'stall') drawStall(solids, shadows, s);
+    else if (s.look === 'fountain') drawFountain(solids, shadows, s);
+    else if (s.look === 'anvil') drawAnvilProp(solids, shadows, s);
+    else if (s.look === 'tent') drawHealerTent(solids, shadows, s);
+  }
+
+  const portals = zone.portals.map(createPortalMarker);
+  const fountainRipple = new Graphics();
+  back.addChild(sea, waves, ground, ...portals.map((p) => p.floor), shadows, solids, fountainRipple);
+
+  // Petits oiseaux / feuilles dorees flottantes
+  const motes: Graphics[] = [];
+  for (let i = 0; i < 20; i++) {
+    const m = new Graphics().ellipse(0, 0, 2.5, 1.2).fill({ color: i % 2 === 0 ? COLORS.gold : COLORS.marbleLit });
+    front.addChild(m);
+    motes.push(m);
+  }
+  front.addChild(...portals.map((p) => p.glow), ...zone.portals.map(makePortalLabel));
+
+  return {
+    back,
+    front,
+    update: (view: View, time: number) => {
+      placeLayer(back, view);
+      placeLayer(front, view);
+      waves.x = Math.sin(time * 0.9) * 14;
+      portals.forEach((p) => p.update(time));
+
+      fountainRipple.clear();
+      const r = 8 + ((time * 12) % 16);
+      fountainRipple.circle(634, 984, r).stroke({ width: 1.2, color: COLORS.foam, alpha: Math.max(0, 1 - (r - 8) / 16) });
+
+      motes.forEach((m, i) => {
+        m.position.set((i * 223 + time * 16) % W, (i * 151 + Math.sin(time + i) * 28) % H);
+        m.alpha = 0.4 + Math.sin(time * 2.5 + i) * 0.25;
+      });
+    }
+  };
 }
 
 function createPlainesScene(zone: ZoneDefinition): Scene {
   const back = new Container();
   const front = new Container();
   const rand = random(73);
+  const W = zone.width;
+  const H = zone.height;
 
   const terrain = new Graphics();
-  // fond terres seches et herbes brulee par la foudre
-  terrain.rect(-240, -240, zone.width + 480, zone.height + 480).fill({ color: mix(COLORS.sand, COLORS.oliveDark, 0.42) });
-  terrain.rect(0, 0, zone.width, zone.height).fill({ color: mix(COLORS.sand, COLORS.stone, 0.35) });
+  terrain.rect(-300, -300, W + 600, H + 600).fill({ color: mix(COLORS.sand, COLORS.oliveDark, 0.45) });
+  terrain.rect(0, 0, W, H).fill({ color: mix(COLORS.sand, COLORS.stone, 0.28) });
 
-  // plaques d'herbe aride
-  for (let i = 0; i < 48; i++) {
-    const x = rand() * zone.width;
-    const y = rand() * zone.height;
-    terrain.ellipse(x, y, 40 + rand() * 70, 26 + rand() * 44)
-      .fill({ color: i % 2 === 0 ? COLORS.grass : COLORS.olive, alpha: 0.22 });
+  // Patches organiques de terre seche, herbe d'olivier et calcaire
+  for (let i = 0; i < 85; i++) {
+    const x = rand() * W;
+    const y = rand() * H;
+    const c = i % 3 === 0 ? COLORS.grass : i % 3 === 1 ? COLORS.olive : 0xdcc59b;
+    terrain.ellipse(x, y, 24 + rand() * 55, 16 + rand() * 34).fill({ color: c, alpha: 0.16 + rand() * 0.1 });
   }
 
-  // ancienne route pavee d'est en ouest (entre l'Agora et le Sanctuaire)
-  terrain.rect(0, 392, zone.width, 112).fill({ color: COLORS.stoneJoint, alpha: 0.85 });
-  for (let x = 0; x < zone.width; x += 58) {
-    for (let row = 0; row < 2; row++) {
-      const y = 398 + row * 50;
-      const tone = mix(COLORS.stone, COLORS.marbleShade, rand() * 0.5);
-      terrain.roundRect(x + 3, y, 52, 44, 3).fill({ color: tone });
+  // Avant-poste ruine a l'entree ouest (sol pave + feu de camp)
+  terrain.roundRect(70, 450, 240, 220, 14).fill({ color: COLORS.stone, alpha: 0.72 });
+
+  // Route antique sinueuse et usee (dalles de tailles variees, certaines brisees)
+  for (let x = 0; x < W; x += 48) {
+    const curveY = 560 + Math.sin(x * 0.0045) * 24;
+    terrain.rect(x, curveY - 56, 50, 112).fill({ color: COLORS.stoneJoint, alpha: 0.65 });
+    for (let row = 0; row < 3; row++) {
+      if (rand() < 0.1) continue; // dalle manquante
+      const sw = 36 + rand() * 14;
+      const sh = 30 + rand() * 6;
+      const sy = curveY - 52 + row * 35 + (rand() - 0.5) * 3;
+      const tone = mix(COLORS.stone, COLORS.marbleShade, rand() * 0.55);
+      drawSlab(terrain, x + (rand() - 0.5) * 4, sy, sw, sh, tone);
     }
   }
 
-  // crateres de foudre de Zeus et terre brulee
-  const craters: [number, number, number][] = [
-    [390, 580, 52],
-    [710, 340, 60],
-    [1040, 410, 56],
-    [610, 145, 44]
-  ];
-  for (const [cx, cy, r] of craters) {
-    terrain.circle(cx, cy, r).fill({ color: 0x3f3730, alpha: 0.38 });
-    terrain.circle(cx, cy, r * 0.62).fill({ color: 0x1c1917, alpha: 0.48 });
-    for (let k = 0; k < 5; k++) {
-      const a = (k / 5) * Math.PI * 2 + rand();
-      terrain.moveTo(cx, cy).lineTo(cx + Math.cos(a) * r * 1.15, cy + Math.sin(a) * r * 1.15)
-        .stroke({ width: 1.5, color: 0x1c1917, alpha: 0.55 });
-    }
+  // Crateres organiques de foudre
+  drawOrganicCrater(terrain, 520, 420, 46, 101);
+  drawOrganicCrater(terrain, 880, 620, 56, 102);
+  drawOrganicCrater(terrain, 1290, 460, 50, 103);
+  drawOrganicCrater(terrain, 790, 210, 40, 104);
+
+  // Touffes d'herbe, fleurs et cailloux partout
+  for (let i = 0; i < 120; i++) {
+    const gx = 30 + rand() * (W - 60);
+    const gy = 30 + rand() * (H - 60);
+    drawGrassTuft(terrain, gx, gy, rand, i % 6 === 0);
+  }
+  for (let i = 0; i < 70; i++) {
+    terrain.ellipse(rand() * W, rand() * H, 3 + rand() * 4, 2 + rand() * 2.5)
+      .fill({ color: COLORS.marbleShadow, alpha: 0.5 });
   }
 
-  // bordure de pierre de la zone
-  terrain.rect(0, 0, zone.width, zone.height).stroke({ width: 6, color: COLORS.ink, alpha: 0.7 });
+  terrain.rect(0, 0, W, H).stroke({ width: 6, color: COLORS.ink, alpha: 0.7 });
 
   const shadows = new Graphics();
   shadows.filters = [new AlphaFilter({ alpha: 0.26 })];
   const solids = new Graphics();
 
+  // Feu de camp de l'avant-poste ouest
+  const campFire = new Graphics();
+  solids.circle(235, 510, 12).fill(0x4b5563).stroke({ width: 1.4, color: COLORS.ink });
+
   let oliveIdx = 0;
+  let cypressIdx = 0;
   let rockIdx = 0;
   for (const s of zone.solids) {
     if (s.look === 'column') drawColumn(solids, shadows, { x: s.x, y: s.y, w: s.w, h: s.h, look: 'column' });
     else if (s.look === 'olive') drawOlive(solids, shadows, { x: s.x, y: s.y, w: s.w, h: s.h, look: 'olive' }, 90 + oliveIdx++);
-    else if (s.look === 'wall') drawLowWall(solids, shadows, { x: s.x, y: s.y, w: s.w, h: s.h }, s.x < zone.width / 2 ? 1 : -1);
+    else if (s.look === 'cypress') drawCypress(solids, shadows, s, 130 + cypressIdx++);
+    else if (s.look === 'wall') drawLowWall(solids, shadows, { x: s.x, y: s.y, w: s.w, h: s.h }, s.x < W / 2 ? 1 : -1);
     else if (s.look === 'ruin') drawRuinWall(solids, shadows, s);
-    else if (s.look === 'rock') drawRock(solids, shadows, s, 140 + rockIdx++);
+    else if (s.look === 'rock') drawRock(solids, shadows, s, 160 + rockIdx++);
   }
 
   const portals = zone.portals.map(createPortalMarker);
-  back.addChild(terrain, ...portals.map((p) => p.floor), shadows, solids);
+  back.addChild(terrain, ...portals.map((p) => p.floor), shadows, solids, campFire);
 
-  // effets d'orage et cendres derivantes
-  const stormFlash = new Graphics().rect(0, 0, zone.width, zone.height).fill({ color: 0xfff8dc });
+  const stormFlash = new Graphics().rect(0, 0, W, H).fill({ color: 0xfff8dc });
   stormFlash.alpha = 0;
   const embers: Graphics[] = [];
   for (let i = 0; i < 24; i++) {
-    const e = new Graphics().circle(0, 0, 1.8).fill({ color: i % 3 === 0 ? 0xf97316 : COLORS.gold });
+    const e = new Graphics().circle(0, 0, 1.7).fill({ color: i % 3 === 0 ? 0xf97316 : COLORS.gold });
     front.addChild(e);
     embers.push(e);
   }
@@ -228,14 +536,19 @@ function createPlainesScene(zone: ZoneDefinition): Scene {
       placeLayer(back, view);
       placeLayer(front, view);
       portals.forEach((p) => p.update(time));
+
+      campFire.clear();
+      const fr = 6 + Math.sin(time * 10) * 1.5;
+      campFire.circle(235, 510, fr * 2).fill({ color: 0xf97316, alpha: 0.25 });
+      campFire.circle(235, 510, fr).fill({ color: 0xf97316 });
+      campFire.circle(235, 510, fr * 0.5).fill({ color: 0xfef08a });
+
       embers.forEach((e, i) => {
-        const px = ((i * 197 + time * (18 + (i % 4) * 7)) % zone.width);
-        const py = ((i * 131 + Math.sin(time + i) * 35 + time * 8) % zone.height);
-        e.position.set(px, py);
-        e.alpha = 0.35 + Math.sin(time * 3 + i) * 0.3;
+        e.position.set((i * 197 + time * (18 + (i % 4) * 6)) % W, (i * 131 + Math.sin(time + i) * 35 + time * 8) % H);
+        e.alpha = 0.32 + Math.sin(time * 3 + i) * 0.28;
       });
-      const cycle = time % 9;
-      stormFlash.alpha = cycle > 8.65 && cycle < 8.85 ? 0.14 : 0;
+      const cycle = time % 11;
+      stormFlash.alpha = cycle > 10.65 && cycle < 10.82 ? 0.12 : 0;
     }
   };
 }
@@ -244,38 +557,42 @@ function createSanctuaireScene(zone: ZoneDefinition): Scene {
   const back = new Container();
   const front = new Container();
   const rand = random(199);
+  const W = zone.width;
+  const H = zone.height;
 
   const floor = new Graphics();
-  floor.rect(-240, -240, zone.width + 480, zone.height + 480).fill({ color: 0x1c2536 });
-  floor.rect(0, 0, zone.width, zone.height).fill({ color: mix(COLORS.marbleShade, COLORS.stone, 0.5) });
+  floor.rect(-320, -320, W + 640, H + 640).fill({ color: 0x162030 });
+  floor.rect(0, 0, W, H).fill({ color: COLORS.stoneJoint });
 
-  // grandes dalles de marbre fissure du temple des Titans
-  for (let y = 0; y < zone.height; y += 64) {
-    for (let x = 0; x < zone.width; x += 64) {
-      const tone = mix(COLORS.stone, COLORS.marbleShadow, rand() * 0.4);
-      floor.rect(x + 2, y + 2, 60, 60).fill({ color: tone });
+  // Dalles de marbre antique variees
+  for (let y = 0; y < H; y += 64) {
+    for (let x = 0; x < W; x += 64) {
+      const tone = mix(COLORS.stone, COLORS.marbleShadow, 0.15 + rand() * 0.42);
+      drawSlab(floor, x, y, 64, 64, tone);
     }
   }
 
-  // cercle sacre au centre ou rode le Gardien d'Airain
-  floor.circle(980, 420, 145).fill({ color: COLORS.marbleShade, alpha: 0.7 });
-  floor.circle(980, 420, 145).stroke({ width: 3, color: COLORS.gold, alpha: 0.75 });
-  drawLaurel(floor, 980, 420, 118, 0xc08a3e);
+  // Corridor d'honneur orne de meandres grecs
+  floor.rect(0, 456, W, 108).fill({ color: COLORS.marble, alpha: 0.35 });
+  drawMeander(floor, 80, 444, W - 160, 2.2, COLORS.bronze);
+  drawMeander(floor, 80, 566, W - 160, 2.2, COLORS.bronze);
 
-  // failles tectoniques incandescentes (seismes des dieux)
+  // Arene sacree du Gardien d'Airain (est)
+  floor.circle(1210, 510, 175).fill({ color: COLORS.marbleShade, alpha: 0.72 });
+  floor.circle(1210, 510, 175).stroke({ width: 3, color: COLORS.gold, alpha: 0.8 });
+  drawLaurel(floor, 1210, 510, 142, COLORS.bronze);
+
+  // Failles tectoniques organiques et ramifiees
   const riftGlow = new Graphics();
-  const rifts = [
-    [430, 80, 470, 200, 445, 310],
-    [760, 480, 810, 630, 780, 790],
-    [1120, 70, 1160, 190, 1210, 260]
-  ];
-  for (const pts of rifts) {
-    floor.poly(pts, false).stroke({ width: 16, color: 0x1f1715, cap: 'round', join: 'round' });
-    riftGlow.poly(pts, false).stroke({ width: 6, color: 0xea580c, cap: 'round', join: 'round' });
-    riftGlow.poly(pts, false).stroke({ width: 2.2, color: 0xfef08a, cap: 'round', join: 'round' });
-  }
+  drawVolcanicRift(floor, riftGlow, [[510, 70], [545, 165], [520, 250], [575, 340], [560, 395]], 14);
+  drawVolcanicRift(floor, riftGlow, [[890, 580], [930, 670], [905, 765], [955, 870], [925, 960]], 16);
+  drawVolcanicRift(floor, riftGlow, [[1320, 60], [1365, 140], [1410, 200], [1465, 255]], 13);
 
-  floor.rect(0, 0, zone.width, zone.height).stroke({ width: 6, color: COLORS.ink });
+  // Mousses et fissures discretes
+  for (let i = 0; i < 45; i++) {
+    drawGrassTuft(floor, 40 + rand() * (W - 80), 40 + rand() * (H - 80), rand, false);
+  }
+  floor.rect(0, 0, W, H).stroke({ width: 6, color: COLORS.ink });
 
   const shadows = new Graphics();
   shadows.filters = [new AlphaFilter({ alpha: 0.28 })];
@@ -284,7 +601,7 @@ function createSanctuaireScene(zone: ZoneDefinition): Scene {
   let rockIdx = 0;
   for (const s of zone.solids) {
     if (s.look === 'column') drawColumn(solids, shadows, { x: s.x, y: s.y, w: s.w, h: s.h, look: 'column' });
-    else if (s.look === 'wall') drawLowWall(solids, shadows, { x: s.x, y: s.y, w: s.w, h: s.h }, s.x < zone.width / 2 ? 1 : -1);
+    else if (s.look === 'wall') drawLowWall(solids, shadows, { x: s.x, y: s.y, w: s.w, h: s.h }, s.x < W / 2 ? 1 : -1);
     else if (s.look === 'ruin') drawRuinWall(solids, shadows, s);
     else if (s.look === 'altar') drawAltar(solids, shadows, s);
     else if (s.look === 'rock') drawRock(solids, shadows, s, 220 + rockIdx++);
@@ -310,9 +627,7 @@ function createSanctuaireScene(zone: ZoneDefinition): Scene {
       portals.forEach((p) => p.update(time));
       riftGlow.alpha = 0.72 + Math.sin(time * 3.4) * 0.25;
       embers.forEach((e, i) => {
-        const px = (i * 157 + Math.sin(time * 1.4 + i) * 30 + zone.width) % zone.width;
-        const py = (zone.height - ((i * 97 + time * (22 + (i % 4) * 6)) % zone.height));
-        e.position.set(px, py);
+        e.position.set((i * 157 + Math.sin(time * 1.4 + i) * 30 + W) % W, H - ((i * 97 + time * (22 + (i % 4) * 6)) % H));
         e.alpha = 0.35 + Math.sin(time * 4 + i) * 0.35;
       });
     }

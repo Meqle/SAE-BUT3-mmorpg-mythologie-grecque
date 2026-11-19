@@ -15,6 +15,7 @@ import { connect } from '../../game/network';
 import { createHero, hexColor, HeroSprite, stackLabels } from '../../game/players';
 import { createZoneScene, Scene } from '../../game/scenes';
 import { COLORS, css } from '../../game/scenes/palette';
+import { GameSettings, loadSettings, saveSettings } from '../../game/settings';
 import {
   acceptQuest,
   addItemToState,
@@ -32,8 +33,10 @@ import {
 import { useScreen } from '../../game/useScreen';
 import { PrologueOverlay } from '../Story/PrologueOverlay';
 import { DialogueModal } from './DialogueModal';
-import { BossHudInfo, Hud, MinimapDot } from './Hud';
+import { BossHudInfo, Hud } from './Hud';
 import { InventoryModal, ModalTab } from './InventoryModal';
+import { MinimapMarker } from './Minimap';
+import { PauseMenuModal } from './PauseMenuModal';
 import { TouchControls } from './TouchControls';
 
 interface GameCanvasProps {
@@ -50,7 +53,12 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
 
   const stateRef = useRef<GameProgressState>(JSON.parse(JSON.stringify(initialState)) as GameProgressState);
   const [uiState, setUiState] = useState<GameProgressState>(() => JSON.parse(JSON.stringify(initialState)) as GameProgressState);
+  const [settings, setSettings] = useState<GameSettings>(() => loadSettings());
+  const settingsRef = useRef<GameSettings>(settings);
+  settingsRef.current = settings;
+
   const [showPrologue, setShowPrologue] = useState(!initialState.prologueSeen);
+  const [pauseOpen, setPauseOpen] = useState(false);
   const [status, setStatus] = useState('Connexion…');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [dialogue, setDialogue] = useState<NpcDialogueView | null>(null);
@@ -61,8 +69,9 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
   const [specialCd, setSpecialCd] = useState(0);
   const [dashCd, setDashCd] = useState(0);
   const [bossInfo, setBossInfo] = useState<BossHudInfo | null>(null);
-  const [minimapDots, setMinimapDots] = useState<MinimapDot[]>([]);
+  const [minimapMarkers, setMinimapMarkers] = useState<MinimapMarker[]>([]);
 
+  const pausedRef = useRef(false);
   const toastTimerRef = useRef<number | null>(null);
   const bannerTimerRef = useRef<number | null>(null);
   const keyboardRef = useRef<ReturnType<typeof createKeyboard> | null>(null);
@@ -78,13 +87,13 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
   const showToast = useCallback((message: string) => {
     setToast(message);
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = window.setTimeout(() => setToast(null), 3200);
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 2800);
   }, []);
 
   const flashZoneBanner = useCallback(() => {
     setZoneBanner(true);
     if (bannerTimerRef.current) window.clearTimeout(bannerTimerRef.current);
-    bannerTimerRef.current = window.setTimeout(() => setZoneBanner(false), 3000);
+    bannerTimerRef.current = window.setTimeout(() => setZoneBanner(false), 2600);
   }, []);
 
   const syncUi = useCallback((persist = false) => {
@@ -94,34 +103,46 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
     actionsRef.current?.refreshNpcBadges();
   }, []);
 
-  const modalOpen = showPrologue || dialogue !== null || modalTab !== null;
+  const handleSettingsChange = useCallback((next: GameSettings) => {
+    setSettings(next);
+    settingsRef.current = next;
+    saveSettings(next);
+    keyboardRef.current?.updateSettings(next);
+  }, []);
+
+  const modalOpen = showPrologue || pauseOpen || dialogue !== null || modalTab !== null;
+  pausedRef.current = showPrologue || pauseOpen;
+
   useEffect(() => {
     keyboardRef.current?.setBlocked(modalOpen);
   }, [modalOpen]);
 
   useEffect(() => {
     const onGlobalKey = (e: KeyboardEvent) => {
-      if (showPrologue) {
-        if (e.code === 'Escape') {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.code === 'Escape') {
+        if (showPrologue) {
           stateRef.current.prologueSeen = true;
           saveGameState(stateRef.current);
           setShowPrologue(false);
+        } else if (dialogue) {
+          setDialogue(null);
+        } else if (modalTab) {
+          setModalTab(null);
+        } else {
+          setPauseOpen((p) => !p);
         }
         return;
       }
-      if (e.code === 'Escape') {
-        if (dialogue) setDialogue(null);
-        else if (modalTab) setModalTab(null);
-        return;
-      }
-      if (dialogue) return;
-      if (e.code === 'KeyI') setModalTab((prev) => (prev === 'inventory' ? null : 'inventory'));
-      if (e.code === 'KeyL') setModalTab((prev) => (prev === 'quests' ? null : 'quests'));
-      if (e.code === 'KeyC') setModalTab((prev) => (prev === 'codex' ? null : 'codex'));
+      if (showPrologue || pauseOpen || dialogue) return;
+      const keys = settingsRef.current.keys;
+      if (e.code === keys.inventory.code) setModalTab((prev) => (prev === 'inventory' ? null : 'inventory'));
+      if (e.code === keys.quests.code) setModalTab((prev) => (prev === 'quests' ? null : 'quests'));
+      if (e.code === keys.codex.code) setModalTab((prev) => (prev === 'codex' ? null : 'codex'));
     };
     window.addEventListener('keydown', onGlobalKey);
     return () => window.removeEventListener('keydown', onGlobalKey);
-  }, [showPrologue, dialogue, modalTab]);
+  }, [showPrologue, pauseOpen, dialogue, modalTab]);
 
   useEffect(() => {
     let app: Application | null = null;
@@ -139,7 +160,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
       getViewMode: () => currentZone().viewMode,
       onStatus: (s) => { if (!cleanedUp) setStatus(s); }
     });
-    const keyboard = createKeyboard();
+    const keyboard = createKeyboard(settingsRef.current);
     keyboardRef.current = keyboard;
     keyboard.setBlocked(!stateRef.current.prologueSeen);
 
@@ -171,7 +192,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
       const fx = createCombatFxLayer();
       actors.addChild(interactLayer, npcLayer, enemyLayer, playerLayer, dust.graphics, fx.container);
 
-      const hero = createHero(`${stateRef.current.heroName} (${cls.name})`, hexColor(godLore.color), true);
+      const hero = createHero(stateRef.current.heroName, hexColor(godLore.color), true, stateRef.current.heroClass);
       playerLayer.addChild(hero.container);
       const others = new Map<string, HeroSprite>();
 
@@ -189,7 +210,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         isGrounded: true
       };
 
-      let facingAngle = 0;
+      let facingAngle = -Math.PI / 2;
       let facingDir = 1;
       let attackCooldown = 0;
       let specialCooldown = 0;
@@ -208,6 +229,8 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
       const loadZone = (zoneId: ZoneId, spawnX?: number, spawnY?: number) => {
         stateRef.current.zoneId = zoneId;
         const zone = ZONES[zoneId];
+
+        setBossInfo(null);
 
         if (scene) {
           app?.stage.removeChildren();
@@ -252,9 +275,8 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         player.vx = 0;
         player.vy = 0;
         lastView = null;
-        portalLockTimer = 0.6;
+        portalLockTimer = 0.65;
 
-        connection.sendViewMode(zone.viewMode);
         const readyQuests = recordQuestEvent(stateRef.current, 'enter_zone', zoneId);
         if (readyQuests.length > 0) showToast(`Objectif accompli : ${readyQuests[0]}`);
         flashZoneBanner();
@@ -266,8 +288,10 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         let dmg = rawDamage;
         if (enemy.shielded) {
           dmg = Math.max(2, Math.round(rawDamage * 0.15));
-          fx.spawnText(enemy.x, enemy.y - 42, `BOUCLIER -${dmg}`, COLORS.sky, 11);
-        } else {
+          if (settingsRef.current.showDamageNumbers) {
+            fx.spawnText(enemy.x, enemy.y - 42, `Bouclier -${dmg}`, COLORS.sky, 11);
+          }
+        } else if (settingsRef.current.showDamageNumbers) {
           fx.spawnText(enemy.x, enemy.y - 26, isCrit ? `CRIT -${dmg}` : `-${dmg}`, isCrit ? COLORS.gold : 0xfff1f2, isCrit ? 15 : 13);
         }
         enemy.hp = Math.max(0, enemy.hp - dmg);
@@ -284,20 +308,25 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
 
           stateRef.current.gold += arch.goldReward;
           const { leveledUp, newLevel } = grantXp(stateRef.current, arch.xpReward);
-          fx.spawnText(enemy.x, enemy.y - 12, `+${arch.xpReward} XP  +${arch.goldReward}g`, COLORS.gold, 12);
+          if (settingsRef.current.showDamageNumbers) {
+            fx.spawnText(enemy.x, enemy.y - 12, `+${arch.xpReward} XP  +${arch.goldReward}g`, COLORS.gold, 12);
+          }
 
-          if (arch.isBoss && !stateRef.current.defeatedBosses.includes(enemy.type)) {
-            stateRef.current.defeatedBosses.push(enemy.type);
+          if (arch.isBoss) {
+            setBossInfo(null);
+            if (!stateRef.current.defeatedBosses.includes(enemy.type)) {
+              stateRef.current.defeatedBosses.push(enemy.type);
+            }
           }
 
           const readyQuests = recordQuestEvent(stateRef.current, 'kill', enemy.type);
           if (leveledUp) {
             fx.spawnSlash(player.x, player.y, 0, 75, COLORS.gold, 'ring');
-            showToast(`Niveau ${newLevel} atteint ! PV et Attaque augmentés.`);
+            showToast(`Niveau ${newLevel} atteint !`);
           } else if (readyQuests.length > 0) {
-            showToast(`Quête prête à rendre : ${readyQuests[0]}`);
+            showToast(`Quête prête : ${readyQuests[0]}`);
           } else if (enemy.type === 'sentinelle_poseidon') {
-            showToast('La Sentinelle de Poséidon est vaincue !');
+            showToast('Sentinelle de Poséidon vaincue !');
           }
           syncUi(true);
         }
@@ -310,7 +339,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
 
         const parry = stateRef.current.god === 'ATHENA' && Math.random() < 0.18;
         if (parry) {
-          fx.spawnText(player.x, player.y - 26, 'PARÉ !', COLORS.sky, 12);
+          if (settingsRef.current.showDamageNumbers) fx.spawnText(player.x, player.y - 26, 'Paré', COLORS.sky, 12);
           iFrames = 0.35;
           return;
         }
@@ -318,14 +347,16 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         stateRef.current.hp = Math.max(0, stateRef.current.hp - amount);
         iFrames = 0.55;
         hero.setHitFlash(true);
-        fx.spawnText(player.x, player.y - 24, `-${amount}`, 0xf87171, 13);
+        if (settingsRef.current.showDamageNumbers) {
+          fx.spawnText(player.x, player.y - 24, `-${amount}`, 0xf87171, 13);
+        }
         const knockDir = player.x >= sourceX ? 1 : -1;
         player.vx += knockDir * 160;
 
         if (stateRef.current.hp <= 0) {
           const stats = getComputedStats(stateRef.current);
           stateRef.current.hp = stats.maxHp;
-          showToast("Vous avez succombé. Cassandre vous ramène sur l'Agora.");
+          showToast("Cassandre vous ramène à la cité de l'Agora.");
           loadZone('agora', ZONES.agora.defaultSpawn.x, ZONES.agora.defaultSpawn.y);
           return;
         }
@@ -346,11 +377,10 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
               ? (facingDir >= 0 ? 0 : Math.PI)
               : facingAngle;
 
-        if (overrideAngle !== undefined) {
-          facingAngle = angle;
-          facingDir = Math.cos(angle) >= 0 ? 1 : -1;
-          hero.face(facingDir);
-        }
+        facingAngle = angle;
+        facingDir = Math.cos(angle) >= 0 ? 1 : -1;
+        hero.face(facingDir);
+        if (zone.viewMode === 'top-down') hero.aimAngle(angle);
 
         if (cls.isRanged) {
           const speed = cls.projectileSpeed;
@@ -411,7 +441,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         if (skill.healRatio && (hitCount > 0 || stateRef.current.god === 'ATHENA')) {
           const heal = Math.round(stats.maxHp * skill.healRatio);
           stateRef.current.hp = Math.min(stats.maxHp, stateRef.current.hp + heal);
-          fx.spawnText(player.x, player.y - 30, `+${heal} PV`, 0x4ade80, 13);
+          if (settingsRef.current.showDamageNumbers) fx.spawnText(player.x, player.y - 30, `+${heal} PV`, 0x4ade80, 13);
           syncUi(false);
         }
       };
@@ -426,10 +456,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
 
       const performPotion = (preferredId?: string) => {
         const stats = getComputedStats(stateRef.current);
-        if (stateRef.current.hp >= stats.maxHp) {
-          showToast('Vos points de vie sont déjà au maximum.');
-          return;
-        }
+        if (stateRef.current.hp >= stats.maxHp) return;
         const itemId = preferredId ?? (
           stateRef.current.inventory.some((s) => s.itemId === 'potion_ambroisie')
             ? 'potion_ambroisie'
@@ -437,12 +464,12 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         );
         const item = ITEMS[itemId];
         if (!item?.healAmount || !consumeItem(stateRef.current, itemId)) {
-          showToast("Aucune potion disponible. Voyez Cassandre sur l'Agora.");
+          showToast('Aucune potion disponible.');
           return;
         }
         const heal = Math.round(stats.maxHp * item.healAmount);
         stateRef.current.hp = Math.min(stats.maxHp, stateRef.current.hp + heal);
-        fx.spawnText(player.x, player.y - 26, `+${heal} PV`, 0x4ade80, 14);
+        if (settingsRef.current.showDamageNumbers) fx.spawnText(player.x, player.y - 26, `+${heal} PV`, 0x4ade80, 14);
         syncUi(true);
       };
 
@@ -458,7 +485,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         }
         if (bestNpc) {
           const def = NPCS[bestNpc];
-          return { kind: 'npc', npcId: bestNpc, label: `Parler à ${def.name} (${def.role})` };
+          return { kind: 'npc', npcId: bestNpc, label: `Parler à ${def.name}` };
         }
 
         for (const sprite of interactables) {
@@ -469,8 +496,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           if (isDone) continue;
           const d = Math.hypot(def.x - player.x, def.y - player.y);
           if (d <= def.radius + 16) {
-            const verb = def.kind === 'brasero' ? 'Ranimer' : def.kind === 'stele' ? 'Examiner' : def.kind === 'trial_stele' ? 'Activer' : 'Récupérer';
-            return { kind: 'obj', sprite, label: `${verb} : ${def.label}` };
+            return { kind: 'obj', sprite, label: def.label };
           }
         }
         return null;
@@ -500,9 +526,9 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
                   fx.spawnSlash(enemy.x, enemy.y - 18, 0, 110, 0x7dd3fc, 'ring');
                 }
               }
-              showToast('Les 3 Stèles brillent ! Le bouclier divin de la Sentinelle est brisé !');
+              showToast('Le bouclier divin de la Sentinelle est brisé !');
             } else {
-              showToast(`Stèle de Prométhée activée (${count}/3) !`);
+              showToast(`Stèle activée (${count}/3)`);
             }
             if (ready.length > 0) showToast(`Objectif accompli : ${ready[0]}`);
             syncUi(true);
@@ -511,7 +537,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         }
 
         if (def.questId && stateRef.current.quests[def.questId]?.status === 'available') {
-          showToast("Parlez d'abord au donneur de quête sur l'Agora avant d'interagir.");
+          showToast("Parlez d'abord au donneur de quête dans la cité.");
           return;
         }
 
@@ -521,11 +547,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           if (def.kind === 'herb') addItemToState(stateRef.current, 'herbe_ambroisie', 1);
           fx.spawnSlash(def.x, def.y, 0, 52, COLORS.gold, 'ring');
           const ready = recordQuestEvent(stateRef.current, 'interact', def.targetId);
-          if (ready.length > 0) {
-            showToast(`Quête prête à rendre : ${ready[0]}`);
-          } else {
-            showToast(`${def.label} activé !`);
-          }
+          showToast(ready.length > 0 ? `Quête prête : ${ready[0]}` : `${def.label} récupéré`);
           syncUi(true);
         }
       };
@@ -540,7 +562,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
       };
 
       const onPointerDown = (e: PointerEvent) => {
-        if (e.target !== app?.canvas) return;
+        if (pausedRef.current || e.target !== app?.canvas) return;
         if (e.button === 2) {
           performSpecial();
           return;
@@ -567,7 +589,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           let other = others.get(id);
           if (!other) {
             const lore = GODS_LORE[state.god];
-            other = createHero(`${state.username} (${lore.name})`, hexColor(lore.color), false);
+            other = createHero(state.username, hexColor(lore.color), false);
             playerLayer.addChild(other.container);
             others.set(id, other);
           }
@@ -594,6 +616,8 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
       let hudSyncTimer = 0;
 
       app.ticker.add((ticker) => {
+        if (pausedRef.current) return;
+
         const dt = Math.min(ticker.deltaMS / 1000, 0.05);
         const time = performance.now() / 1000;
         const zone = currentZone();
@@ -660,9 +684,9 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           const portal = zonePortalAt(player, zone);
           if (portal) {
             if (portal.requiredQuestCompleted && stateRef.current.quests[portal.requiredQuestCompleted]?.status !== 'completed') {
-              showToast(portal.lockedHint ?? 'Ce passage est encore scellé.');
+              showToast(portal.lockedHint ?? 'Passage verrouillé.');
               portalLockTimer = 1.6;
-              player.x += portal.x < zone.width / 2 ? 42 : -42;
+              player.x += portal.x < zone.width / 2 ? 48 : -48;
             } else {
               loadZone(portal.toZone, portal.spawnX, portal.spawnY);
               return;
@@ -670,7 +694,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           }
         }
 
-        // 5. IA ennemis
+        // 5. IA ennemis diversifiee par archetype
         for (const enemy of enemies) {
           const arch = ENEMY_ARCHETYPES[enemy.type];
           if (!enemy.alive) {
@@ -702,16 +726,16 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           const dy = player.y - enemy.y;
           const dist = Math.hypot(dx, dy);
 
-          // Vague marine du boss Sentinelle de Poseidon en vue de profil
-          if (enemy.type === 'sentinelle_poseidon' && dist < 560) {
+          // Capacites speciales du boss Sentinelle de Poseidon
+          if (enemy.type === 'sentinelle_poseidon' && dist < 580) {
             enemy.waveCooldown -= dt;
             if (enemy.waveCooldown <= 0) {
-              enemy.waveCooldown = enemy.shielded ? 4.4 : 3.2;
+              enemy.waveCooldown = enemy.shielded ? 4.2 : 3.0;
               const waveDir = dx >= 0 ? 1 : -1;
               fx.spawnProjectile({
                 x: enemy.x + waveDir * 24,
                 y: 454,
-                vx: waveDir * 235,
+                vx: waveDir * 245,
                 vy: 0,
                 damage: 18,
                 radius: 18,
@@ -722,18 +746,114 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
                 piercing: true
               });
             }
+            enemy.skyCooldown -= dt;
+            if (enemy.skyCooldown <= 0) {
+              enemy.skyCooldown = enemy.shielded ? 5.6 : 4.2;
+              fx.spawnHazard(player.x, player.y, 44, 1.05, 20, COLORS.seaLight);
+            }
           }
 
-          if (enemy.state === 'windup') {
+          if (enemy.state === 'dashing') {
+            enemy.x += enemy.dashVx * dt;
+            enemy.y += enemy.dashVy * dt;
+            enemy.stateTimer -= dt;
+            dust.trail(enemy.x, enemy.y + 8);
+            if (!enemy.dashHitDone && Math.hypot(player.x - enemy.x, player.y - enemy.y) <= arch.radius + 18) {
+              enemy.dashHitDone = true;
+              damagePlayer(arch.attack, enemy.x);
+            }
+            if (enemy.stateTimer <= 0) {
+              enemy.state = 'cooldown';
+              enemy.stateTimer = arch.attackCooldown;
+            }
+          } else if (enemy.state === 'windup') {
             enemy.vx = 0;
             enemy.vy = 0;
             enemy.stateTimer -= dt;
             if (enemy.stateTimer <= 0) {
-              if (dist <= arch.attackRange + 16) {
-                damagePlayer(arch.attack, enemy.x);
+              const a = enemy.aimAngle;
+              if (arch.attackStyle === 'lunge') {
+                enemy.state = 'dashing';
+                enemy.stateTimer = 0.28;
+                enemy.dashVx = Math.cos(a) * 320;
+                enemy.dashVy = Math.sin(a) * 320;
+                enemy.dashHitDone = false;
+                dust.burst(enemy.x, enemy.y + 8);
+              } else if (arch.attackStyle === 'charge') {
+                enemy.state = 'dashing';
+                enemy.stateTimer = 0.46;
+                enemy.dashVx = Math.cos(a) * 410;
+                enemy.dashVy = Math.sin(a) * 410;
+                enemy.dashHitDone = false;
+                dust.burst(enemy.x, enemy.y + 10);
+              } else if (arch.attackStyle === 'ranged_fan') {
+                for (const offset of [-0.26, 0, 0.26]) {
+                  fx.spawnProjectile({
+                    x: enemy.x,
+                    y: enemy.y,
+                    vx: Math.cos(a + offset) * 265,
+                    vy: Math.sin(a + offset) * 265,
+                    damage: arch.attack,
+                    radius: 7,
+                    fromPlayer: false,
+                    life: 1.4,
+                    color: COLORS.sky,
+                    style: 'feather'
+                  });
+                }
+                enemy.state = 'cooldown';
+                enemy.stateTimer = arch.attackCooldown;
+              } else if (arch.attackStyle === 'fire_slam') {
+                if (dist <= 86) {
+                  fx.spawnSlash(enemy.x, enemy.y, 0, 88, 0xf97316, 'ring');
+                  damagePlayer(arch.attack, enemy.x);
+                } else {
+                  fx.spawnProjectile({
+                    x: enemy.x,
+                    y: enemy.y,
+                    vx: Math.cos(a) * 250,
+                    vy: Math.sin(a) * 250,
+                    damage: arch.attack - 2,
+                    radius: 9,
+                    fromPlayer: false,
+                    life: 1.5,
+                    color: 0xf97316,
+                    style: 'fireball'
+                  });
+                }
+                enemy.state = 'cooldown';
+                enemy.stateTimer = arch.attackCooldown;
+              } else if (arch.attackStyle === 'boss_burst') {
+                enemy.patternStep = (enemy.patternStep + 1) % 2;
+                if (enemy.patternStep === 0) {
+                  for (let k = 0; k < 6; k++) {
+                    const ra = a + (k / 6) * Math.PI * 2;
+                    fx.spawnProjectile({
+                      x: enemy.x,
+                      y: enemy.y,
+                      vx: Math.cos(ra) * 225,
+                      vy: Math.sin(ra) * 225,
+                      damage: 18,
+                      radius: 9,
+                      fromPlayer: false,
+                      life: 1.6,
+                      color: 0xf97316,
+                      style: 'fireball'
+                    });
+                  }
+                } else {
+                  fx.spawnSlash(enemy.x, enemy.y, 0, 112, 0xf97316, 'ring');
+                  if (dist <= 116) damagePlayer(arch.attack, enemy.x);
+                }
+                enemy.state = 'cooldown';
+                enemy.stateTimer = arch.attackCooldown;
+              } else {
+                // poseidon coup de trident rapproche
+                fx.spawnSlash(enemy.x, enemy.y - 10, a, 76, COLORS.seaLight, 'arc');
+                if (dist <= 84) damagePlayer(arch.attack, enemy.x);
+                enemy.state = 'cooldown';
+                enemy.stateTimer = arch.attackCooldown;
               }
-              enemy.state = 'cooldown';
-              enemy.stateTimer = arch.attackCooldown;
             }
           } else if (enemy.state === 'cooldown') {
             enemy.vx *= 0.85;
@@ -744,6 +864,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
             if (dist <= arch.attackRange) {
               enemy.state = 'windup';
               enemy.stateTimer = arch.windupDuration;
+              enemy.aimAngle = Math.atan2(dy, dx);
             } else {
               enemy.state = 'chase';
               if (mode === 'side-view' && !arch.flying) {
@@ -777,7 +898,20 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           updateEnemyVisual(enemy, time, mode);
         }
 
-        // 6. Projectiles
+        // 6. Zones de danger telegraphees (foudre/eau du boss)
+        for (let i = fx.hazards.length - 1; i >= 0; i--) {
+          const h = fx.hazards[i];
+          h.delay -= dt;
+          if (h.delay <= 0) {
+            fx.spawnSlash(h.x, h.y, 0, h.radius, h.color, 'bolt');
+            if (Math.hypot(player.x - h.x, player.y - h.y) <= h.radius + 14) {
+              damagePlayer(h.damage, h.x);
+            }
+            fx.hazards.splice(i, 1);
+          }
+        }
+
+        // 7. Projectiles
         for (let i = fx.projectiles.length - 1; i >= 0; i--) {
           const p = fx.projectiles[i];
           p.life -= dt;
@@ -802,14 +936,14 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
             }
             if (hit && !p.piercing) fx.projectiles.splice(i, 1);
           } else {
-            if (Math.hypot(player.x - p.x, player.y - p.y) <= 18 + p.radius) {
+            if (Math.hypot(player.x - p.x, player.y - p.y) <= 16 + p.radius) {
               damagePlayer(p.damage, p.x);
               if (!p.piercing) fx.projectiles.splice(i, 1);
             }
           }
         }
 
-        // 7. PNJ & Objets interactifs
+        // 8. PNJ & Objets
         for (const npc of npcs) {
           const near = Math.hypot(npc.x - player.x, npc.y - player.y) < 66;
           npc.update(time, near);
@@ -822,7 +956,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           inter.update(time, done, near);
         }
 
-        // 8. Rendu heros, poussiere et effets
+        // 9. Rendu heros, poussiere et effets
         const moving = Math.abs(player.vx) + Math.abs(player.vy) > 1;
         const airborne = mode === 'side-view' && !player.isGrounded;
         hero.setView(mode);
@@ -834,7 +968,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         dust.update();
         fx.render(dt);
 
-        // 9. Camera
+        // 10. Camera
         const target = viewAround(
           player.x,
           player.y,
@@ -849,7 +983,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         scene?.update(lastView, time);
         placeLayer(actors, lastView);
 
-        // 10. Mise a jour HUD (cooldowns, prompt, boss, minimap)
+        // 11. Mise a jour HUD (uniquement si un boss de la zone est reellement proche/engage)
         hudSyncTimer += dt;
         if (hudSyncTimer >= 0.12) {
           hudSyncTimer = 0;
@@ -859,7 +993,10 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           const nearest = findNearestInteraction();
           setInteractPrompt(nearest ? nearest.label : null);
 
-          const boss = enemies.find((e) => e.alive && ENEMY_ARCHETYPES[e.type].isBoss);
+          const engageDist = zone.id === 'rivage' ? 680 : 460;
+          const boss = enemies.find(
+            (e) => e.alive && ENEMY_ARCHETYPES[e.type].isBoss && Math.hypot(e.x - player.x, e.y - player.y) < engageDist
+          );
           if (boss) {
             setBossInfo({
               name: boss.name,
@@ -873,24 +1010,27 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
             setBossInfo(null);
           }
 
-          const dots: MinimapDot[] = [
-            { x: player.x, y: player.y, kind: 'player' },
-            ...zone.portals.map((p): MinimapDot => ({ x: p.x + p.w / 2, y: p.y + p.h / 2, kind: 'portal' })),
-            ...npcs.map((n): MinimapDot => ({ x: n.x, y: n.y, kind: 'npc' })),
+          const markers: MinimapMarker[] = [
+            { x: player.x, y: player.y, kind: 'player', angle: mode === 'side-view' ? (facingDir >= 0 ? 0 : Math.PI) : facingAngle },
+            ...zone.portals.map((p): MinimapMarker => ({ x: p.x + p.w / 2, y: p.y + p.h / 2, kind: 'portal' })),
+            ...npcs.map((n): MinimapMarker => {
+              const b = getNpcBadge(stateRef.current, n.npcId);
+              return { x: n.x, y: n.y, kind: b && b !== 'active' ? 'npc_quest' : 'npc' };
+            }),
             ...interactables
               .filter((inter) => !(inter.def.kind === 'trial_stele'
                 ? stateRef.current.activatedTrialSteles.includes(inter.def.id)
                 : stateRef.current.collectedInteractables.includes(inter.def.id)))
-              .map((inter): MinimapDot => ({ x: inter.def.x, y: inter.def.y, kind: 'interact' })),
+              .map((inter): MinimapMarker => ({ x: inter.def.x, y: inter.def.y, kind: 'interact' })),
             ...enemies
               .filter((e) => e.alive)
-              .map((e): MinimapDot => ({
+              .map((e): MinimapMarker => ({
                 x: e.x,
                 y: e.y,
                 kind: ENEMY_ARCHETYPES[e.type].isBoss ? 'boss' : 'enemy'
               }))
           ];
-          setMinimapDots(dots);
+          setMinimapMarkers(markers);
         }
       });
     };
@@ -920,14 +1060,13 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
     stateRef.current.prologueSeen = true;
     saveGameState(stateRef.current);
     setShowPrologue(false);
-    showToast("Éveil sur l'Agora — Approchez de Lycos et appuyez sur [E]");
   };
 
   const handleAcceptQuest = (questId: string) => {
     if (acceptQuest(stateRef.current, questId)) {
       syncUi(true);
       if (dialogue) setDialogue(resolveNpcDialogue(stateRef.current, dialogue.npcId));
-      showToast('Quête acceptée ! Suivez vos objectifs à droite.');
+      showToast('Quête acceptée');
     }
   };
 
@@ -936,7 +1075,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
     if (res.completed) {
       syncUi(true);
       if (dialogue) setDialogue(resolveNpcDialogue(stateRef.current, dialogue.npcId));
-      showToast(res.leveledUp ? `Niveau ${res.newLevel} ! ${res.rewardSummary}` : `Quête terminée : ${res.rewardSummary}`);
+      showToast(res.leveledUp ? `Niveau ${res.newLevel} ! ${res.rewardSummary}` : `Quête terminée • ${res.rewardSummary}`);
     }
   };
 
@@ -944,15 +1083,17 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
     const stats = getComputedStats(stateRef.current);
     stateRef.current.hp = stats.maxHp;
     syncUi(true);
-    showToast('Cassandre a entièrement restauré vos points de vie.');
+    showToast('Points de vie restaurés');
   };
 
-  const handleBuyPotion = () => {
-    if (stateRef.current.gold < 15) return;
-    stateRef.current.gold -= 15;
-    addItemToState(stateRef.current, 'potion_ambroisie', 1);
+  const handleBuyItem = (itemId: string) => {
+    const item = ITEMS[itemId];
+    if (!item || stateRef.current.gold < item.price) return;
+    if (!item.stackable && stateRef.current.inventory.some((s) => s.itemId === itemId)) return;
+    stateRef.current.gold -= item.price;
+    addItemToState(stateRef.current, itemId, 1);
     syncUi(true);
-    showToast("Potion d'ambroisie achetée.");
+    showToast(`${item.name} acquis`);
   };
 
   const activeZone = ZONES[uiState.zoneId];
@@ -968,13 +1109,14 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         status={status}
         zone={activeZone}
         state={uiState}
+        settings={settings}
         specialCooldown={specialCd}
         dashCooldown={dashCd}
         interactPrompt={modalOpen ? null : interactPrompt}
         toast={toast}
         zoneBanner={zoneBanner}
         bossInfo={bossInfo}
-        minimapDots={minimapDots}
+        minimapMarkers={minimapMarkers}
         loadError={loadError}
         compact={screen.compact}
         touch={screen.touch}
@@ -984,6 +1126,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         onTriggerPotion={() => actionsRef.current?.potion()}
         onTriggerInteract={() => actionsRef.current?.interact()}
         onOpenModal={(tab) => setModalTab(tab)}
+        onOpenPause={() => setPauseOpen(true)}
         onLeave={() => {
           saveGameState(stateRef.current);
           onLeave();
@@ -996,21 +1139,38 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         <PrologueOverlay heroName={uiState.heroName} onFinish={handleFinishPrologue} />
       )}
 
-      {dialogue && !showPrologue && (
+      {pauseOpen && !showPrologue && (
+        <PauseMenuModal
+          settings={settings}
+          onChangeSettings={handleSettingsChange}
+          onSaveNow={() => {
+            saveGameState(stateRef.current);
+            showToast('Partie sauvegardée');
+          }}
+          onResume={() => setPauseOpen(false)}
+          onQuitToLobby={() => {
+            saveGameState(stateRef.current);
+            onLeave();
+          }}
+        />
+      )}
+
+      {dialogue && !showPrologue && !pauseOpen && (
         <DialogueModal
           view={dialogue}
           gold={uiState.gold}
           hp={uiState.hp}
           maxHp={stats.maxHp}
+          inventory={uiState.inventory}
           onAcceptQuest={handleAcceptQuest}
           onCompleteQuest={handleCompleteQuest}
           onHeal={handleHeal}
-          onBuyPotion={handleBuyPotion}
+          onBuyItem={handleBuyItem}
           onClose={() => setDialogue(null)}
         />
       )}
 
-      {modalTab && !showPrologue && (
+      {modalTab && !showPrologue && !pauseOpen && (
         <InventoryModal
           state={uiState}
           initialTab={modalTab}

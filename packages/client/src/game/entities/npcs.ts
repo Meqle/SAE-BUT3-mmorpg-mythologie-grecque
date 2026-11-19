@@ -20,28 +20,28 @@ function makeNameLabel(name: string, role: string): Container {
     resolution: 3,
     style: new TextStyle({
       fontFamily: 'Cinzel, serif',
-      fontSize: 11,
+      fontSize: 10.5,
       fontWeight: '700',
       fill: COLORS.marbleLit,
       stroke: { color: COLORS.ink, width: 3, join: 'round' }
     })
   });
   title.anchor.set(0.5, 1);
-  title.y = -22;
+  title.y = -21;
 
   const sub = new Text({
     text: role,
     resolution: 3,
     style: new TextStyle({
       fontFamily: 'Outfit, sans-serif',
-      fontSize: 8.5,
+      fontSize: 8,
       fontWeight: '600',
       fill: COLORS.gold,
-      stroke: { color: COLORS.ink, width: 2.5, join: 'round' }
+      stroke: { color: COLORS.ink, width: 2.4, join: 'round' }
     })
   });
   sub.anchor.set(0.5, 1);
-  sub.y = -12;
+  sub.y = -11;
 
   wrap.addChild(title, sub);
   return wrap;
@@ -56,7 +56,6 @@ function drawNpcBody(look: NpcDef['look']): Container {
     g.circle(0, 0, 14).fill({ color: 0xf97316, alpha: 0.25 });
     g.ellipse(0, 0, 9, 11).fill(shaded(0xffe7a3, 0xd97706)).stroke({ ...LINE, color: 0x9a3412 });
     g.circle(0, -1, 5.5).fill(dome(0xfffbeb, COLORS.gold, 0xd97706)).stroke({ ...LINE, color: 0x9a3412 });
-    // chaines brisees symboliques autour de l'echo
     g.circle(-11, 5, 3).stroke({ width: 1.5, color: BRONZE_SHADE });
     g.circle(11, 5, 3).stroke({ width: 1.5, color: BRONZE_SHADE });
     body.addChild(g);
@@ -67,44 +66,40 @@ function drawNpcBody(look: NpcDef['look']): Container {
     look === 'messenger' ? COLORS.tile :
     look === 'smith' ? LEATHER :
     look === 'healer' ? COLORS.olive :
+    look === 'merchant' ? COLORS.bronze :
+    look === 'citizen' ? 0x64748b :
     COLORS.seaDeep;
 
-  // cape ou tunique vue du dessus
   g.ellipse(-1, 2, 10.5, 9).fill(shaded(lighter(cloakColor, 0.2), darker(cloakColor, 0.35))).stroke(LINE);
-  // epaules en lin ou cuir
   g.ellipse(0, 0, 8.5, 6.2).fill(shaded(look === 'smith' ? BRONZE : LINEN, look === 'smith' ? BRONZE_SHADE : LINEN_SHADE)).stroke(LINE);
 
   if (look === 'messenger') {
-    // torche de Promethee dans la main droite
     g.moveTo(8, 3).lineTo(13, -4).stroke({ width: 2.2, color: WOOD, cap: 'round' });
     g.circle(13.5, -5.5, 4.5).fill({ color: 0xf97316, alpha: 0.65 });
     g.circle(13.5, -5.5, 2.3).fill({ color: 0xfff3c4 });
   } else if (look === 'smith') {
-    // marteau de forgeron
     g.moveTo(7, 2).lineTo(13, -3).stroke({ width: 2, color: WOOD, cap: 'round' });
     g.rect(10.5, -6.5, 5.5, 3.6).fill(shaded(BRONZE_LIT, BRONZE_SHADE)).stroke({ ...LINE, width: 0.7 });
   } else if (look === 'healer') {
-    // amphore doree / herbes
     g.ellipse(9.5, 2, 3.2, 4.2).fill(shaded(COLORS.gold, BRONZE_SHADE)).stroke({ ...LINE, width: 0.7 });
+  } else if (look === 'merchant') {
+    g.circle(9.5, 2, 3.8).fill(COLORS.gold).stroke({ ...LINE, width: 0.7 });
+    g.circle(6, 5, 2.5).fill(COLORS.tile).stroke({ ...LINE, width: 0.6 });
   } else if (look === 'guard') {
-    // lance et bouclier d'hoplite
     g.moveTo(9, -11).lineTo(9, 10).stroke({ width: 2, color: WOOD, cap: 'round' });
     g.poly([9, -15, 11.2, -10.5, 6.8, -10.5]).fill(BRONZE_LIT).stroke({ ...LINE, width: 0.7 });
     g.circle(-9, 1, 6).fill(shaded(BRONZE_LIT, BRONZE)).stroke(LINE);
   }
 
-  // tete
   if (look === 'guard') {
     g.circle(0, 0, 5.2).fill(dome(BRONZE_LIT, BRONZE, BRONZE_SHADE)).stroke(LINE);
     g.ellipse(0, -1, 1.8, 6.5).fill(COLORS.tile).stroke({ ...LINE, width: 0.6 });
   } else {
     g.circle(0, 0, 5.2).fill(dome(0xf3c79e, SKIN, 0xa8714c)).stroke(LINE);
-    // cheveux / couronne
-    const hair = look === 'messenger' ? 0x4b5563 : look === 'healer' ? 0x3b2618 : 0x261c17;
+    const hair = look === 'messenger' ? 0x4b5563 : look === 'citizen' ? 0xd1d5db : 0x261c17;
     g.arc(0, 0, 5.2, Math.PI * 0.9, Math.PI * 2.1).fill(hair);
-    if (look === 'healer') {
-      g.circle(0, 0, 5.4).stroke({ width: 1.3, color: COLORS.olive });
-    }
+    if (look === 'healer') g.circle(0, 0, 5.4).stroke({ width: 1.3, color: COLORS.olive });
+    if (look === 'merchant') g.circle(0, 0, 5.4).stroke({ width: 1.3, color: COLORS.gold });
   }
 
   body.addChild(g);
@@ -183,9 +178,7 @@ export function createNpcSprite(npcId: string, x: number, y: number): NpcSprite 
       }
       badgeWrap.y = -43 + Math.sin(time * 4.2) * 3.5;
       talkRing.visible = nearPlayer;
-      if (nearPlayer) {
-        talkRing.scale.set(1 + Math.sin(time * 5) * 0.08);
-      }
+      if (nearPlayer) talkRing.scale.set(1 + Math.sin(time * 5) * 0.08);
     }
   };
 }

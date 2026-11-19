@@ -13,9 +13,20 @@ export interface Projectile {
   fromPlayer: boolean;
   life: number;
   color: number;
-  style: 'arrow' | 'orb' | 'wave';
+  style: 'arrow' | 'orb' | 'wave' | 'feather' | 'fireball';
   piercing?: boolean;
   hitIds: Set<string>;
+}
+
+export interface HazardZone {
+  x: number;
+  y: number;
+  radius: number;
+  delay: number;
+  maxDelay: number;
+  damage: number;
+  color: number;
+  triggered: boolean;
 }
 
 export interface SlashFx {
@@ -43,6 +54,7 @@ export function createCombatFxLayer() {
   container.addChild(gfx, textLayer);
 
   const projectiles: Projectile[] = [];
+  const hazards: HazardZone[] = [];
   const slashes: SlashFx[] = [];
   const texts: FloatingTextItem[] = [];
 
@@ -72,8 +84,13 @@ export function createCombatFxLayer() {
     projectiles.push({ ...p, hitIds: new Set() });
   };
 
+  const spawnHazard = (x: number, y: number, radius: number, delay: number, damage: number, color = COLORS.seaLight) => {
+    hazards.push({ x, y, radius, delay, maxDelay: delay, damage, color, triggered: false });
+  };
+
   const clear = () => {
     projectiles.length = 0;
+    hazards.length = 0;
     slashes.length = 0;
     for (const t of texts) t.node.destroy();
     texts.length = 0;
@@ -82,6 +99,13 @@ export function createCombatFxLayer() {
 
   const render = (dt: number) => {
     gfx.clear();
+
+    for (const h of hazards) {
+      const progress = 1 - Math.max(0, h.delay / h.maxDelay);
+      gfx.circle(h.x, h.y, h.radius).fill({ color: h.color, alpha: 0.14 + progress * 0.2 });
+      gfx.circle(h.x, h.y, h.radius * progress).stroke({ width: 2, color: COLORS.sun, alpha: 0.85 });
+      gfx.circle(h.x, h.y, h.radius).stroke({ width: 1.8, color: h.color, alpha: 0.9 });
+    }
 
     for (let i = slashes.length - 1; i >= 0; i--) {
       const s = slashes[i];
@@ -103,8 +127,8 @@ export function createCombatFxLayer() {
         gfx.circle(s.x, s.y, r).fill({ color: s.color, alpha: t * 0.22 });
         gfx.circle(s.x, s.y, r).stroke({ width: 4.5 * t + 1, color: s.color, alpha: t * 0.9 });
       } else {
-        gfx.moveTo(s.x, s.y - 160).lineTo(s.x - 10, s.y - 80).lineTo(s.x + 8, s.y - 40).lineTo(s.x, s.y)
-          .stroke({ width: 5 * t, color: COLORS.sun, alpha: t });
+        gfx.moveTo(s.x, s.y - 180).lineTo(s.x - 10, s.y - 90).lineTo(s.x + 8, s.y - 45).lineTo(s.x, s.y)
+          .stroke({ width: 5.5 * t, color: COLORS.sun, alpha: t });
         gfx.circle(s.x, s.y, s.radius * (1.1 - t * 0.4)).stroke({ width: 3 * t, color: s.color, alpha: t });
       }
     }
@@ -114,9 +138,25 @@ export function createCombatFxLayer() {
         const a = Math.atan2(p.vy, p.vx);
         const cx = Math.cos(a);
         const sy = Math.sin(a);
-        gfx.moveTo(p.x - cx * 10, p.y - sy * 10).lineTo(p.x + cx * 8, p.y + sy * 8)
+        gfx.moveTo(p.x - cx * 11, p.y - sy * 11).lineTo(p.x + cx * 8, p.y + sy * 8)
           .stroke({ width: 2.2, color: WOOD, cap: 'round' });
-        gfx.circle(p.x + cx * 8, p.y + sy * 8, 2.6).fill({ color: BRONZE_LIT });
+        gfx.circle(p.x + cx * 8, p.y + sy * 8, 2.7).fill({ color: BRONZE_LIT });
+      } else if (p.style === 'feather') {
+        const a = Math.atan2(p.vy, p.vx);
+        const cx = Math.cos(a);
+        const sy = Math.sin(a);
+        const px = -sy;
+        const py = cx;
+        gfx.poly([
+          p.x + cx * 10, p.y + sy * 10,
+          p.x - cx * 4 + px * 4, p.y - sy * 4 + py * 4,
+          p.x - cx * 10, p.y - sy * 10,
+          p.x - cx * 4 - px * 4, p.y - sy * 4 - py * 4
+        ]).fill({ color: 0x38bdf8 }).stroke({ width: 1, color: COLORS.ink });
+      } else if (p.style === 'fireball') {
+        gfx.circle(p.x, p.y, p.radius + 4).fill({ color: 0xea580c, alpha: 0.35 });
+        gfx.circle(p.x, p.y, p.radius).fill({ color: 0xf97316 }).stroke({ width: 1.2, color: COLORS.ink });
+        gfx.circle(p.x, p.y, p.radius * 0.5).fill({ color: 0xfef08a });
       } else if (p.style === 'wave') {
         gfx.ellipse(p.x, p.y, 16, 22).fill({ color: COLORS.seaLight, alpha: 0.72 });
         gfx.ellipse(p.x, p.y - 6, 12, 12).fill({ color: COLORS.foam, alpha: 0.85 });
@@ -144,9 +184,11 @@ export function createCombatFxLayer() {
   return {
     container,
     projectiles,
+    hazards,
     spawnText,
     spawnSlash,
     spawnProjectile,
+    spawnHazard,
     clear,
     render
   };
@@ -180,7 +222,7 @@ export function createInteractableSprite(def: ZoneInteractable): InteractableSpr
   label.y = -24;
 
   if (def.kind === 'brasero') {
-    base.circle(0, 0, 18).fill(shaded(BRONZE_LIT, BRONZE_SHADE)).stroke({ ...LINE, width: 1.8 });
+    base.circle(0, 0, 19).fill(shaded(BRONZE_LIT, BRONZE_SHADE)).stroke({ ...LINE, width: 1.8 });
     base.circle(0, 0, 12).fill({ color: 0x3b1f14 });
     label.y = -26;
   } else if (def.kind === 'bronze') {
@@ -232,7 +274,7 @@ export function createInteractableSprite(def: ZoneInteractable): InteractableSpr
         ring.circle(0, def.kind === 'trial_stele' ? -14 : 0, 22 + Math.sin(time * 6) * 2)
           .stroke({ width: 1.8, color: COLORS.gold, alpha: 0.85 });
       }
-      label.visible = nearPlayer || (!done && (def.kind === 'brasero' || def.kind === 'stele' || def.kind === 'trial_stele'));
+      label.visible = nearPlayer;
     }
   };
 }

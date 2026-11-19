@@ -1,5 +1,6 @@
 import { Container, Text, TextStyle } from 'pixi.js';
 import { ViewMode } from '@greek-myth/shared';
+import type { HeroClassId } from './data/classes';
 import { COLORS } from './scenes/palette';
 import { createAboveHero } from './hero/above';
 import { createSideHero } from './hero/side';
@@ -10,6 +11,7 @@ export interface HeroSprite {
   labelY: number;
   setView: (mode: ViewMode) => void;
   face: (dx: number) => void;
+  aimAngle: (angle: number) => void;
   animate: (moving: boolean, airborne: boolean, time: number) => void;
   setHitFlash: (active: boolean) => void;
   pulseAttack: () => void;
@@ -33,16 +35,16 @@ function createLabel(name: string, isLocal: boolean): Text {
   return label;
 }
 
-export function createHero(name: string, color: number, isLocal: boolean): HeroSprite {
-  const above = createAboveHero(color, isLocal);
-  const side = createSideHero(color, isLocal);
+export function createHero(name: string, color: number, isLocal: boolean, heroClass: HeroClassId = 'GUERRIER'): HeroSprite {
+  const above = createAboveHero(color, isLocal, heroClass);
+  const side = createSideHero(color, isLocal, heroClass);
   const label = createLabel(name, isLocal);
   const bodyWrap = new Container();
   bodyWrap.addChild(above.view, side.view);
   const container = new Container();
   container.addChild(bodyWrap, label);
   let mode: ViewMode = 'top-down';
-  let attackKick = 0;
+  let attackPulse = 0;
 
   const hero: HeroSprite = {
     container,
@@ -60,22 +62,19 @@ export function createHero(name: string, color: number, isLocal: boolean): HeroS
       side.face(Math.sign(dx));
       above.face(Math.sign(dx));
     },
+    aimAngle: (angle) => {
+      above.setAngle(angle);
+    },
     animate: (moving, airborne, time) => {
-      if (mode === 'top-down') above.animate(moving, time);
-      else side.animate(moving, airborne, time);
-      if (attackKick > 0) {
-        attackKick = Math.max(0, attackKick - 0.14);
-        const s = 1 + attackKick * 0.18;
-        bodyWrap.scale.set(s);
-      } else {
-        bodyWrap.scale.set(1);
-      }
+      if (attackPulse > 0) attackPulse = Math.max(0, attackPulse - 0.11);
+      if (mode === 'top-down') above.animate(moving, time, attackPulse);
+      else side.animate(moving, airborne, time, attackPulse);
     },
     setHitFlash: (active) => {
       bodyWrap.tint = active ? 0xffb4b4 : 0xffffff;
     },
     pulseAttack: () => {
-      attackKick = 1;
+      attackPulse = 1;
     }
   };
   hero.setView('top-down');

@@ -349,7 +349,7 @@ export interface NpcDialogueView {
   npcRole: string;
   text: string;
   canHeal: boolean;
-  sellsPotion: boolean;
+  shopItems: string[];
   readyQuest?: QuestDef;
   availableQuest?: QuestDef;
   activeQuest?: QuestDef;
@@ -384,7 +384,7 @@ export function resolveNpcDialogue(state: GameProgressState, npcId: string): Npc
     npcRole: npc.role,
     text,
     canHeal: Boolean(npc.canHeal),
-    sellsPotion: Boolean(npc.sellsPotion),
+    shopItems: npc.shopItems ?? [],
     readyQuest,
     availableQuest,
     activeQuest
