@@ -10,6 +10,7 @@ import type {
   PlayerState,
   WorldTickPacket
 } from '@greek-myth/shared';
+import { portalAt, SPAWN_POINT, stepMovement } from '@greek-myth/shared';
 
 const app = express();
 app.use(cors());
@@ -118,8 +119,8 @@ function joinRoom(socket: WebSocket, packet: JoinRequestPacket): void {
       hp: 100,
       maxHp: 100,
       position: {
-        x: 400 + room.size * 48,
-        y: 300,
+        x: SPAWN_POINT.x,
+        y: SPAWN_POINT.y,
         vx: 0,
         vy: 0,
         direction: 'down',
@@ -128,7 +129,7 @@ function joinRoom(socket: WebSocket, packet: JoinRequestPacket): void {
       viewMode: 'top-down',
       currentRoomId: packet.roomId
     },
-    keys: { up: false, down: false, left: false, right: false     },
+    keys: { up: false, down: false, left: false, right: false },
     previousJump: false,
   };
 
@@ -165,42 +166,30 @@ function updatePlayer(session: PlayerSession, deltaSeconds: number): void {
   const vertical = Number(keys.down) - Number(keys.up);
   const jumpStarted = Boolean(keys.jump) && !session.previousJump;
   session.previousJump = Boolean(keys.jump);
-  const speed = 220;
-  const acceleration = 1 - Math.pow(0.75, deltaSeconds * 60);
 
   if (horizontal < 0) position.direction = 'left';
   else if (horizontal > 0) position.direction = 'right';
   else if (vertical < 0) position.direction = 'up';
   else if (vertical > 0) position.direction = 'down';
 
-  if (state.viewMode === 'top-down') {
-    const length = Math.hypot(horizontal, vertical) || 1;
-    const targetVx = (horizontal / length) * speed;
-    const targetVy = (vertical / length) * speed;
-    position.vx += (targetVx - position.vx) * acceleration;
-    position.vy += (targetVy - position.vy) * acceleration;
-    position.x += position.vx * deltaSeconds;
-    position.y += position.vy * deltaSeconds;
-    position.isGrounded = true;
-    return;
-  }
+  stepMovement(position, {
+    up: keys.up,
+    down: keys.down,
+    left: keys.left,
+    right: keys.right,
+    jumpStarted
+  }, state.viewMode, deltaSeconds);
 
-  position.vx += (horizontal * speed - position.vx) * acceleration;
-  position.x += position.vx * deltaSeconds;
-  position.vy += 900 * deltaSeconds;
-  position.y += position.vy * deltaSeconds;
-  const groundY = 456;
-  if (position.y >= groundY) {
-    position.y = groundY;
-    position.vy = 0;
-    position.isGrounded = true;
-  } else {
-    position.isGrounded = false;
-  }
-
-  if (jumpStarted && position.isGrounded) {
-    position.vy = -480;
-    position.isGrounded = false;
+  const portal = portalAt(position, state.viewMode);
+  if (portal) {
+    state.viewMode = portal.to;
+    Object.assign(position, {
+      x: portal.spawnX,
+      y: portal.spawnY,
+      vx: 0,
+      vy: 0,
+      isGrounded: true
+    });
   }
 }
 
@@ -270,9 +259,21 @@ wss.on('connection', (socket, request) => {
         sendError(socket, 'Le mode de caméra demandé est invalide.');
         return;
       }
-      session.state.viewMode = packet.viewMode;
-      session.state.position.vx = 0;
-      session.state.position.vy = 0;
+      if (packet.viewMode !== session.state.viewMode) {
+        const portal = portalAt(session.state.position, session.state.viewMode);
+        if (!portal || portal.to !== packet.viewMode) {
+          sendError(socket, 'Le changement de vue doit passer par un portail.');
+          return;
+        }
+        session.state.viewMode = portal.to;
+        Object.assign(session.state.position, {
+          x: portal.spawnX,
+          y: portal.spawnY,
+          vx: 0,
+          vy: 0,
+          isGrounded: true
+        });
+      }
     } else {
       sendError(socket, 'Type de message non pris en charge.');
     }
