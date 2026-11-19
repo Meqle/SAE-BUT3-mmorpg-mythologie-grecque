@@ -12,12 +12,13 @@ export interface MinimapMarker {
 interface MinimapProps {
   zone: ZoneDefinition;
   markers: MinimapMarker[];
+  onOpenWorldMap?: () => void;
 }
 
 const MARBLE = css(COLORS.marble);
 const GOLD = css(COLORS.gold);
 
-export function Minimap({ zone, markers }: MinimapProps) {
+export function Minimap({ zone, markers, onOpenWorldMap }: MinimapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapW = 176;
   const mapH = Math.max(66, Math.min(120, Math.round((zone.height / zone.width) * mapW)));
@@ -95,6 +96,16 @@ export function Minimap({ zone, markers }: MinimapProps) {
         pts.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x * sx, y * sy) : ctx.lineTo(x * sx, y * sy)));
         ctx.stroke();
       }
+    } else if (zone.id === 'labyrinthe') {
+      ctx.fillStyle = '#2d3748';
+      ctx.fillRect(0, 0, mapW, mapH);
+      ctx.beginPath();
+      ctx.arc(1330 * sx, 560 * sy, 235 * sx, 0, Math.PI * 2);
+      ctx.fillStyle = '#3f4a5e';
+      ctx.fill();
+      ctx.strokeStyle = '#c08a3e';
+      ctx.lineWidth = 1;
+      ctx.stroke();
     } else {
       // vue de profil Rivage d'Egee
       ctx.fillStyle = '#7bb4db';
@@ -192,7 +203,7 @@ export function Minimap({ zone, markers }: MinimapProps) {
   }, [zone, markers, mapW, mapH]);
 
   return (
-    <div style={{
+    <div onClick={onOpenWorldMap} title="Ouvrir la carte du monde" style={{ cursor: onOpenWorldMap ? 'pointer' : 'default',
       background: 'rgba(26, 45, 70, 0.92)',
       border: `2px solid ${MARBLE}`,
       boxShadow: `inset 0 0 0 2px rgba(26, 45, 70, 0.92), inset 0 0 0 3px ${GOLD}, 0 4px 12px rgba(0, 0, 0, 0.35)`,

@@ -43,6 +43,7 @@ interface HudProps {
   onTriggerInteract: () => void;
   onOpenModal: (tab: ModalTab) => void;
   onOpenPause: () => void;
+  onOpenWorldMap: () => void;
   onLeave: () => void;
 }
 
@@ -84,6 +85,7 @@ export function Hud({
   onTriggerInteract,
   onOpenModal,
   onOpenPause,
+  onOpenWorldMap,
   onLeave
 }: HudProps) {
   const stats = getComputedStats(state);
@@ -319,7 +321,7 @@ export function Hud({
           gap: 8,
           width: 224
         }}>
-          {settings.showMinimap && <Minimap zone={zone} markers={minimapMarkers} />}
+          {settings.showMinimap && <Minimap zone={zone} markers={minimapMarkers} onOpenWorldMap={onOpenWorldMap} />}
 
           {settings.showQuestTracker && trackedQuests.length > 0 && (
             <div style={{ ...panel, position: 'relative', width: '100%', padding: '8px 10px' }}>

@@ -1,7 +1,7 @@
 import { MAPS, GRAVITY, JUMP_VELOCITY, MAX_FALL_SPEED, PLAYER_HALF, PLAYER_SPEED } from '@greek-myth/shared';
 import type { MoveInput, MovingBody, Rect, ViewMode } from '@greek-myth/shared';
 
-export type ZoneId = 'agora' | 'plaines' | 'sanctuaire' | 'rivage';
+export type ZoneId = 'agora' | 'plaines' | 'sanctuaire' | 'rivage' | 'labyrinthe';
 
 export type ZoneSolidLook =
   | 'column'
@@ -42,7 +42,7 @@ export interface ZoneNpcPlacement {
   y: number;
 }
 
-export type InteractableKind = 'brasero' | 'bronze' | 'herb' | 'stele' | 'trial_stele';
+export type InteractableKind = 'brasero' | 'bronze' | 'herb' | 'stele' | 'trial_stele' | 'chest';
 
 export interface ZoneInteractable {
   id: string;
@@ -61,7 +61,9 @@ export type EnemyType =
   | 'centaure'
   | 'automate'
   | 'gardien_airain'
-  | 'sentinelle_poseidon';
+  | 'sentinelle_poseidon'
+  | 'squelette'
+  | 'minotaure';
 
 export interface ZoneEnemySpawn {
   id: string;
@@ -271,7 +273,9 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
       { id: 'herb_1', targetId: 'herbe_ambroisie', label: "Herbe d'ambroisie", kind: 'herb', x: 205, y: 285, radius: 42, questId: 'sq_ambroisie_perdue' },
       { id: 'herb_2', targetId: 'herbe_ambroisie', label: "Herbe d'ambroisie", kind: 'herb', x: 495, y: 865, radius: 42, questId: 'sq_ambroisie_perdue' },
       { id: 'herb_3', targetId: 'herbe_ambroisie', label: "Herbe d'ambroisie", kind: 'herb', x: 1355, y: 925, radius: 42, questId: 'sq_ambroisie_perdue' },
-      { id: 'stele_chatiment_obj', targetId: 'stele_chatiment', label: 'Stèle du Châtiment', kind: 'stele', x: 950, y: 185, radius: 52, questId: 'mq_2_terres_foudroyees' }
+      { id: 'stele_chatiment_obj', targetId: 'stele_chatiment', label: 'Stèle du Châtiment', kind: 'stele', x: 950, y: 185, radius: 52, questId: 'mq_2_terres_foudroyees' },
+      { id: 'coffre_plaines_1', targetId: 'chest_loot', label: 'Coffre antique', kind: 'chest', x: 1126, y: 205, radius: 42 },
+      { id: 'coffre_plaines_2', targetId: 'chest_loot', label: 'Coffre antique', kind: 'chest', x: 640, y: 940, radius: 42 }
     ],
     spawns: [
       { id: 'pl_sat_1', type: 'satyre', x: 570, y: 545, level: 1, patrolRadius: 75, respawnSeconds: 18 },
@@ -302,6 +306,8 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
       { x: 0, y: 560, w: 72, h: 26, look: 'wall' },
       { x: 1528, y: 434, w: 72, h: 26, look: 'wall' },
       { x: 1528, y: 560, w: 72, h: 26, look: 'wall' },
+      { x: 716, y: 0, w: 26, h: 64, look: 'wall' },
+      { x: 858, y: 0, w: 26, h: 64, look: 'wall' },
       ruin(185, 190, 210, 26),
       ruin(185, 800, 210, 26),
       { x: 265, y: 250, w: 60, h: 38, look: 'altar' },
@@ -334,12 +340,25 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
         spawnX: 170,
         spawnY: 456,
         label: "Rivage d'Égée"
+      },
+      {
+        id: 'sanctuaire_to_labyrinthe',
+        x: 742,
+        y: 0,
+        w: 116,
+        h: 64,
+        toZone: 'labyrinthe',
+        spawnX: 165,
+        spawnY: 985,
+        label: 'Labyrinthe des Brumes'
       }
     ],
     npcs: [
       { npcId: 'echo_promethee', x: 295, y: 332 }
     ],
-    interactables: [],
+    interactables: [
+      { id: 'coffre_sanctuaire_1', targetId: 'chest_loot', label: 'Coffre des Titans', kind: 'chest', x: 1410, y: 880, radius: 44 }
+    ],
     spawns: [
       { id: 'sn_aut_1', type: 'automate', x: 690, y: 410, level: 5, patrolRadius: 65, respawnSeconds: 26 },
       { id: 'sn_aut_2', type: 'automate', x: 700, y: 635, level: 5, patrolRadius: 65, respawnSeconds: 26 },
@@ -399,6 +418,71 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
       { id: 'rv_har_1', type: 'harpie', x: 470, y: 245, level: 5, patrolRadius: 90, respawnSeconds: 26 },
       { id: 'rv_har_2', type: 'harpie', x: 1090, y: 230, level: 6, patrolRadius: 90, respawnSeconds: 26 },
       { id: 'rv_boss', type: 'sentinelle_poseidon', x: 1060, y: 452, level: 8, patrolRadius: 190, respawnSeconds: 90 }
+    ]
+  },
+
+  labyrinthe: {
+    id: 'labyrinthe',
+    name: 'Labyrinthe des Brumes',
+    subtitle: 'Donjon du Minotaure',
+    realm: 'tartarus',
+    viewMode: 'top-down',
+    recommendedLevel: 'Niv. 7 - 10',
+    safeZone: false,
+    width: 1680,
+    height: 1160,
+    cameraMargin: 28,
+    defaultSpawn: { x: 165, y: 985 },
+    solids: [
+      // Murets de la porte sud-ouest (retour Sanctuaire)
+      { x: 74, y: 1086, w: 26, h: 74, look: 'wall' },
+      { x: 230, y: 1086, w: 26, h: 74, look: 'wall' },
+
+      // Murs du labyrinthe (couloirs larges >= 150px)
+      ruin(340, 740, 28, 420),
+      ruin(340, 420, 28, 170),
+      ruin(340, 120, 28, 160),
+
+      ruin(340, 420, 340, 28),
+      ruin(520, 740, 460, 28),
+      ruin(660, 180, 28, 268),
+      ruin(660, 560, 28, 180),
+
+      ruin(960, 160, 28, 320),
+      ruin(960, 650, 28, 360),
+      ruin(660, 180, 328, 28),
+
+      // Colonnes de la salle du Minotaure (Est, centre 1330, 560)
+      pillar(1140, 320), pillar(1520, 320),
+      pillar(1140, 800), pillar(1520, 800),
+      pillar(180, 520), pillar(510, 940)
+    ],
+    portals: [
+      {
+        id: 'labyrinthe_to_sanctuaire',
+        x: 100,
+        y: 1086,
+        w: 130,
+        h: 74,
+        toZone: 'sanctuaire',
+        spawnX: 800,
+        spawnY: 112,
+        label: 'Sanctuaire Brisé'
+      }
+    ],
+    npcs: [],
+    interactables: [
+      { id: 'fil_ariane_obj', targetId: 'fil_ariane', label: "Autel du Fil d'Ariane", kind: 'stele', x: 185, y: 190, radius: 50 },
+      { id: 'coffre_laby_1', targetId: 'chest_loot', label: 'Coffre crétois', kind: 'chest', x: 510, y: 295, radius: 44 },
+      { id: 'coffre_laby_2', targetId: 'chest_loot', label: 'Coffre crétois', kind: 'chest', x: 820, y: 940, radius: 44 }
+    ],
+    spawns: [
+      { id: 'lb_sq_1', type: 'squelette', x: 190, y: 690, level: 7, patrolRadius: 65, respawnSeconds: 24 },
+      { id: 'lb_sq_2', type: 'squelette', x: 200, y: 340, level: 7, patrolRadius: 60, respawnSeconds: 24 },
+      { id: 'lb_sq_3', type: 'squelette', x: 810, y: 580, level: 8, patrolRadius: 75, respawnSeconds: 26 },
+      { id: 'lb_aut_1', type: 'automate', x: 810, y: 315, level: 8, patrolRadius: 60, respawnSeconds: 28 },
+      { id: 'lb_sq_4', type: 'squelette', x: 580, y: 930, level: 8, patrolRadius: 70, respawnSeconds: 26 },
+      { id: 'lb_boss', type: 'minotaure', x: 1340, y: 560, level: 9, patrolRadius: 85, respawnSeconds: 75 }
     ]
   }
 };

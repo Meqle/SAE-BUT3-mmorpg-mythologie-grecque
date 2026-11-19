@@ -153,6 +153,17 @@ export const ITEMS: Record<string, ItemDef> = {
     stackable: false,
     price: 0
   },
+  coeur_airain: {
+    id: 'coeur_airain',
+    name: "Cœur d'Airain",
+    description: 'Relique forgée des Titans arrachée au Minotaure des Brumes.',
+    category: 'artefact',
+    rarity: 'legendaire',
+    stackable: false,
+    price: 0,
+    bonusHp: 75,
+    bonusAttack: 12
+  },
   vestige_egee: {
     id: 'vestige_egee',
     name: "Vestige d'Égée",

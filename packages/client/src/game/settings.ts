@@ -11,7 +11,8 @@ export type ActionKey =
   | 'potion'
   | 'inventory'
   | 'quests'
-  | 'codex';
+  | 'codex'
+  | 'map';
 
 export interface KeyBinding {
   code: string;
@@ -23,6 +24,7 @@ export interface GameSettings {
   showMinimap: boolean;
   showQuestTracker: boolean;
   showDamageNumbers: boolean;
+  soundEnabled: boolean;
 }
 
 export const ACTION_LABELS: Record<ActionKey, string> = {
@@ -38,7 +40,8 @@ export const ACTION_LABELS: Record<ActionKey, string> = {
   potion: 'Boire une potion',
   inventory: 'Inventaire',
   quests: 'Journal de quêtes',
-  codex: 'Chroniques'
+  codex: 'Chroniques',
+  map: 'Carte du monde'
 };
 
 export const ACTION_ORDER: ActionKey[] = [
@@ -71,11 +74,13 @@ export const DEFAULT_SETTINGS: GameSettings = {
     potion: { code: 'KeyR', label: 'R' },
     inventory: { code: 'KeyI', label: 'I' },
     quests: { code: 'KeyL', label: 'L' },
-    codex: { code: 'KeyC', label: 'C' }
+    codex: { code: 'KeyC', label: 'C' },
+    map: { code: 'KeyM', label: 'M' }
   },
   showMinimap: true,
   showQuestTracker: true,
-  showDamageNumbers: true
+  showDamageNumbers: true,
+  soundEnabled: true
 };
 
 const STORAGE_KEY = 'mythologia_settings_v1';
@@ -102,7 +107,8 @@ export function loadSettings(): GameSettings {
       keys: { ...DEFAULT_SETTINGS.keys, ...(parsed.keys ?? {}) },
       showMinimap: parsed.showMinimap ?? DEFAULT_SETTINGS.showMinimap,
       showQuestTracker: parsed.showQuestTracker ?? DEFAULT_SETTINGS.showQuestTracker,
-      showDamageNumbers: parsed.showDamageNumbers ?? DEFAULT_SETTINGS.showDamageNumbers
+      showDamageNumbers: parsed.showDamageNumbers ?? DEFAULT_SETTINGS.showDamageNumbers,
+      soundEnabled: parsed.soundEnabled ?? DEFAULT_SETTINGS.soundEnabled
     };
   } catch {
     return structuredClone(DEFAULT_SETTINGS);

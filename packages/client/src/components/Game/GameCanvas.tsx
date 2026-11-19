@@ -6,6 +6,7 @@ import { DIVINE_SKILLS, HERO_CLASSES } from '../../game/data/classes';
 import { ITEMS } from '../../game/data/items';
 import { NPCS } from '../../game/data/story';
 import { stepZoneMovement, ZoneDefinition, ZoneId, zonePortalAt, ZONES } from '../../game/data/zones';
+import { sound } from '../../game/audio';
 import { createDust } from '../../game/effects';
 import { createCombatFxLayer, createInteractableSprite, InteractableSprite } from '../../game/entities/combat';
 import { createEnemyEntity, ENEMY_ARCHETYPES, EnemyEntity, redrawEnemyHp, updateEnemyVisual } from '../../game/entities/enemies';
@@ -21,6 +22,7 @@ import {
   addItemToState,
   completeQuest,
   consumeItem,
+  equipItem,
   GameProgressState,
   getComputedStats,
   getNpcBadge,
@@ -38,6 +40,7 @@ import { InventoryModal, ModalTab } from './InventoryModal';
 import { MinimapMarker } from './Minimap';
 import { PauseMenuModal } from './PauseMenuModal';
 import { TouchControls } from './TouchControls';
+import { WorldMapModal } from './WorldMapModal';
 
 interface GameCanvasProps {
   server: ServerInfo;
@@ -59,6 +62,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
 
   const [showPrologue, setShowPrologue] = useState(!initialState.prologueSeen);
   const [pauseOpen, setPauseOpen] = useState(false);
+  const [worldMapOpen, setWorldMapOpen] = useState(false);
   const [status, setStatus] = useState('Connexion…');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [dialogue, setDialogue] = useState<NpcDialogueView | null>(null);
@@ -82,6 +86,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
     potion: (itemId?: string) => void;
     interact: () => void;
     refreshNpcBadges: () => void;
+    travelToAgora: () => void;
   } | null>(null);
 
   const showToast = useCallback((message: string) => {
@@ -108,10 +113,11 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
     settingsRef.current = next;
     saveSettings(next);
     keyboardRef.current?.updateSettings(next);
+    sound.setEnabled(next.soundEnabled);
   }, []);
 
-  const modalOpen = showPrologue || pauseOpen || dialogue !== null || modalTab !== null;
-  pausedRef.current = showPrologue || pauseOpen;
+  const modalOpen = showPrologue || pauseOpen || worldMapOpen || dialogue !== null || modalTab !== null;
+  pausedRef.current = showPrologue || pauseOpen || worldMapOpen;
 
   useEffect(() => {
     keyboardRef.current?.setBlocked(modalOpen);
@@ -127,6 +133,8 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           setShowPrologue(false);
         } else if (dialogue) {
           setDialogue(null);
+        } else if (worldMapOpen) {
+          setWorldMapOpen(false);
         } else if (modalTab) {
           setModalTab(null);
         } else {
@@ -139,10 +147,11 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
       if (e.code === keys.inventory.code) setModalTab((prev) => (prev === 'inventory' ? null : 'inventory'));
       if (e.code === keys.quests.code) setModalTab((prev) => (prev === 'quests' ? null : 'quests'));
       if (e.code === keys.codex.code) setModalTab((prev) => (prev === 'codex' ? null : 'codex'));
+      if (e.code === keys.map.code) setWorldMapOpen((prev) => !prev);
     };
     window.addEventListener('keydown', onGlobalKey);
     return () => window.removeEventListener('keydown', onGlobalKey);
-  }, [showPrologue, pauseOpen, dialogue, modalTab]);
+  }, [showPrologue, pauseOpen, worldMapOpen, dialogue, modalTab]);
 
   useEffect(() => {
     let app: Application | null = null;
@@ -160,6 +169,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
       getViewMode: () => currentZone().viewMode,
       onStatus: (s) => { if (!cleanedUp) setStatus(s); }
     });
+    sound.setEnabled(settingsRef.current.soundEnabled);
     const keyboard = createKeyboard(settingsRef.current);
     keyboardRef.current = keyboard;
     keyboard.setBlocked(!stateRef.current.prologueSeen);
@@ -219,6 +229,10 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
       let iFrames = 0;
       let portalLockTimer = 0;
       let previousJump = false;
+      let comboCount = 0;
+      let hasteTimer = 0;
+      let cameraShake = 0;
+      let regenTimer = 0;
 
       const refreshNpcBadges = () => {
         for (const npc of npcs) {
@@ -233,6 +247,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         setBossInfo(null);
 
         if (scene) {
+          sound.playPortal();
           app?.stage.removeChildren();
           scene.back.destroy({ children: true });
           scene.front.destroy({ children: true });
@@ -296,6 +311,9 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         }
         enemy.hp = Math.max(0, enemy.hp - dmg);
         enemy.hitFlash = 0.15;
+        sound.playHit(isCrit);
+        cameraShake = Math.max(cameraShake, isCrit ? 4.5 : 2.2);
+        if (isCrit && stateRef.current.heroClass === 'ASSASSIN') hasteTimer = 1.5;
         if (stunSec > 0 && !enemy.shielded) enemy.stunTimer = Math.max(enemy.stunTimer, stunSec);
         redrawEnemyHp(enemy);
 
@@ -320,7 +338,12 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           }
 
           const readyQuests = recordQuestEvent(stateRef.current, 'kill', enemy.type);
+          if (!arch.isBoss && Math.random() < 0.18) {
+            addItemToState(stateRef.current, 'potion_ambroisie', 1);
+            if (settingsRef.current.showDamageNumbers) fx.spawnText(enemy.x, enemy.y - 30, '+1 Potion', 0x4ade80, 11);
+          }
           if (leveledUp) {
+            sound.playLevelUp();
             fx.spawnSlash(player.x, player.y, 0, 75, COLORS.gold, 'ring');
             showToast(`Niveau ${newLevel} atteint !`);
           } else if (readyQuests.length > 0) {
@@ -346,6 +369,8 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
 
         stateRef.current.hp = Math.max(0, stateRef.current.hp - amount);
         iFrames = 0.55;
+        sound.playPlayerHurt();
+        cameraShake = Math.max(cameraShake, 6);
         hero.setHitFlash(true);
         if (settingsRef.current.showDamageNumbers) {
           fx.spawnText(player.x, player.y - 24, `-${amount}`, 0xf87171, 13);
@@ -368,7 +393,10 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         const zone = currentZone();
         const stats = getComputedStats(stateRef.current);
         attackCooldown = cls.attackCooldown;
+        comboCount = (comboCount + 1) % 3;
+        const isFinisher = comboCount === 0;
         hero.pulseAttack();
+        sound.playAttack(stateRef.current.heroClass === 'ARCHER' ? 'bow' : stateRef.current.heroClass === 'MAGE' ? 'magic' : stateRef.current.heroClass === 'ASSASSIN' ? 'dagger' : 'melee');
 
         const angle =
           overrideAngle !== undefined
@@ -384,24 +412,29 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
 
         if (cls.isRanged) {
           const speed = cls.projectileSpeed;
-          fx.spawnProjectile({
-            x: player.x + Math.cos(angle) * 16,
-            y: player.y + Math.sin(angle) * 16,
-            vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed,
-            damage: stats.attack,
-            radius: stateRef.current.heroClass === 'MAGE' ? 7 : 5,
-            fromPlayer: true,
-            life: cls.attackRange / speed,
-            color: stateRef.current.heroClass === 'MAGE' ? hexColor(godLore.color) : COLORS.gold,
-            style: stateRef.current.heroClass === 'ARCHER' ? 'arrow' : 'orb'
-          });
+          const offsets = stateRef.current.heroClass === 'ARCHER' && isFinisher ? [-0.09, 0.09] : [0];
+          for (const off of offsets) {
+            const a = angle + off;
+            fx.spawnProjectile({
+              x: player.x + Math.cos(a) * 16,
+              y: player.y + Math.sin(a) * 16,
+              vx: Math.cos(a) * speed,
+              vy: Math.sin(a) * speed,
+              damage: Math.round(stats.attack * (isFinisher && stateRef.current.heroClass === 'MAGE' ? 1.25 : 1)),
+              radius: stateRef.current.heroClass === 'MAGE' ? (isFinisher ? 9 : 7) : 5,
+              fromPlayer: true,
+              life: cls.attackRange / speed,
+              color: stateRef.current.heroClass === 'MAGE' ? hexColor(godLore.color) : COLORS.gold,
+              style: stateRef.current.heroClass === 'ARCHER' ? 'arrow' : 'orb'
+            });
+          }
           return;
         }
 
-        const isCrit = stateRef.current.heroClass === 'ASSASSIN' && Math.random() < 0.32;
-        const dmg = Math.round(stats.attack * (isCrit ? 1.55 : 1));
-        fx.spawnSlash(player.x, player.y, angle, cls.attackRange, hexColor(cls.accentColor), 'arc');
+        const isCrit = (stateRef.current.heroClass === 'ASSASSIN' && Math.random() < 0.32) || (stateRef.current.heroClass === 'GUERRIER' && isFinisher);
+        const range = cls.attackRange + (stateRef.current.heroClass === 'GUERRIER' && isFinisher ? 14 : 0);
+        const dmg = Math.round(stats.attack * (isCrit ? (stateRef.current.heroClass === 'ASSASSIN' ? 1.55 : 1.32) : 1));
+        fx.spawnSlash(player.x, player.y, angle, range, isFinisher ? COLORS.gold : hexColor(cls.accentColor), 'arc');
 
         for (const enemy of enemies) {
           if (!enemy.alive) continue;
@@ -409,7 +442,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           const dx = enemy.x - player.x;
           const dy = enemy.y - player.y;
           const dist = Math.hypot(dx, dy);
-          if (dist > cls.attackRange + arch.radius) continue;
+          if (dist > range + arch.radius) continue;
           const dirAngle = Math.atan2(dy, dx);
           const diff = Math.abs(Math.atan2(Math.sin(dirAngle - angle), Math.cos(dirAngle - angle)));
           if (dist < arch.radius + 26 || diff < 1.25) {
@@ -423,6 +456,8 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         const stats = getComputedStats(stateRef.current);
         specialCooldown = skill.cooldown;
         hero.pulseAttack();
+        sound.playSpecial();
+        cameraShake = Math.max(cameraShake, 5.5);
         const dmg = Math.round(stats.attack * skill.damageMultiplier);
         const color = hexColor(godLore.color);
         fx.spawnSlash(player.x, player.y, 0, skill.radius, color, stateRef.current.god === 'ZEUS' ? 'bolt' : 'ring');
@@ -450,6 +485,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         if (dashCooldown > 0) return;
         dashCooldown = 2.2;
         dashTimer = 0.22;
+        sound.playDash();
         iFrames = Math.max(iFrames, 0.35);
         dust.burst(player.x, player.y + 10);
       };
@@ -469,6 +505,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         }
         const heal = Math.round(stats.maxHp * item.healAmount);
         stateRef.current.hp = Math.min(stats.maxHp, stateRef.current.hp + heal);
+        sound.playHeal();
         if (settingsRef.current.showDamageNumbers) fx.spawnText(player.x, player.y - 26, `+${heal} PV`, 0x4ade80, 14);
         syncUi(true);
       };
@@ -515,6 +552,8 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         if (def.kind === 'trial_stele') {
           if (!stateRef.current.activatedTrialSteles.includes(def.id)) {
             stateRef.current.activatedTrialSteles.push(def.id);
+            sound.playQuest();
+            cameraShake = Math.max(cameraShake, 4.5);
             fx.spawnSlash(def.x, def.y - 16, 0, 68, COLORS.gold, 'ring');
             const count = stateRef.current.activatedTrialSteles.length;
             const ready = recordQuestEvent(stateRef.current, 'interact', def.targetId);
@@ -543,6 +582,18 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
 
         if (!stateRef.current.collectedInteractables.includes(def.id)) {
           stateRef.current.collectedInteractables.push(def.id);
+          if (def.kind === 'chest') {
+            const goldLoot = stateRef.current.zoneId === 'labyrinthe' ? 75 : stateRef.current.zoneId === 'sanctuaire' ? 60 : 40;
+            const bonusItem = stateRef.current.zoneId === 'labyrinthe' ? 'nectar_divin' : 'potion_ambroisie';
+            stateRef.current.gold += goldLoot;
+            addItemToState(stateRef.current, bonusItem, 1);
+            sound.playChest();
+            fx.spawnSlash(def.x, def.y, 0, 56, COLORS.gold, 'ring');
+            showToast(`Coffre ouvert : +${goldLoot} drachmes & ${ITEMS[bonusItem].name}`);
+            syncUi(true);
+            return;
+          }
+          sound.playQuest();
           if (def.kind === 'bronze') addItemToState(stateRef.current, 'fragment_bronze', 1);
           if (def.kind === 'herb') addItemToState(stateRef.current, 'herbe_ambroisie', 1);
           fx.spawnSlash(def.x, def.y, 0, 52, COLORS.gold, 'ring');
@@ -558,7 +609,8 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         dash: performDash,
         potion: performPotion,
         interact: performInteract,
-        refreshNpcBadges
+        refreshNpcBadges,
+        travelToAgora: () => loadZone('agora', ZONES.agora.defaultSpawn.x, ZONES.agora.defaultSpawn.y)
       };
 
       const onPointerDown = (e: PointerEvent) => {
@@ -628,6 +680,8 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         specialCooldown = Math.max(0, specialCooldown - dt);
         dashCooldown = Math.max(0, dashCooldown - dt);
         dashTimer = Math.max(0, dashTimer - dt);
+        hasteTimer = Math.max(0, hasteTimer - dt);
+        cameraShake = Math.max(0, cameraShake - dt * 18);
         portalLockTimer = Math.max(0, portalLockTimer - dt);
         if (iFrames > 0) {
           iFrames = Math.max(0, iFrames - dt);
@@ -658,7 +712,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         const jump = keyboard.isJump();
         const jumpStarted = jump && !previousJump;
         const wasGrounded = player.isGrounded;
-        const speedMult = stats.speedMultiplier * (dashTimer > 0 ? 2.4 : 1);
+        const speedMult = stats.speedMultiplier * (dashTimer > 0 ? 2.4 : 1) * (hasteTimer > 0 ? 1.28 : 1);
 
         stepZoneMovement(player, {
           up: keyboard.isUp(),
@@ -847,6 +901,29 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
                 }
                 enemy.state = 'cooldown';
                 enemy.stateTimer = arch.attackCooldown;
+              } else if (arch.attackStyle === 'minotaur') {
+                const step = enemy.patternStep;
+                enemy.patternStep = (enemy.patternStep + 1) % 3;
+                if (step === 0) {
+                  enemy.state = 'dashing';
+                  enemy.stateTimer = 0.48;
+                  enemy.dashVx = Math.cos(a) * 425;
+                  enemy.dashVy = Math.sin(a) * 425;
+                  enemy.dashHitDone = false;
+                  dust.burst(enemy.x, enemy.y + 10);
+                } else if (step === 1) {
+                  fx.spawnSlash(enemy.x, enemy.y, 0, 120, COLORS.gold, 'ring');
+                  cameraShake = Math.max(cameraShake, 6);
+                  if (dist <= 122) damagePlayer(arch.attack, enemy.x);
+                  enemy.state = 'cooldown';
+                  enemy.stateTimer = arch.attackCooldown;
+                } else {
+                  for (const [ox, oy] of [[0, 0], [72, -35], [-72, 35]]) {
+                    fx.spawnHazard(player.x + ox, player.y + oy, 42, 0.95, 22, 0xf97316);
+                  }
+                  enemy.state = 'cooldown';
+                  enemy.stateTimer = arch.attackCooldown;
+                }
               } else {
                 // poseidon coup de trident rapproche
                 fx.spawnSlash(enemy.x, enemy.y - 10, a, 76, COLORS.seaLight, 'arc');
@@ -930,6 +1007,15 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
               if (Math.hypot(enemy.x - p.x, enemy.y - p.y) <= arch.radius + p.radius) {
                 p.hitIds.add(enemy.spawnId);
                 damageEnemy(enemy, p.damage);
+                if (p.style === 'orb') {
+                  fx.spawnSlash(p.x, p.y, 0, 44, p.color, 'ring');
+                  for (const splash of enemies) {
+                    if (!splash.alive || splash.spawnId === enemy.spawnId) continue;
+                    if (Math.hypot(splash.x - p.x, splash.y - p.y) <= 46 + ENEMY_ARCHETYPES[splash.type].radius) {
+                      damageEnemy(splash, Math.round(p.damage * 0.45));
+                    }
+                  }
+                }
                 hit = true;
                 if (!p.piercing) break;
               }
@@ -980,8 +1066,25 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         lastView = lastView
           ? { ...target, x: lastView.x + (target.x - lastView.x) * 0.12, y: lastView.y + (target.y - lastView.y) * 0.12 }
           : target;
-        scene?.update(lastView, time);
-        placeLayer(actors, lastView);
+        // Regen douce pres de la fontaine de Cassandre ou du brasero dans la cite
+        if (zone.id === 'agora' && stateRef.current.hp < stats.maxHp) {
+          const nearFountain = Math.hypot(player.x - 634, player.y - 984) < 110;
+          const nearBrazier = Math.hypot(player.x - 1080, player.y - 660) < 105;
+          if (nearFountain || nearBrazier) {
+            regenTimer += dt;
+            if (regenTimer >= 1) {
+              regenTimer = 0;
+              stateRef.current.hp = Math.min(stats.maxHp, stateRef.current.hp + 10);
+              if (settingsRef.current.showDamageNumbers) fx.spawnText(player.x, player.y - 24, '+10 PV', 0x4ade80, 11);
+              syncUi(false);
+            }
+          }
+        }
+        const shakenView: View = cameraShake > 0.2
+          ? { ...lastView, x: lastView.x + (Math.random() - 0.5) * cameraShake, y: lastView.y + (Math.random() - 0.5) * cameraShake }
+          : lastView;
+        scene?.update(shakenView, time);
+        placeLayer(actors, shakenView);
 
         // 11. Mise a jour HUD (uniquement si un boss de la zone est reellement proche/engage)
         hudSyncTimer += dt;
@@ -1064,6 +1167,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
 
   const handleAcceptQuest = (questId: string) => {
     if (acceptQuest(stateRef.current, questId)) {
+      sound.playQuest();
       syncUi(true);
       if (dialogue) setDialogue(resolveNpcDialogue(stateRef.current, dialogue.npcId));
       showToast('Quête acceptée');
@@ -1073,6 +1177,8 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
   const handleCompleteQuest = (questId: string) => {
     const res = completeQuest(stateRef.current, questId);
     if (res.completed) {
+      if (res.leveledUp) sound.playLevelUp();
+      else sound.playQuest();
       syncUi(true);
       if (dialogue) setDialogue(resolveNpcDialogue(stateRef.current, dialogue.npcId));
       showToast(res.leveledUp ? `Niveau ${res.newLevel} ! ${res.rewardSummary}` : `Quête terminée • ${res.rewardSummary}`);
@@ -1082,6 +1188,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
   const handleHeal = () => {
     const stats = getComputedStats(stateRef.current);
     stateRef.current.hp = stats.maxHp;
+    sound.playHeal();
     syncUi(true);
     showToast('Points de vie restaurés');
   };
@@ -1092,8 +1199,17 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
     if (!item.stackable && stateRef.current.inventory.some((s) => s.itemId === itemId)) return;
     stateRef.current.gold -= item.price;
     addItemToState(stateRef.current, itemId, 1);
+    sound.playChest();
     syncUi(true);
     showToast(`${item.name} acquis`);
+  };
+
+  const handleEquipItem = (itemId: string) => {
+    if (equipItem(stateRef.current, itemId)) {
+      sound.playQuest();
+      syncUi(true);
+      showToast(`${ITEMS[itemId]?.name ?? 'Objet'} équipé`);
+    }
   };
 
   const activeZone = ZONES[uiState.zoneId];
@@ -1127,6 +1243,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         onTriggerInteract={() => actionsRef.current?.interact()}
         onOpenModal={(tab) => setModalTab(tab)}
         onOpenPause={() => setPauseOpen(true)}
+        onOpenWorldMap={() => setWorldMapOpen(true)}
         onLeave={() => {
           saveGameState(stateRef.current);
           onLeave();
@@ -1170,12 +1287,24 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         />
       )}
 
-      {modalTab && !showPrologue && !pauseOpen && (
+      {modalTab && !showPrologue && !pauseOpen && !worldMapOpen && (
         <InventoryModal
           state={uiState}
           initialTab={modalTab}
           onUseConsumable={(itemId) => actionsRef.current?.potion(itemId)}
+          onEquipItem={handleEquipItem}
           onClose={() => setModalTab(null)}
+        />
+      )}
+
+      {worldMapOpen && !showPrologue && !pauseOpen && (
+        <WorldMapModal
+          currentZone={uiState.zoneId}
+          onFastTravelAgora={() => {
+            setWorldMapOpen(false);
+            actionsRef.current?.travelToAgora();
+          }}
+          onClose={() => setWorldMapOpen(false)}
         />
       )}
     </div>

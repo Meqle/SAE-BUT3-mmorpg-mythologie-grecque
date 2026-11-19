@@ -24,8 +24,11 @@ function makePortalLabel(portal: ZonePortal): Text {
   label.anchor.set(0.5, 0.5);
   const cx = portal.x + portal.w / 2;
   const cy = portal.y + portal.h / 2;
-  const offsetX = cx < 200 ? 68 : -68;
-  label.position.set(cx + offsetX, cy - 52);
+  const isTop = cy < 120;
+  const isBottom = cy > 980;
+  const offsetX = isTop || isBottom ? 0 : cx < 200 ? 68 : -68;
+  const offsetY = isTop ? 48 : isBottom ? -46 : -52;
+  label.position.set(cx + offsetX, cy + offsetY);
   return label;
 }
 
@@ -655,9 +658,104 @@ function createRivageScene(zone: ZoneDefinition): Scene {
   return base;
 }
 
+function createLabyrintheScene(zone: ZoneDefinition): Scene {
+  const back = new Container();
+  const front = new Container();
+  const rand = random(311);
+  const W = zone.width;
+  const H = zone.height;
+
+  const floor = new Graphics();
+  floor.rect(-320, -320, W + 640, H + 640).fill({ color: 0x101826 });
+  floor.rect(0, 0, W, H).fill({ color: 0x243042 });
+
+  // dalles cretoises sombres et humides
+  for (let y = 0; y < H; y += 56) {
+    for (let x = 0; x < W; x += 56) {
+      const tone = mix(0x4b5563, COLORS.marbleShadow, 0.25 + rand() * 0.32);
+      drawSlab(floor, x, y, 56, 56, tone);
+    }
+  }
+
+  // grande salle du Minotaure a l'est (1330, 560)
+  floor.circle(1330, 560, 235).fill({ color: 0x3b4454, alpha: 0.85 });
+  floor.circle(1330, 560, 235).stroke({ width: 3, color: COLORS.bronze, alpha: 0.8 });
+  drawLaurel(floor, 1330, 560, 185, COLORS.bronze);
+  floor.circle(1330, 560, 95).fill({ color: 0x2a3140 }).stroke({ width: 2, color: COLORS.gold, alpha: 0.7 });
+
+  // meandres graves dans le vestibule d'entree
+  drawMeander(floor, 80, 900, 220, 2, COLORS.bronze);
+
+  // fissures de sol
+  for (let i = 0; i < 36; i++) {
+    const x = 40 + rand() * (W - 80);
+    const y = 40 + rand() * (H - 80);
+    floor.moveTo(x, y).lineTo(x + (rand() - 0.5) * 40, y + (rand() - 0.5) * 40)
+      .stroke({ width: 1.2, color: 0x111827, alpha: 0.45 });
+  }
+
+  floor.rect(0, 0, W, H).stroke({ width: 8, color: COLORS.ink });
+
+  const shadows = new Graphics();
+  shadows.filters = [new AlphaFilter({ alpha: 0.34 })];
+  const solids = new Graphics();
+
+  for (const s of zone.solids) {
+    if (s.look === 'column') drawColumn(solids, shadows, { x: s.x, y: s.y, w: s.w, h: s.h, look: 'column' });
+    else if (s.look === 'wall') drawLowWall(solids, shadows, { x: s.x, y: s.y, w: s.w, h: s.h }, 1);
+    else if (s.look === 'ruin') drawRuinWall(solids, shadows, s);
+  }
+
+  // braseros muraux dans la salle du Minotaure et les couloirs
+  const torchCoords: [number, number][] = [
+    [130, 920], [290, 920], [500, 620], [820, 440],
+    [1140, 380], [1520, 380], [1140, 740], [1520, 740]
+  ];
+  const torches = new Graphics();
+  for (const [tx, ty] of torchCoords) {
+    solids.circle(tx, ty, 9).fill(BRONZE_SHADE).stroke({ width: 1.4, color: COLORS.ink });
+  }
+
+  const portals = zone.portals.map(createPortalMarker);
+  back.addChild(floor, ...portals.map((p) => p.floor), shadows, solids, torches);
+
+  // nappes de brume derivantes dans le labyrinthe
+  const mists: Graphics[] = [];
+  for (let i = 0; i < 14; i++) {
+    const m = new Graphics().ellipse(0, 0, 90 + rand() * 80, 40 + rand() * 35).fill({ color: 0xcbd5e1, alpha: 0.08 });
+    front.addChild(m);
+    mists.push(m);
+  }
+  front.addChild(...portals.map((p) => p.glow), ...zone.portals.map(makePortalLabel));
+
+  return {
+    back,
+    front,
+    update: (view: View, time: number) => {
+      placeLayer(back, view);
+      placeLayer(front, view);
+      portals.forEach((p) => p.update(time));
+
+      torches.clear();
+      for (let i = 0; i < torchCoords.length; i++) {
+        const [tx, ty] = torchCoords[i];
+        const r = 6 + Math.sin(time * 9 + i * 2) * 1.6;
+        torches.circle(tx, ty, r * 3).fill({ color: 0xf97316, alpha: 0.16 });
+        torches.circle(tx, ty, r).fill({ color: 0xf97316 });
+        torches.circle(tx, ty, r * 0.45).fill({ color: 0xfef08a });
+      }
+
+      mists.forEach((m, i) => {
+        m.position.set(((i * 211 + time * (10 + (i % 3) * 5)) % (W + 180)) - 90, (i * 149) % H);
+      });
+    }
+  };
+}
+
 export function createZoneScene(zone: ZoneDefinition): Scene {
   if (zone.id === 'agora') return createAgoraScene(zone);
   if (zone.id === 'plaines') return createPlainesScene(zone);
   if (zone.id === 'sanctuaire') return createSanctuaireScene(zone);
+  if (zone.id === 'labyrinthe') return createLabyrintheScene(zone);
   return createRivageScene(zone);
 }

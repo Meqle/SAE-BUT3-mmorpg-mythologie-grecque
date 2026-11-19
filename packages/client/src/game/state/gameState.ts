@@ -390,3 +390,22 @@ export function resolveNpcDialogue(state: GameProgressState, npcId: string): Npc
     activeQuest
   };
 }
+
+export function equipItem(state: GameProgressState, itemId: string): boolean {
+  const slot = state.inventory.find((s) => s.itemId === itemId);
+  const def = ITEMS[itemId];
+  if (!slot || !def) return false;
+  if (def.category !== 'arme' && def.category !== 'armure' && def.category !== 'artefact') return false;
+  if (def.category === 'arme' || def.category === 'armure') {
+    for (const other of state.inventory) {
+      const otherDef = ITEMS[other.itemId];
+      if (otherDef && otherDef.category === def.category) other.equipped = false;
+    }
+    slot.equipped = true;
+  } else {
+    slot.equipped = !slot.equipped;
+  }
+  const stats = getComputedStats(state);
+  if (state.hp > stats.maxHp) state.hp = stats.maxHp;
+  return true;
+}

@@ -84,7 +84,7 @@ export function createCombatFxLayer() {
     projectiles.push({ ...p, hitIds: new Set() });
   };
 
-  const spawnHazard = (x: number, y: number, radius: number, delay: number, damage: number, color = COLORS.seaLight) => {
+  const spawnHazard = (x: number, y: number, radius: number, delay: number, damage: number, color: number = COLORS.seaLight) => {
     hazards.push({ x, y, radius, delay, maxDelay: delay, damage, color, triggered: false });
   };
 
@@ -233,6 +233,11 @@ export function createInteractableSprite(def: ZoneInteractable): InteractableSpr
       base.ellipse(Math.sin(a) * 6, -Math.cos(a) * 4, 3.5, 7).fill({ color: COLORS.olive }).stroke({ ...LINE, width: 0.8 });
     }
     base.circle(0, -6, 3.5).fill({ color: COLORS.gold });
+  } else if (def.kind === 'chest') {
+    base.roundRect(-13, -9, 26, 18, 3).fill(shaded(0xa66a3c, WOOD)).stroke({ ...LINE, width: 1.6 });
+    base.rect(-13, -2, 26, 3.5).fill(BRONZE_SHADE);
+    base.rect(-3, -4, 6, 7).fill(COLORS.gold).stroke({ ...LINE, width: 0.7 });
+    label.y = -18;
   } else if (def.kind === 'stele' || def.kind === 'trial_stele') {
     const h = def.kind === 'trial_stele' ? 38 : 34;
     base.roundRect(-10, -h, 20, h, 3).fill(shaded(COLORS.marbleLit, COLORS.marbleShade)).stroke({ ...LINE, width: 1.6 });
@@ -247,6 +252,13 @@ export function createInteractableSprite(def: ZoneInteractable): InteractableSpr
     def,
     container,
     update: (time, done, nearPlayer) => {
+      if (def.kind === 'chest' && done) {
+        container.alpha = 0.45;
+        glow.clear();
+        ring.clear();
+        label.visible = false;
+        return;
+      }
       if ((def.kind === 'bronze' || def.kind === 'herb') && done) {
         container.visible = false;
         return;

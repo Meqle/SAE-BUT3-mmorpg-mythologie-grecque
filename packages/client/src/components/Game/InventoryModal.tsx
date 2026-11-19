@@ -13,6 +13,7 @@ interface InventoryModalProps {
   state: GameProgressState;
   initialTab: ModalTab;
   onUseConsumable: (itemId: string) => void;
+  onEquipItem: (itemId: string) => void;
   onClose: () => void;
 }
 
@@ -20,7 +21,7 @@ const MARBLE = css(COLORS.marble);
 const GOLD = css(COLORS.gold);
 const SKY = css(COLORS.sky);
 
-export function InventoryModal({ state, initialTab, onUseConsumable, onClose }: InventoryModalProps) {
+export function InventoryModal({ state, initialTab, onUseConsumable, onEquipItem, onClose }: InventoryModalProps) {
   const [tab, setTab] = useState<ModalTab>(initialTab);
   const stats = getComputedStats(state);
   const cls = HERO_CLASSES[state.heroClass];
@@ -167,6 +168,24 @@ export function InventoryModal({ state, initialTab, onUseConsumable, onClose }: 
                         </div>
                         <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 2 }}>{item.description}</div>
                       </div>
+                      {(item.category === 'arme' || item.category === 'armure' || (item.category === 'artefact' && (item.bonusAttack || item.bonusHp))) && !slot.equipped && (
+                        <button
+                          onClick={() => onEquipItem(slot.itemId)}
+                          style={{
+                            background: 'rgba(233, 195, 90, 0.18)',
+                            border: `1px solid ${GOLD}`,
+                            color: GOLD,
+                            borderRadius: 4,
+                            padding: '5px 10px',
+                            fontSize: 11.5,
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            flexShrink: 0
+                          }}
+                        >
+                          Équiper
+                        </button>
+                      )}
                       {item.category === 'consommable' && (
                         <button
                           onClick={() => onUseConsumable(slot.itemId)}

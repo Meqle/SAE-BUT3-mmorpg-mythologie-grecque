@@ -187,6 +187,37 @@ export const QUESTS: Record<string, QuestDef> = {
     }
   },
 
+  mq_5_labyrinthe: {
+    id: 'mq_5_labyrinthe',
+    title: 'Le Labyrinthe des Brumes',
+    kind: 'main',
+    level: 7,
+    giverNpcId: 'lycos',
+    turnInNpcId: 'lycos',
+    prerequisiteQuestId: 'mq_4_rivage_epreuve',
+    summary: "Franchissez la porte Nord du Sanctuaire Brisé, trouvez le Fil d'Ariane et vainquez le Minotaure des Brumes.",
+    offerDialogue:
+      "Le Vestige d'Égée a réveillé une porte ancienne au nord du Sanctuaire Brisé : l'entrée du Labyrinthe des Brumes. Le Minotaure y garde le Cœur d'Airain, une relique capable de briser les portes du Caucase. Trouve le Fil d'Ariane dans les couloirs et abats la bête.",
+    progressDialogue:
+      "La porte Nord du Sanctuaire Brisé mène au Labyrinthe des Brumes. Trouve l'autel du Fil d'Ariane puis affronte le Minotaure dans la salle orientale.",
+    completeDialogue:
+      "Le Cœur d'Airain est à nous ! Grâce à ces deux reliques, la voie vers les Marécages de l'Hydre et le Mont Caucase pourra bientôt s'ouvrir. L'Olympe commence à trembler.",
+    objectives: [
+      { id: 'enter_laby', label: 'Entrer dans le Labyrinthe des Brumes', type: 'enter_zone', targetId: 'labyrinthe', required: 1 },
+      { id: 'find_ariane', label: "Allumer l'autel du Fil d'Ariane", type: 'interact', targetId: 'fil_ariane', required: 1 },
+      { id: 'kill_minotaure', label: 'Minotaure des Brumes vaincu', type: 'kill', targetId: 'minotaure', required: 1 }
+    ],
+    reward: {
+      xp: 620,
+      gold: 380,
+      items: [
+        { itemId: 'coeur_airain', quantity: 1 },
+        { itemId: 'nectar_divin', quantity: 2 }
+      ],
+      unlocksCodex: 'codex_labyrinthe'
+    }
+  },
+
   sq_bronze_ruines: {
     id: 'sq_bronze_ruines',
     title: 'Le Bronze des Ruines',
@@ -293,6 +324,7 @@ export const QUEST_ORDER = [
   'mq_2_terres_foudroyees',
   'mq_3_sanctuaire',
   'mq_4_rivage_epreuve',
+  'mq_5_labyrinthe',
   'sq_bronze_ruines',
   'sq_ambroisie_perdue',
   'sq_ailes_tempete',
@@ -434,5 +466,11 @@ export const CODEX_ENTRIES: CodexEntry[] = [
     title: "L'Épreuve du Rivage d'Égée",
     chapter: 'Chronique IV',
     text: "Les avatars divins s'abritent derrière une égide presque impénétrable. Seules les Stèles de Prométhée dressées dans leurs arènes permettent d'affaiblir leur bouclier."
+  },
+  {
+    id: 'codex_labyrinthe',
+    title: 'Le Labyrinthe des Brumes',
+    chapter: 'Donjon I — Mid Game',
+    text: "Bâti sous les ruines antiques par Dédale et scellé par les dieux, le Labyrinthe des Brumes abritait le Cœur d'Airain sous la garde du Minotaure. Sa chute marque le début de la Voie des Reliques."
   }
 ];

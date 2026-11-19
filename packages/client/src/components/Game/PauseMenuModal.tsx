@@ -130,7 +130,8 @@ export function PauseMenuModal({
                 {[
                   { key: 'showMinimap' as const, label: 'Mini-carte' },
                   { key: 'showQuestTracker' as const, label: 'Objectifs' },
-                  { key: 'showDamageNumbers' as const, label: 'Dégâts flottants' }
+                  { key: 'showDamageNumbers' as const, label: 'Dégâts flottants' },
+                  { key: 'soundEnabled' as const, label: 'Effets sonores' }
                 ].map((opt) => (
                   <label key={opt.key} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, cursor: 'pointer' }}>
                     <input

@@ -4,7 +4,7 @@ import type { EnemyType, ZoneEnemySpawn } from '../data/zones';
 import { BRONZE, BRONZE_LIT, BRONZE_SHADE, LINE, WOOD, dome, shaded } from '../hero/look';
 import { COLORS } from '../scenes/palette';
 
-export type EnemyAttackStyle = 'lunge' | 'ranged_fan' | 'charge' | 'fire_slam' | 'boss_burst' | 'poseidon';
+export type EnemyAttackStyle = 'lunge' | 'ranged_fan' | 'charge' | 'fire_slam' | 'boss_burst' | 'poseidon' | 'minotaur';
 
 export interface EnemyArchetype {
   type: EnemyType;
@@ -117,6 +117,37 @@ export const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     goldReward: 200,
     radius: 28,
     isBoss: true
+  },
+  squelette: {
+    type: 'squelette',
+    name: 'Squelette hoplite',
+    maxHp: 135,
+    attack: 18,
+    speed: 112,
+    aggroRange: 230,
+    attackRange: 96,
+    attackCooldown: 1.35,
+    windupDuration: 0.42,
+    attackStyle: 'lunge',
+    xpReward: 88,
+    goldReward: 38,
+    radius: 16
+  },
+  minotaure: {
+    type: 'minotaure',
+    name: 'Minotaure des Brumes',
+    maxHp: 580,
+    attack: 30,
+    speed: 102,
+    aggroRange: 340,
+    attackRange: 240,
+    attackCooldown: 1.75,
+    windupDuration: 0.68,
+    attackStyle: 'minotaur',
+    xpReward: 480,
+    goldReward: 260,
+    radius: 30,
+    isBoss: true
   }
 };
 
@@ -201,6 +232,28 @@ function drawEnemyVisual(type: EnemyType, mode: ViewMode): Container {
     g.moveTo(11, -46).lineTo(11, -57).moveTo(25, -46).lineTo(25, -57).moveTo(11, -46).lineTo(25, -46)
       .stroke({ width: 2.2, color: COLORS.gold, cap: 'round' });
     g.circle(18, -55, 5).fill({ color: COLORS.seaLight, alpha: 0.6 });
+  } else if (type === 'squelette') {
+    g.ellipse(0, 0, 8.5, 6.5).fill(COLORS.marbleShade).stroke(LINE);
+    g.circle(0, -1, 5.4).fill(COLORS.marbleLit).stroke(LINE);
+    g.circle(-2, -1.5, 1.1).fill(COLORS.ink);
+    g.circle(2, -1.5, 1.1).fill(COLORS.ink);
+    // bouclier fissure et lance
+    g.circle(-9, 1, 6).fill(shaded(BRONZE, BRONZE_SHADE)).stroke(LINE);
+    g.moveTo(8, -10).lineTo(8, 12).stroke({ width: 2.2, color: WOOD, cap: 'round' });
+    g.poly([8, -14, 10.5, -9, 5.5, -9]).fill(BRONZE_LIT).stroke({ ...LINE, width: 0.7 });
+  } else if (type === 'minotaure') {
+    // epaules massives de taureau
+    g.ellipse(0, 2, 22, 16).fill(shaded(0x6b3f23, 0x3b1f10)).stroke({ ...LINE, width: 1.8 });
+    g.roundRect(-16, -6, 32, 12, 4).fill(shaded(BRONZE_LIT, BRONZE_SHADE)).stroke(LINE);
+    // tete bovine + grandes cornes d'ivoire
+    g.circle(0, -4, 10.5).fill(dome(0x7c4a2a, 0x522e18, 0x2b160a)).stroke({ ...LINE, width: 1.5 });
+    g.moveTo(-7, -9).quadraticCurveTo(-22, -20, -24, -4).stroke({ width: 4, color: COLORS.marbleLit, cap: 'round' });
+    g.moveTo(7, -9).quadraticCurveTo(22, -20, 24, -4).stroke({ width: 4, color: COLORS.marbleLit, cap: 'round' });
+    g.circle(0, -1, 3.2).stroke({ width: 1.6, color: COLORS.gold });
+    // double hache (Labrys) en bronze
+    g.moveTo(16, -18).lineTo(16, 18).stroke({ width: 3.2, color: WOOD, cap: 'round' });
+    g.poly([16, -12, 27, -18, 25, -4, 16, -8]).fill(shaded(BRONZE_LIT, BRONZE_SHADE)).stroke(LINE);
+    g.poly([16, -12, 5, -18, 7, -4, 16, -8]).fill(shaded(BRONZE_LIT, BRONZE_SHADE)).stroke(LINE);
   }
 
   c.addChild(g);
@@ -338,9 +391,9 @@ export function updateEnemyVisual(enemy: EnemyEntity, time: number, mode: ViewMo
     const px = -sy;
     const py = cx;
 
-    if (arch.attackStyle === 'lunge' || arch.attackStyle === 'charge') {
-      const len = arch.attackStyle === 'charge' ? 210 : 105;
-      const halfW = arch.attackStyle === 'charge' ? 20 : 13;
+    if (arch.attackStyle === 'lunge' || arch.attackStyle === 'charge' || (arch.attackStyle === 'minotaur' && enemy.patternStep === 0)) {
+      const len = arch.attackStyle === 'charge' || arch.attackStyle === 'minotaur' ? 220 : 105;
+      const halfW = arch.attackStyle === 'charge' || arch.attackStyle === 'minotaur' ? 24 : 13;
       enemy.telegraph.poly([
         px * halfW, py * halfW,
         cx * len + px * halfW, sy * len + py * halfW,
@@ -352,7 +405,7 @@ export function updateEnemyVisual(enemy: EnemyEntity, time: number, mode: ViewMo
         .fill({ color: 0x38bdf8, alpha: 0.14 + pulse * 0.1 })
         .stroke({ width: 1.5, color: 0x7dd3fc, alpha: 0.85 });
     } else {
-      const r = arch.attackStyle === 'boss_burst' ? 105 : 74;
+      const r = arch.attackStyle === 'boss_burst' || arch.attackStyle === 'minotaur' ? 115 : 74;
       enemy.telegraph.circle(0, 0, r)
         .fill({ color: 0xf97316, alpha: 0.15 + pulse * 0.12 })
         .stroke({ width: 2, color: 0xfb923c, alpha: 0.9 });
