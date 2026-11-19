@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Keyboard as KeyboardIcon, LogOut, Play, RotateCcw, Save, Settings } from 'lucide-react';
+import { Keyboard as KeyboardIcon, LogOut, Play, RotateCcw, Save, Settings, Skull } from 'lucide-react';
 import {
   ACTION_LABELS,
   ACTION_ORDER,
@@ -9,9 +9,11 @@ import {
   GameSettings
 } from '../../game/settings';
 import { COLORS, css } from '../../game/scenes/palette';
+import { BestiaryPanel } from './BestiaryPanel';
 
 interface PauseMenuModalProps {
   settings: GameSettings;
+  bestiaryKills?: Record<string, number>;
   onChangeSettings: (next: GameSettings) => void;
   onSaveNow: () => void;
   onResume: () => void;
@@ -24,12 +26,13 @@ const SKY = css(COLORS.sky);
 
 export function PauseMenuModal({
   settings,
+  bestiaryKills,
   onChangeSettings,
   onSaveNow,
   onResume,
   onQuitToLobby
 }: PauseMenuModalProps) {
-  const [view, setView] = useState<'main' | 'settings'>('main');
+  const [view, setView] = useState<'main' | 'bestiary' | 'settings'>('main');
   const [listening, setListening] = useState<ActionKey | null>(null);
 
   useEffect(() => {
@@ -44,10 +47,7 @@ export function PauseMenuModal({
       const binding = formatKeyEvent(e);
       onChangeSettings({
         ...settings,
-        keys: {
-          ...settings.keys,
-          [listening]: binding
-        }
+        keys: { ...settings.keys, [listening]: binding }
       });
       setListening(null);
     };
@@ -57,14 +57,14 @@ export function PauseMenuModal({
 
   const menuBtnStyle: React.CSSProperties = {
     width: '100%',
-    background: 'rgba(15, 28, 46, 0.85)',
-    border: `1.5px solid ${SKY}`,
-    color: MARBLE,
-    borderRadius: 4,
     padding: '11px 16px',
+    background: 'rgba(12, 22, 38, 0.82)',
+    border: `1px solid ${SKY}`,
+    borderRadius: 4,
+    color: MARBLE,
+    fontFamily: 'Cinzel, serif',
     fontSize: 13.5,
     fontWeight: 700,
-    fontFamily: 'Cinzel, serif',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
@@ -72,34 +72,45 @@ export function PauseMenuModal({
     gap: 8
   };
 
+  const modalWidth = view === 'main' ? 'min(390px, 94vw)' : view === 'bestiary' ? 'min(760px, 95vw)' : 'min(640px, 95vw)';
+
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      zIndex: 110,
-      background: 'rgba(10, 16, 28, 0.68)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 16,
-      fontFamily: 'Outfit, sans-serif'
-    }}>
-      <div style={{
-        width: view === 'main' ? 'min(380px, 92vw)' : 'min(620px, 94vw)',
-        maxHeight: '86vh',
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 110,
+        background: 'rgba(10, 16, 28, 0.72)',
         display: 'flex',
-        flexDirection: 'column',
-        background: 'rgba(24, 42, 66, 0.97)',
-        border: `2px solid ${MARBLE}`,
-        boxShadow: `inset 0 0 0 3px rgba(24, 42, 66, 0.97), inset 0 0 0 4px ${GOLD}, 0 20px 55px rgba(0,0,0,0.65)`,
-        borderRadius: 6,
-        padding: '22px 26px',
-        color: MARBLE
-      }}>
-        <div style={{ textAlign: 'center', marginBottom: 18 }}>
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+        fontFamily: 'Outfit, sans-serif'
+      }}
+    >
+      <div
+        style={{
+          width: modalWidth,
+          maxHeight: '88vh',
+          display: 'flex',
+          flexDirection: 'column',
+          background: 'rgba(24, 42, 66, 0.97)',
+          border: `2px solid ${MARBLE}`,
+          boxShadow: `inset 0 0 0 3px rgba(24, 42, 66, 0.97), inset 0 0 0 4px ${GOLD}, 0 20px 50px rgba(0,0,0,0.65)`,
+          borderRadius: 6,
+          padding: '22px 24px',
+          color: MARBLE
+        }}
+      >
+        <div style={{ textAlign: 'center', marginBottom: 16 }}>
           <div style={{ fontFamily: 'Cinzel, serif', fontSize: 20, fontWeight: 700, color: GOLD, letterSpacing: 1.5 }}>
-            {view === 'main' ? 'PAUSE' : 'PARAMÈTRES & COMMANDES'}
+            {view === 'main' ? 'PAUSE' : view === 'bestiary' ? 'BESTIAIRE' : 'PARAMÈTRES'}
           </div>
+          {view === 'bestiary' && (
+            <div style={{ fontSize: 11.5, color: SKY, marginTop: 3 }}>
+              Créatures rencontrées et taux de drop par rareté
+            </div>
+          )}
         </div>
 
         {view === 'main' ? (
@@ -109,6 +120,9 @@ export function PauseMenuModal({
               style={{ ...menuBtnStyle, background: GOLD, color: '#1f3550', borderColor: GOLD }}
             >
               <Play size={16} /> Reprendre
+            </button>
+            <button onClick={() => setView('bestiary')} style={menuBtnStyle}>
+              <Skull size={16} /> Bestiaire
             </button>
             <button onClick={() => setView('settings')} style={menuBtnStyle}>
               <Settings size={16} /> Paramètres & Touches
@@ -123,6 +137,20 @@ export function PauseMenuModal({
               <LogOut size={16} /> Quitter vers le menu
             </button>
           </div>
+        ) : view === 'bestiary' ? (
+          <>
+            <div style={{ overflowY: 'auto', flex: 1, paddingRight: 4 }}>
+              <BestiaryPanel bestiaryKills={bestiaryKills} />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 14 }}>
+              <button
+                onClick={() => setView('main')}
+                style={{ ...menuBtnStyle, width: 'auto', padding: '8px 18px', background: GOLD, color: '#1f3550', borderColor: GOLD }}
+              >
+                Retour
+              </button>
+            </div>
+          </>
         ) : (
           <>
             <div style={{ overflowY: 'auto', flex: 1, paddingRight: 4 }}>

@@ -246,7 +246,7 @@ export function Minimap({ zone, markers, onOpenWorldMap }: MinimapProps) {
         <span style={{ fontFamily: 'Cinzel, serif', fontSize: 10, fontWeight: 700, color: GOLD, letterSpacing: 0.6 }}>
           {zone.name}
         </span>
-        <span style={{ fontSize: 9, fontWeight: 700, color: MARBLE, opacity: 0.75 }}>N</span>
+        <span style={{ fontSize: 9, fontWeight: 700, color: MARBLE, opacity: 0.8 }}>[M] • N</span>
       </div>
       <canvas
         ref={canvasRef}

@@ -41,7 +41,7 @@ export const ACTION_LABELS: Record<ActionKey, string> = {
   inventory: 'Inventaire',
   quests: 'Journal de quêtes',
   codex: 'Chroniques',
-  map: 'Carte du monde'
+  map: 'Carte (zone & monde)'
 };
 
 export const ACTION_ORDER: ActionKey[] = [
@@ -57,7 +57,8 @@ export const ACTION_ORDER: ActionKey[] = [
   'potion',
   'inventory',
   'quests',
-  'codex'
+  'codex',
+  'map'
 ];
 
 export const DEFAULT_SETTINGS: GameSettings = {

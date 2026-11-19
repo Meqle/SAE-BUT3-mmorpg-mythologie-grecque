@@ -151,7 +151,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
       if (e.code === keys.inventory.code) setModalTab((prev) => (prev === 'inventory' ? null : 'inventory'));
       if (e.code === keys.quests.code) setModalTab((prev) => (prev === 'quests' ? null : 'quests'));
       if (e.code === keys.codex.code) setModalTab((prev) => (prev === 'codex' ? null : 'codex'));
-      if (e.code === keys.map.code) setWorldMapOpen((prev) => !prev);
+      if (e.code === keys.map.code || (keys.map.code === 'KeyM' && e.key.toLowerCase() === 'm')) { setModalTab(null); setWorldMapOpen((prev) => !prev); }
     };
     window.addEventListener('keydown', onGlobalKey);
     return () => window.removeEventListener('keydown', onGlobalKey);
@@ -1353,6 +1353,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
       {pauseOpen && !showPrologue && (
         <PauseMenuModal
           settings={settings}
+          bestiaryKills={uiState.bestiaryKills}
           onChangeSettings={handleSettingsChange}
           onSaveNow={() => {
             saveGameState(stateRef.current);
@@ -1396,6 +1397,8 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         <WorldMapModal
           currentZone={uiState.zoneId}
           discoveredZones={uiState.discoveredZones ?? ['agora']}
+          markers={minimapMarkers}
+          mapKeyLabel={settings.keys.map.label}
           onFastTravel={(targetZone) => {
             setWorldMapOpen(false);
             actionsRef.current?.travelToZone(targetZone);
