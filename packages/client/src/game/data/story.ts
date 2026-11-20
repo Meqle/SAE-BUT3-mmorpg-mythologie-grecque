@@ -272,6 +272,33 @@ export const QUESTS: Record<string, QuestDef> = {
       items: [{ itemId: 'nectar_divin', quantity: 2 }]
     }
   },
+  sq_initiation_artisanat: {
+    id: 'sq_initiation_artisanat',
+    title: 'Les Ateliers de la Cité',
+    kind: 'side',
+    level: 1,
+    giverNpcId: 'damon',
+    turnInNpcId: 'damon',
+    summary: "Visitez l'Atelier de la Forge et l'Infirmerie de Cassandre dans la cité pour débloquer les recettes avancées.",
+    offerDialogue:
+      "Si tu veux survivre au-delà des remparts, tu devras forger ton équipement et brasser tes propres élixirs. Entre dans mon Atelier au sud-est et passe voir l'Infirmerie de Cassandre au sud-ouest.",
+    progressDialogue:
+      "L'entrée de la Forge se trouve devant ma maison au sud-est, et l'Infirmerie de Cassandre dans le jardin au sud-ouest.",
+    completeDialogue:
+      "Parfait ! Tu sais maintenant où forger les pièces rares et brasser du nectar avec le butin des monstres.",
+    objectives: [
+      { id: 'visit_forge', label: "Entrer dans l'Atelier de la Forge", type: 'enter_zone', targetId: 'forge_interieur', required: 1 },
+      { id: 'visit_apoth', label: "Entrer dans l'Infirmerie de Cassandre", type: 'enter_zone', targetId: 'apothicairerie_interieur', required: 1 }
+    ],
+    reward: {
+      xp: 120,
+      gold: 75,
+      items: [
+        { itemId: 'fragment_bronze', quantity: 2 },
+        { itemId: 'herbe_ambroisie', quantity: 2 }
+      ]
+    }
+  },
   sq_bronze_ruines: {
     id: 'sq_bronze_ruines',
     title: 'Le Bronze des Ruines',
@@ -380,6 +407,7 @@ export const QUEST_ORDER = [
   'mq_4_rivage_epreuve',
   'mq_5_labyrinthe',
   'mq_6_hydre',
+  'sq_initiation_artisanat',
   'sq_bronze_ruines',
   'sq_ambroisie_perdue',
   'sq_ailes_tempete',
@@ -457,6 +485,15 @@ export const NPCS: Record<string, NpcDef> = {
     look: 'citizen',
     idleDialogue:
       "Ma cité s'est effondrée en une nuit sous la foudre. Heureusement que les murailles de l'Agora ont tenu."
+  },
+  dionysios: {
+    id: 'dionysios',
+    name: 'Dionysios',
+    role: 'Maître de Taverne',
+    look: 'merchant',
+    idleDialogue:
+      "Assieds-toi donc ! Vin de Chios, posca d'hoplite ou kykèon d'Éleusis : rien de tel avant de repartir affronter les bêtes.",
+    shopItems: ['vin_chios', 'posca', 'hydromel_olympe', 'kykeon']
   },
   homere: {
     id: 'homere',

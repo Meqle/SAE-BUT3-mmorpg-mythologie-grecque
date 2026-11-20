@@ -260,6 +260,50 @@ export const ITEMS: Record<string, ItemDef> = {
     price: 15,
     healAmount: 0.38
   },
+  vin_chios: {
+    id: 'vin_chios',
+    name: 'Vin de Chios',
+    description: 'Vin rouge miellé servi à la taverne.',
+    usageHint: 'Boisson : rend 35% PV.',
+    category: 'consommable',
+    rarity: 'commun',
+    stackable: true,
+    price: 18,
+    healAmount: 0.35
+  },
+  posca: {
+    id: 'posca',
+    name: 'Posca des Hoplites',
+    description: 'Breuvage frais au vinaigre de vin et herbes.',
+    usageHint: 'Boisson : rend 45% PV.',
+    category: 'consommable',
+    rarity: 'commun',
+    stackable: true,
+    price: 24,
+    healAmount: 0.45
+  },
+  hydromel_olympe: {
+    id: 'hydromel_olympe',
+    name: "Hydromel d'Attique",
+    description: 'Miel fermenté parfumé au thym des collines.',
+    usageHint: 'Boisson : rend 60% PV.',
+    category: 'consommable',
+    rarity: 'rare',
+    stackable: true,
+    price: 36,
+    healAmount: 0.6
+  },
+  kykeon: {
+    id: 'kykeon',
+    name: "Kykèon d'Éleusis",
+    description: 'Boisson sacrée à l’orge, au miel et à la menthe.',
+    usageHint: 'Boisson rare : rend 80% PV.',
+    category: 'consommable',
+    rarity: 'rare',
+    stackable: true,
+    price: 48,
+    healAmount: 0.8
+  },
   nectar_divin: {
     id: 'nectar_divin',
     name: 'Nectar divin',

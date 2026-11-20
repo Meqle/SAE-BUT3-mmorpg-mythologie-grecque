@@ -460,9 +460,7 @@ function createAgoraScene(zone: ZoneDefinition): Scene {
   ground.circle(cx, cy, 130).fill(COLORS.marbleShade);
   drawLaurel(ground, cx, cy, 106, COLORS.bronze);
   ground.circle(cx, cy, 72).fill(COLORS.marbleLit).stroke({ width: 1.8, color: COLORS.gold });
-  drawMeander(ground, cx - 150, cy - 224, 300, 2.2, COLORS.bronze);
-  drawMeander(ground, cx - 150, cy + 214, 300, 2.2, COLORS.bronze);
-
+    
   // Place du Marche (Sud-Est) pavee de marbre clair
   ground.roundRect(1310, 810, 480, 320, 12).fill({ color: COLORS.marble, alpha: 0.55 }).stroke({ width: 1.5, color: COLORS.marbleLit, alpha: 0.6 });
 
@@ -743,9 +741,7 @@ function createSanctuaireScene(zone: ZoneDefinition): Scene {
 
   // Corridor d'honneur orne de meandres grecs
   floor.rect(0, 456, W, 108).fill({ color: COLORS.marble, alpha: 0.35 });
-  drawMeander(floor, 80, 444, W - 160, 2.2, COLORS.bronze);
-  drawMeander(floor, 80, 566, W - 160, 2.2, COLORS.bronze);
-
+    
   // Arene sacree du Gardien d'Airain (est)
   floor.circle(1210, 510, 175).fill({ color: COLORS.marbleShade, alpha: 0.72 });
   floor.circle(1210, 510, 175).stroke({ width: 3, color: COLORS.gold, alpha: 0.8 });
@@ -857,15 +853,14 @@ function createLabyrintheScene(zone: ZoneDefinition): Scene {
     }
   }
 
-  // grande salle du Minotaure a l'est (1330, 560)
-  floor.circle(1330, 560, 235).fill({ color: 0x3b4454, alpha: 0.85 });
-  floor.circle(1330, 560, 235).stroke({ width: 3, color: COLORS.bronze, alpha: 0.8 });
-  drawLaurel(floor, 1330, 560, 185, COLORS.bronze);
-  floor.circle(1330, 560, 95).fill({ color: 0x2a3140 }).stroke({ width: 2, color: COLORS.gold, alpha: 0.7 });
+  // grande salle du Minotaure a l'est (2060, 860)
+  floor.circle(2060, 860, 235).fill({ color: 0x3b4454, alpha: 0.85 });
+  floor.circle(2060, 860, 235).stroke({ width: 3, color: COLORS.bronze, alpha: 0.8 });
+  drawLaurel(floor, 2060, 860, 185, COLORS.bronze);
+  floor.circle(2060, 860, 95).fill({ color: 0x2a3140 }).stroke({ width: 2, color: COLORS.gold, alpha: 0.7 });
 
   // meandres graves dans le vestibule d'entree
-  drawMeander(floor, 80, 900, 220, 2, COLORS.bronze);
-
+  
   // fissures de sol
   for (let i = 0; i < 36; i++) {
     const x = 40 + rand() * (W - 80);
@@ -874,17 +869,12 @@ function createLabyrintheScene(zone: ZoneDefinition): Scene {
       .stroke({ width: 1.2, color: 0x111827, alpha: 0.45 });
   }
 
-  // Reliques cretoises, mosaiques d'angle et colonnes brisees dans le Labyrinthe
-  drawMosaicMedallion(floor, 165, 175, 38, COLORS.bronze);
-  drawMosaicMedallion(floor, 1500, 155, 42, COLORS.gold);
-  drawMosaicMedallion(floor, 1500, 985, 42, COLORS.gold);
-  for (const [bx, by, ba] of [[230, 145, 0.6], [1460, 210, -0.4], [1460, 920, 0.5], [760, 160, 0.2]]) {
-    drawBrokenColumn(floor, bx, by, ba);
-  }
-  for (const [rx, ry, sd] of [[310, 320, 91], [660, 620, 92], [1050, 220, 93], [1050, 930, 94]]) {
+  // Braseros muraux et reliques discretement places aux intersections du dedale
+  drawMosaicMedallion(floor, 1380, 105, 48, COLORS.gold);
+  for (const [rx, ry, sd] of [[190, 1350, 91], [560, 740, 92], [970, 920, 93], [1400, 760, 94], [1920, 380, 95], [2200, 1350, 96]]) {
     drawFallenRelic(floor, rx, ry, sd);
   }
-  for (const [ax, ay, sd] of [[130, 860, 95], [460, 980, 96], [1540, 360, 97], [1540, 780, 98]]) {
+  for (const [ax, ay, sd] of [[95, 1500, 95], [430, 1290, 96], [840, 1280, 97], [1250, 1180, 98]]) {
     drawAmphoraCluster(floor, ax, ay, sd);
   }
   floor.rect(0, 0, W, H).stroke({ width: 8, color: COLORS.ink });
@@ -1103,6 +1093,28 @@ function createInteriorScene(zone: ZoneDefinition): Scene {
     }
     floor.roundRect(W / 2 - 140, 210, 280, 340, 10).fill({ color: 0x8b2635, alpha: 0.82 }).stroke({ width: 3, color: COLORS.gold });
     floor.roundRect(W / 2 - 126, 224, 252, 312, 6).stroke({ width: 1.5, color: COLORS.marbleLit, alpha: 0.65 });
+    // Coin recit d'Homere (tapis circulaire au nord-est) + cheminee au nord-ouest
+    floor.circle(760, 195, 76).fill({ color: 0x1e3a5f, alpha: 0.85 }).stroke({ width: 2.5, color: COLORS.gold });
+    floor.roundRect(120, 48, 124, 34, 4).fill({ color: 0x4b5563 }).stroke({ width: 2, color: COLORS.ink });
+    floor.ellipse(182, 74, 34, 12).fill({ color: 0x3b2416 });
+    // Foule assise ecoutant Homere (4 citoyens) + 2 paires de clients discutant aux tables
+    const drawPatron = (px: number, py: number, tunic: number) => {
+      floor.ellipse(px + 2, py + 3, 10, 8).fill({ color: COLORS.ink, alpha: 0.25 });
+      floor.circle(px, py, 9.5).fill({ color: tunic }).stroke({ width: 1.4, color: COLORS.ink });
+      floor.circle(px, py - 1, 5).fill({ color: 0xd9a77e }).stroke({ width: 1, color: COLORS.ink });
+    };
+    // Auditoire d'Homere
+    drawPatron(708, 224, 0x58a7cf);
+    drawPatron(755, 246, 0xb5523b);
+    drawPatron(806, 232, 0x7e8f4e);
+    drawPatron(824, 184, 0xc08a3e);
+    // Clients discutant aux tables ouest et sud
+    drawPatron(155, 254, 0x6b7280);
+    drawPatron(235, 254, 0x9b6b43);
+    drawPatron(155, 424, 0x4b6b52);
+    drawPatron(235, 424, 0x8b3a3a);
+    drawPatron(715, 424, 0x5b6b8a);
+    drawPatron(800, 424, 0xa16207);
   }
 
   // Amphores et caisses decoratives aux coins de l'interieur
@@ -1127,8 +1139,36 @@ function createInteriorScene(zone: ZoneDefinition): Scene {
 
   const portals = zone.portals.map(createPortalMarker);
   const hearthGlow = new Graphics();
+  const isTavern = zone.id === 'taverne_interieur';
+  const bubbleStyle = new TextStyle({
+    fontFamily: 'Outfit, sans-serif',
+    fontSize: 10.5,
+    fontWeight: '600',
+    fill: 0xfef9c3,
+    stroke: { color: COLORS.ink, width: 3, join: 'round' }
+  });
+  const homereBubble = isTavern ? new Text({ text: '', resolution: 3, style: bubbleStyle }) : null;
+  const patronBubble = isTavern ? new Text({ text: '', resolution: 3, style: bubbleStyle }) : null;
+  if (homereBubble) { homereBubble.anchor.set(0.5, 1); homereBubble.position.set(760, 148); }
+  if (patronBubble) { patronBubble.anchor.set(0.5, 1); patronBubble.position.set(195, 232); }
+
+  const homereLines = [
+    '« Chante, ô Muse, la colère des dieux... »',
+    '« Et le Titan offrit la braise aux mortels... »',
+    '« Sous le Sanctuaire dort le Minotaure... »',
+    '« Trois reliques briseront le Caucase... »'
+  ];
+  const patronLines = [
+    '« Encore un pichet de Chios, Dionysios ! »',
+    '« Paraît que Damon forge des cuirasses rares... »',
+    '« Un centaure a failli m’embrocher hier ! »',
+    '« Quelle voix cet Homère... »'
+  ];
+
   back.addChild(floor, ...portals.map((p) => p.floor), shadows, solids, hearthGlow);
   front.addChild(...portals.map((p) => p.glow), ...zone.portals.map(makePortalLabel));
+  if (homereBubble) front.addChild(homereBubble);
+  if (patronBubble) front.addChild(patronBubble);
 
   return {
     back,
@@ -1145,7 +1185,18 @@ function createInteriorScene(zone: ZoneDefinition): Scene {
       } else if (isApoth) {
         hearthGlow.circle(W / 2, 255, 22 * pulse).fill({ color: 0x38bdf8, alpha: 0.22 });
       } else {
-        hearthGlow.circle(W / 2, 74, 24 * pulse).fill({ color: 0xf97316, alpha: 0.28 });
+        hearthGlow.circle(182, 74, 26 * pulse).fill({ color: 0xf97316, alpha: 0.38 });
+        hearthGlow.circle(182, 74, 12 * pulse).fill({ color: 0xfef08a, alpha: 0.78 });
+        if (homereBubble) {
+          const idx = Math.floor(time / 5.5) % homereLines.length;
+          homereBubble.text = homereLines[idx];
+          homereBubble.alpha = 0.75 + Math.sin(time * 2) * 0.25;
+        }
+        if (patronBubble) {
+          const idx = Math.floor((time + 2.7) / 6) % patronLines.length;
+          patronBubble.text = patronLines[idx];
+          patronBubble.alpha = 0.75 + Math.cos(time * 2) * 0.25;
+        }
       }
     }
   };

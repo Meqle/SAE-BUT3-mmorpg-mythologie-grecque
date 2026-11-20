@@ -8,7 +8,7 @@ const RING = 0xf2c43c;
 function createCape(color: number, heroClass: HeroClassId): Graphics {
   const g = new Graphics();
   g.position.set(-1, 0);
-  const c = heroClass === 'ASSASSIN' ? darker(color, 0.25) : color;
+  const c = heroClass === 'ASSASSIN' ? 0x1e1b2e : color;
   g.moveTo(1, -8.6)
     .bezierCurveTo(-5, -11, -11.5, -8.5, -12, 0)
     .bezierCurveTo(-11.5, 8.5, -5, 11, 1, 8.6)

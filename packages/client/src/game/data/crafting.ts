@@ -6,6 +6,7 @@ export interface CraftIngredient {
 export interface CraftRecipe {
   id: string;
   station: 'forge' | 'alchimie';
+  pocket?: boolean; // true = disponible partout dans le menu; sinon obligatoire a l'atelier du PNJ
   resultItemId: string;
   resultQuantity: number;
   goldCost: number;
@@ -13,14 +14,30 @@ export interface CraftRecipe {
 }
 
 export const CRAFT_RECIPES: CraftRecipe[] = [
+  // --- Recettes simples (accessibles partout) ---
   {
     id: 'craft_potion',
     station: 'alchimie',
+    pocket: true,
     resultItemId: 'potion_ambroisie',
     resultQuantity: 2,
     goldCost: 10,
     ingredients: [{ itemId: 'herbe_ambroisie', quantity: 2 }]
   },
+  {
+    id: 'craft_sandales',
+    station: 'forge',
+    pocket: true,
+    resultItemId: 'sandales_cuir',
+    resultQuantity: 1,
+    goldCost: 25,
+    ingredients: [
+      { itemId: 'corne_satyre', quantity: 2 },
+      { itemId: 'plume_harpie', quantity: 1 }
+    ]
+  },
+
+  // --- Recettes avancees d'Alchimie (Infirmerie de Cassandre uniquement) ---
   {
     id: 'craft_nectar',
     station: 'alchimie',
@@ -43,17 +60,8 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
       { itemId: 'herbe_ambroisie', quantity: 1 }
     ]
   },
-  {
-    id: 'craft_sandales',
-    station: 'forge',
-    resultItemId: 'sandales_cuir',
-    resultQuantity: 1,
-    goldCost: 25,
-    ingredients: [
-      { itemId: 'corne_satyre', quantity: 2 },
-      { itemId: 'plume_harpie', quantity: 1 }
-    ]
-  },
+
+  // --- Recettes avancees de Forge (Atelier de Damon uniquement) ---
   {
     id: 'craft_bouclier',
     station: 'forge',

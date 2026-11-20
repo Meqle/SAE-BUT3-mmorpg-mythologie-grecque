@@ -46,7 +46,7 @@ import { useScreen } from '../../game/useScreen';
 import { PrologueOverlay } from '../Story/PrologueOverlay';
 import { DialogueModal } from './DialogueModal';
 import { BossHudInfo, Hud } from './Hud';
-import { InventoryModal, ModalTab } from './InventoryModal';
+import { CraftStationMode, InventoryModal, ModalTab } from './InventoryModal';
 import { MinimapMarker } from './Minimap';
 import { PauseMenuModal } from './PauseMenuModal';
 import { TouchControls } from './TouchControls';
@@ -77,6 +77,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [dialogue, setDialogue] = useState<NpcDialogueView | null>(null);
   const [modalTab, setModalTab] = useState<ModalTab | null>(null);
+  const [craftStation, setCraftStation] = useState<CraftStationMode>('pocket');
   const [interactPrompt, setInteractPrompt] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [zoneBanner, setZoneBanner] = useState(true);
@@ -156,7 +157,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
       }
       if (showPrologue || pauseOpen || dialogue) return;
       const keys = settingsRef.current.keys;
-      if (e.code === keys.inventory.code) setModalTab((prev) => (prev === 'inventory' ? null : 'inventory'));
+      if (e.code === keys.inventory.code) { setCraftStation('pocket'); setModalTab((prev) => (prev === 'inventory' ? null : 'inventory')); }
       if (e.code === keys.quests.code) setModalTab((prev) => (prev === 'quests' ? null : 'quests'));
       if (e.code === keys.codex.code) setModalTab((prev) => (prev === 'codex' ? null : 'codex'));
       if (e.code === 'KeyT') setModalTab((prev) => (prev === 'talents' ? null : 'talents'));
@@ -487,22 +488,56 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           return;
         }
 
-        const isCrit = (stateRef.current.heroClass === 'ASSASSIN' && Math.random() < 0.32) || (stateRef.current.heroClass === 'GUERRIER' && isFinisher);
-        const range = cls.attackRange + (stateRef.current.heroClass === 'GUERRIER' && isFinisher ? 14 : 0);
-        const dmg = Math.round(stats.attack * (isCrit ? (stateRef.current.heroClass === 'ASSASSIN' ? 1.55 : 1.32) : 1));
-        fx.spawnSlash(player.x, player.y, angle, range, isFinisher ? COLORS.gold : hexColor(cls.accentColor), 'arc');
-
-        for (const enemy of enemies) {
-          if (!enemy.alive) continue;
-          const arch = ENEMY_ARCHETYPES[enemy.type];
-          const dx = enemy.x - player.x;
-          const dy = enemy.y - player.y;
-          const dist = Math.hypot(dx, dy);
-          if (dist > range + arch.radius) continue;
-          const dirAngle = Math.atan2(dy, dx);
-          const diff = Math.abs(Math.atan2(Math.sin(dirAngle - angle), Math.cos(dirAngle - angle)));
-          if (dist < arch.radius + 26 || diff < 1.25) {
-            damageEnemy(enemy, dmg, isCrit, 0.12);
+        if (stateRef.current.heroClass === 'ASSASSIN') {
+          // Assassin : double entaille rapide en croix + micro-pas vers l'avant + rafale triple au 3e coup
+          const isCrit = isFinisher || Math.random() < stats.critChance + 0.14;
+          const range = cls.attackRange + (isFinisher ? 10 : 0);
+          const dmg = Math.round(stats.attack * (isFinisher ? 1.48 : isCrit ? 1.38 : 0.86));
+          player.vx += Math.cos(angle) * 110;
+          player.vy += Math.sin(angle) * 110;
+          const slashCol = isFinisher ? 0xe879f9 : 0xc084fc;
+          const sideSign = comboCount % 2 === 0 ? 1 : -1;
+          fx.spawnSlash(player.x, player.y, angle + sideSign * 0.28, range, slashCol, 'arc');
+          if (isFinisher) {
+            fx.spawnSlash(player.x, player.y, angle - sideSign * 0.28, range + 8, 0xf8fafc, 'arc');
+            hasteBuffTimer = Math.max(hasteBuffTimer, 1.4);
+          }
+          for (const enemy of enemies) {
+            if (!enemy.alive) continue;
+            const arch = ENEMY_ARCHETYPES[enemy.type];
+            const dx = enemy.x - player.x;
+            const dy = enemy.y - player.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > range + arch.radius) continue;
+            const dirAngle = Math.atan2(dy, dx);
+            const diff = Math.abs(Math.atan2(Math.sin(dirAngle - angle), Math.cos(dirAngle - angle)));
+            if (dist < arch.radius + 22 || diff < 0.95) {
+              damageEnemy(enemy, dmg, isCrit, 0.08);
+            }
+          }
+        } else {
+          // Guerrier : grand balayage lourd de lance avec recul + onde de choc 360 au 3e coup
+          const isCrit = isFinisher || Math.random() < stats.critChance;
+          const range = cls.attackRange + (isFinisher ? 18 : 0);
+          const dmg = Math.round(stats.attack * (isFinisher ? 1.45 : isCrit ? 1.32 : 1.05));
+          if (isFinisher) {
+            cameraShake = Math.max(cameraShake, 4.5);
+            fx.spawnSlash(player.x, player.y, 0, range, COLORS.gold, 'ring');
+          } else {
+            fx.spawnSlash(player.x, player.y, angle, range, hexColor(cls.accentColor), 'arc');
+          }
+          for (const enemy of enemies) {
+            if (!enemy.alive) continue;
+            const arch = ENEMY_ARCHETYPES[enemy.type];
+            const dx = enemy.x - player.x;
+            const dy = enemy.y - player.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > range + arch.radius) continue;
+            const dirAngle = Math.atan2(dy, dx);
+            const diff = Math.abs(Math.atan2(Math.sin(dirAngle - angle), Math.cos(dirAngle - angle)));
+            if (isFinisher || dist < arch.radius + 26 || diff < 1.3) {
+              damageEnemy(enemy, dmg, isCrit, isFinisher ? 0.34 : 0.22);
+            }
           }
         }
       };
@@ -690,7 +725,61 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           for (const e of enemies) {
             if (e.alive && Math.hypot(e.x - player.x, e.y - player.y) <= 140) damageEnemy(e, Math.round(stats.attack * mult), true, 0.3);
           }
-        } else {
+        } else if (eff === 'war_brutal' || eff === 'war_whirlwind' || eff === 'war_execute') {
+          const mult = eff === 'war_execute' ? 3.8 : eff === 'war_whirlwind' ? 2.5 : 2.1;
+          const r = eff === 'war_whirlwind' ? 145 : 120;
+          cameraShake = Math.max(cameraShake, eff === 'war_execute' ? 7 : 5);
+          fx.spawnSlash(player.x, player.y, facingAngle, r, col, eff === 'war_whirlwind' ? 'ring' : 'arc');
+          for (const e of enemies) {
+            if (e.alive && Math.hypot(e.x - player.x, e.y - player.y) <= r + 15) {
+              damageEnemy(e, Math.round(stats.attack * mult), true, 0.4);
+            }
+          }
+        } else if (eff === 'mage_bolt') {
+          fx.spawnProjectile({
+            x: player.x, y: player.y,
+            vx: Math.cos(facingAngle) * 480, vy: Math.sin(facingAngle) * 480,
+            damage: Math.round(stats.attack * 2.1), radius: 10, fromPlayer: true, life: 1.2, color: col, style: 'orb', piercing: true
+          });
+        } else if (eff === 'mage_meteor' || eff === 'mage_cataclysm') {
+          const mult = eff === 'mage_cataclysm' ? 3.8 : 2.8;
+          const r = eff === 'mage_cataclysm' ? 170 : 140;
+          cameraShake = Math.max(cameraShake, 6.5);
+          fx.spawnSlash(player.x, player.y, 0, r, col, 'ring');
+          for (const e of enemies) {
+            if (e.alive && Math.hypot(e.x - player.x, e.y - player.y) <= r + 15) {
+              damageEnemy(e, Math.round(stats.attack * mult), true, 0.45);
+            }
+          }
+        } else if (eff === 'dps_hunter_mark' || eff === 'dps_apollo_arrow') {
+          const mult = eff === 'dps_apollo_arrow' ? 4.0 : 2.6;
+          hasteBuffTimer = Math.max(hasteBuffTimer, 3.5);
+          fx.spawnProjectile({
+            x: player.x, y: player.y,
+            vx: Math.cos(facingAngle) * 580, vy: Math.sin(facingAngle) * 580,
+            damage: Math.round(stats.attack * mult), radius: 11, fromPlayer: true, life: 1.3, color: col, style: 'arrow', piercing: true
+          });
+        } else if (eff === 'dps_explosive' || eff === 'dps_venom_blades' || eff === 'dps_viper_swarm') {
+          const angles = eff === 'dps_viper_swarm'
+            ? Array.from({ length: 10 }, (_, k) => (k / 10) * Math.PI * 2)
+            : [-0.24, 0, 0.24].map((o) => facingAngle + o);
+          for (const ang of angles) {
+            fx.spawnProjectile({
+              x: player.x, y: player.y,
+              vx: Math.cos(ang) * 430, vy: Math.sin(ang) * 430,
+              damage: Math.round(stats.attack * (eff === 'dps_explosive' ? 1.65 : 1.35)),
+              radius: 8, fromPlayer: true, life: 1.0, color: col, style: eff === 'dps_explosive' ? 'fireball' : 'venom', piercing: true
+            });
+          }
+        } else if (eff === 'dps_backstab') {
+          player.vx += Math.cos(facingAngle) * 320;
+          player.vy += Math.sin(facingAngle) * 320;
+          fx.spawnSlash(player.x, player.y, facingAngle + 0.25, 95, col, 'arc');
+          fx.spawnSlash(player.x, player.y, facingAngle - 0.25, 95, 0xf8fafc, 'arc');
+          for (const e of enemies) {
+            if (e.alive && Math.hypot(e.x - player.x, e.y - player.y) <= 110) damageEnemy(e, Math.round(stats.attack * 2.6), true, 0.3);
+          }
+                } else {
           // Pouvoirs actifs de Faction Divine (Zeus, Poseidon, Hades, Athena, Ares, Apollo)
           const mult = eff.includes('tempest') || eff.includes('rampage') || eff.includes('maelstrom') || eff.includes('legion') || eff.includes('spear') || eff.includes('nova') ? 3.2 : 2.1;
           cameraShake = Math.max(cameraShake, 6);
@@ -726,6 +815,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
 
         const def = nearest.sprite.def;
         if (def.kind === 'workbench') {
+          setCraftStation(def.targetId === 'craft_alchimie' ? 'alchimie' : 'forge');
           setModalTab('craft');
           return;
         }
@@ -1061,7 +1151,6 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
               const a = enemy.aimAngle;
               if (arch.attackStyle === 'lunge') {
                 const step = enemy.patternStep;
-                enemy.patternStep = (enemy.patternStep + 1) % 2;
                 if (step === 0) {
                   enemy.state = 'dashing';
                   enemy.stateTimer = 0.28;
@@ -1077,7 +1166,6 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
                 }
               } else if (arch.attackStyle === 'charge') {
                 const step = enemy.patternStep;
-                enemy.patternStep = (enemy.patternStep + 1) % 2;
                 if (step === 0) {
                   enemy.state = 'dashing';
                   enemy.stateTimer = 0.45;
@@ -1101,7 +1189,6 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
                 }
               } else if (arch.attackStyle === 'ranged_fan') {
                 const step = enemy.patternStep;
-                enemy.patternStep = (enemy.patternStep + 1) % 2;
                 if (step === 0) {
                   for (const offset of [-0.28, 0, 0.28]) {
                     fx.spawnProjectile({
@@ -1122,7 +1209,6 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
                 }
               } else if (arch.attackStyle === 'fire_slam') {
                 const step = enemy.patternStep;
-                enemy.patternStep = (enemy.patternStep + 1) % 2;
                 if (step === 0) {
                   for (const off of [-0.24, 0, 0.24]) {
                     fx.spawnProjectile({
@@ -1140,7 +1226,6 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
                 enemy.stateTimer = arch.attackCooldown;
               } else if (arch.attackStyle === 'boss_burst') {
                 const step = enemy.patternStep;
-                enemy.patternStep = (enemy.patternStep + 1) % 3;
                 if (step === 0) {
                   for (let k = 0; k < 6; k++) {
                     const ra = a + (k / 6) * Math.PI * 2;
@@ -1163,7 +1248,6 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
                 enemy.stateTimer = arch.attackCooldown;
               } else if (arch.attackStyle === 'minotaur') {
                 const step = enemy.patternStep;
-                enemy.patternStep = (enemy.patternStep + 1) % 3;
                 if (step === 0) {
                   // 1. Charge furieuse du Minotaure
                   enemy.state = 'dashing';
@@ -1200,7 +1284,6 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
                 }
               } else if (arch.attackStyle === 'venom_spit') {
                 const step = enemy.patternStep;
-                enemy.patternStep = (enemy.patternStep + 1) % 2;
                 if (step === 0) {
                   for (const off of [-0.14, 0.14]) {
                     fx.spawnProjectile({
@@ -1218,7 +1301,6 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
                 enemy.stateTimer = arch.attackCooldown;
               } else if (arch.attackStyle === 'hydra') {
                 const step = enemy.patternStep;
-                enemy.patternStep = (enemy.patternStep + 1) % 3;
                 if (step === 0) {
                   for (const offset of [-0.42, -0.21, 0, 0.21, 0.42]) {
                     const ang = a + offset;
@@ -1259,6 +1341,13 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
               enemy.state = 'windup';
               enemy.stateTimer = arch.windupDuration;
               enemy.aimAngle = Math.atan2(dy, dx);
+              // Choix aleatoire de la prochaine attaque (2 pour monstres normaux, 3 pour boss)
+              const count = arch.attackStyle === 'minotaur' || arch.attackStyle === 'boss_burst' || arch.attackStyle === 'hydra' ? 3 : 2;
+              let pick = Math.floor(Math.random() * count);
+              if (pick === enemy.patternStep && Math.random() < 0.65) {
+                pick = (pick + 1 + Math.floor(Math.random() * (count - 1))) % count;
+              }
+              enemy.patternStep = pick;
             } else {
               enemy.state = 'chase';
               if (mode === 'side-view' && !arch.flying) {
@@ -1636,7 +1725,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         onTriggerPotion={() => actionsRef.current?.potion()}
         onTriggerActiveSkill={(id) => actionsRef.current?.castActiveSkill(id)}
         onTriggerInteract={() => actionsRef.current?.interact()}
-        onOpenModal={(tab) => setModalTab(tab)}
+        onOpenModal={(tab) => { setCraftStation('pocket'); setModalTab(tab); }}
         onOpenPause={() => setPauseOpen(true)}
         onOpenWorldMap={() => setWorldMapOpen(true)}
         onLeave={() => {
@@ -1688,6 +1777,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         <InventoryModal
           state={uiState}
           initialTab={modalTab}
+          craftStation={craftStation}
           onUseConsumable={(itemId) => actionsRef.current?.potion(itemId)}
           onEquipItem={handleEquipItem}
           onCraftRecipe={handleCraftRecipe}

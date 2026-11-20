@@ -100,7 +100,7 @@ export function Minimap({ zone, markers, onOpenWorldMap }: MinimapProps) {
       ctx.fillStyle = '#2d3748';
       ctx.fillRect(0, 0, mapW, mapH);
       ctx.beginPath();
-      ctx.arc(1330 * sx, 560 * sy, 235 * sx, 0, Math.PI * 2);
+      ctx.arc(2060 * sx, 860 * sy, 255 * sx, 0, Math.PI * 2);
       ctx.fillStyle = '#3f4a5e';
       ctx.fill();
       ctx.strokeStyle = '#c08a3e';

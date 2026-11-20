@@ -83,7 +83,7 @@ function createFrontArm(heroClass: HeroClassId, color: number): Container {
     g.circle(9.8, -15, 3.4).fill(dome(COLORS.sun, color, darker(color, 0.4))).stroke({ ...LINE, width: 0.7 });
   } else {
     limb(g, [0, 0, 4.5, 4.4], 2.6, SKIN);
-    g.poly([4.5, 4.4, 14.5, 1.2, 10.5, 6.8]).fill(shaded(BRONZE_LIT, BRONZE_SHADE)).stroke({ ...LINE, width: 0.8 });
+    g.poly([4.5, 4.4, 17, 0.5, 11.5, 7.2]).fill(shaded(0xe2e8f0, 0x64748b)).stroke({ ...LINE, width: 0.9 });
   }
 
   arm.addChild(g);
@@ -91,7 +91,7 @@ function createFrontArm(heroClass: HeroClassId, color: number): Container {
 }
 
 function createCape(color: number, heroClass: HeroClassId) {
-  const c = heroClass === 'ASSASSIN' ? darker(color, 0.25) : color;
+  const c = heroClass === 'ASSASSIN' ? 0x1e1b2e : color;
   const fill = shaded(darker(c, 0.1), darker(c, 0.5));
   const top = new Container();
   top.position.set(-2.2, -9.8);

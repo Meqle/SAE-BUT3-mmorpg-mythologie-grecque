@@ -189,7 +189,9 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
         toZone: 'plaines',
         spawnX: 115,
         spawnY: 560,
-        label: 'Plaines Foudroyées'
+        label: 'Plaines Foudroyées',
+        requiredQuestCompleted: 'mq_1_etincelle',
+        lockedHint: "Parlez d'abord à Lycos et ranimez le Brasero de Prométhée sur l'Agora."
       },
       {
         id: 'agora_to_rivage',
@@ -418,7 +420,9 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
         toZone: 'rivage',
         spawnX: 170,
         spawnY: 456,
-        label: "Rivage d'Égée"
+        label: "Rivage d'Égée",
+        requiredQuestCompleted: 'mq_3_sanctuaire',
+        lockedHint: "Vainquez le Gardien d'Airain et validez la quête du Sanctuaire."
       },
       {
         id: 'sanctuaire_to_labyrinthe',
@@ -427,9 +431,11 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
         w: 116,
         h: 64,
         toZone: 'labyrinthe',
-        spawnX: 165,
-        spawnY: 985,
-        label: 'Labyrinthe des Brumes'
+        spawnX: 170,
+        spawnY: 1545,
+        label: 'Labyrinthe des Brumes',
+        requiredQuestCompleted: 'mq_4_rivage_epreuve',
+        lockedHint: "Terminez d'abord l'épreuve du Rivage d'Égée auprès de Lycos."
       },
       {
         id: 'sanctuaire_to_marecages',
@@ -440,7 +446,9 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
         toZone: 'marecages',
         spawnX: 880,
         spawnY: 115,
-        label: 'Marécages de Lerne'
+        label: 'Marécages de Lerne',
+        requiredQuestCompleted: 'mq_5_labyrinthe',
+        lockedHint: "Vainquez d'abord le Minotaure et validez la quête du Labyrinthe."
       }
     ],
     npcs: [
@@ -528,90 +536,118 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
   labyrinthe: {
     id: 'labyrinthe',
     name: 'Labyrinthe des Brumes',
-    subtitle: 'Donjon du Minotaure',
-    realm: 'tartarus',
+    subtitle: 'Dédale de Crète',
+    realm: 'elysium',
     viewMode: 'top-down',
     recommendedLevel: 'Niv. 7 - 10',
     safeZone: false,
-    width: 1680,
-    height: 1160,
+    width: 2480,
+    height: 1720,
     cameraMargin: 28,
-    defaultSpawn: { x: 165, y: 985 },
+    defaultSpawn: { x: 170, y: 1545 },
     solids: [
-      // Murets de la porte sud-ouest (retour Sanctuaire)
-      { x: 74, y: 1086, w: 26, h: 74, look: 'wall' },
-      { x: 230, y: 1086, w: 26, h: 74, look: 'wall' },
+      // Porte Sud d'entree (x=110..230, y=1656..1720)
+      { x: 76, y: 1656, w: 32, h: 64, look: 'wall' },
+      { x: 232, y: 1656, w: 32, h: 64, look: 'wall' },
 
-      // Murs du labyrinthe (couloirs larges >= 150px)
-      ruin(340, 740, 28, 420),
-      ruin(340, 420, 28, 170),
-      ruin(340, 120, 28, 160),
+      // Murs du dedale (couloirs larges de 200-240px, vrais embranchements et impasses)
+      // Colonne 1 (x=360)
+      { x: 360, y: 1220, w: 34, h: 500, look: 'wall' },
+      { x: 360, y: 360, w: 34, h: 640, look: 'wall' },
+      // Traverses Ouest
+      { x: 0, y: 1180, w: 210, h: 34, look: 'wall' },
+      { x: 150, y: 740, w: 244, h: 34, look: 'wall' },
+      { x: 0, y: 360, w: 220, h: 34, look: 'wall' },
 
-      ruin(340, 420, 340, 28),
-      ruin(520, 740, 460, 28),
-      ruin(660, 180, 28, 268),
-      ruin(660, 560, 28, 180),
+      // Colonne 2 (x=760)
+      { x: 760, y: 0, w: 34, h: 420, look: 'wall' },
+      { x: 760, y: 600, w: 34, h: 560, look: 'wall' },
+      { x: 760, y: 1340, w: 34, h: 380, look: 'wall' },
+      // Traverses Centre-Ouest
+      { x: 360, y: 1340, w: 240, h: 34, look: 'wall' },
+      { x: 540, y: 960, w: 254, h: 34, look: 'wall' },
+      { x: 360, y: 560, w: 240, h: 34, look: 'wall' },
+      { x: 540, y: 200, w: 254, h: 34, look: 'wall' },
 
-      ruin(960, 160, 28, 320),
-      ruin(960, 650, 28, 360),
-      ruin(660, 180, 328, 28),
+      // Colonne 3 (x=1180)
+      { x: 1180, y: 200, w: 34, h: 580, look: 'wall' },
+      { x: 1180, y: 980, w: 34, h: 520, look: 'wall' },
+      // Traverses Centre
+      { x: 760, y: 1126, w: 260, h: 34, look: 'wall' },
+      { x: 960, y: 746, w: 254, h: 34, look: 'wall' },
+      { x: 760, y: 386, w: 260, h: 34, look: 'wall' },
+      { x: 960, y: 1480, w: 254, h: 34, look: 'wall' },
 
-      // Colonnes de la salle du Minotaure (Est, centre 1330, 560)
-      pillar(1140, 320), pillar(1520, 320),
-      pillar(1140, 800), pillar(1520, 800),
-      pillar(180, 520), pillar(510, 940)
+      // Colonne 4 (x=1620) — Avant-mur de la Salle du Minotaure (ouverture centrale y=740..980)
+      { x: 1620, y: 0, w: 36, h: 740, look: 'wall' },
+      { x: 1620, y: 980, w: 36, h: 740, look: 'wall' },
+      // Traverses Centre-Est
+      { x: 1180, y: 1220, w: 270, h: 34, look: 'wall' },
+      { x: 1380, y: 520, w: 276, h: 34, look: 'wall' },
+      { x: 1180, y: 200, w: 260, h: 34, look: 'wall' },
+
+      // 4 Piliers massifs encadrant la salle du Minotaure (centre 2060, 860)
+      pillar(1830, 560), pillar(2280, 560),
+      pillar(1830, 1160), pillar(2280, 1160)
     ],
     portals: [
       {
         id: 'labyrinthe_to_sanctuaire',
-        x: 100,
-        y: 1086,
-        w: 130,
-        h: 74,
+        x: 110,
+        y: 1656,
+        w: 120,
+        h: 64,
         toZone: 'sanctuaire',
         spawnX: 800,
-        spawnY: 112,
+        spawnY: 115,
         label: 'Sanctuaire Brisé'
       }
     ],
     npcs: [],
     interactables: [
-      { id: 'fil_ariane_obj', targetId: 'fil_ariane', label: "Autel du Fil d'Ariane", kind: 'stele', x: 185, y: 190, radius: 50 },
+      // Fil d'Ariane cache tout au nord-est du dedale (avant la salle du boss)
+      { id: 'fil_ariane_autel', targetId: 'fil_ariane', label: "Autel du Fil d'Ariane", kind: 'stele', x: 1380, y: 105, radius: 52 },
+      // Coffre scelle dans une impasse sud-centre
       {
         id: 'coffre_laby_1',
         targetId: 'chest_loot',
         label: 'Coffre scellé de Dédale',
         kind: 'chest',
-        x: 510,
-        y: 295,
+        x: 560,
+        y: 1525,
         radius: 44,
         seal: {
           zoneId: 'labyrinthe',
           requiredKills: 3,
           enemyType: 'squelette',
-          hint: 'Sceau de Dédale : abattez 3 Squelettes hoplites pour lever le sceau.'
+          hint: 'Sceau de Dédale : abattez 3 Squelettes hoplites.'
         }
       },
+      // Coffre dissimule dans l'impasse nord-ouest
       {
         id: 'coffre_laby_2',
         targetId: 'chest_loot',
         label: 'Coffre oublié',
         kind: 'chest',
-        x: 820,
-        y: 1055,
+        x: 145,
+        y: 140,
         radius: 40
       }
     ],
     spawns: [
-      { id: 'lb_sq_1', type: 'squelette', x: 190, y: 690, level: 7, patrolRadius: 65, respawnSeconds: 150 },
-      { id: 'lb_sq_2', type: 'squelette', x: 200, y: 340, level: 7, patrolRadius: 60, respawnSeconds: 150 },
-      { id: 'lb_sq_3', type: 'squelette', x: 810, y: 580, level: 8, patrolRadius: 75, respawnSeconds: 150 },
-      { id: 'lb_aut_1', type: 'automate', x: 810, y: 315, level: 8, patrolRadius: 60, respawnSeconds: 150 },
-      { id: 'lb_sq_4', type: 'squelette', x: 580, y: 930, level: 8, patrolRadius: 70, respawnSeconds: 150 },
-      { id: 'lb_boss', type: 'minotaure', x: 1340, y: 560, level: 9, patrolRadius: 85, respawnSeconds: 180 }
+      { id: 'lab_sq_1', type: 'squelette', x: 190, y: 980, level: 7, patrolRadius: 95, respawnSeconds: 130 },
+      { id: 'lab_sq_2', type: 'squelette', x: 190, y: 550, level: 7, patrolRadius: 95, respawnSeconds: 130 },
+      { id: 'lab_sq_3', type: 'squelette', x: 560, y: 1150, level: 7, patrolRadius: 95, respawnSeconds: 130 },
+      { id: 'lab_sq_4', type: 'squelette', x: 560, y: 760, level: 8, patrolRadius: 95, respawnSeconds: 130 },
+      { id: 'lab_sq_5', type: 'squelette', x: 560, y: 390, level: 8, patrolRadius: 95, respawnSeconds: 130 },
+      { id: 'lab_sq_6', type: 'squelette', x: 970, y: 1300, level: 8, patrolRadius: 95, respawnSeconds: 130 },
+      { id: 'lab_sq_7', type: 'squelette', x: 970, y: 940, level: 8, patrolRadius: 95, respawnSeconds: 130 },
+      { id: 'lab_sq_8', type: 'squelette', x: 970, y: 560, level: 8, patrolRadius: 95, respawnSeconds: 130 },
+      { id: 'lab_sq_9', type: 'squelette', x: 1400, y: 1020, level: 8, patrolRadius: 100, respawnSeconds: 135 },
+      { id: 'lab_sq_10', type: 'squelette', x: 1400, y: 340, level: 8, patrolRadius: 100, respawnSeconds: 135 },
+      { id: 'lab_boss_minotaure', type: 'minotaure', x: 2060, y: 860, level: 9, patrolRadius: 95, respawnSeconds: 180 }
     ]
-  }
-,
+  },
   marecages: {
     id: 'marecages',
     name: 'Marécages de Lerne',
@@ -742,7 +778,8 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
       }
     ],
     npcs: [
-      { npcId: 'homere', x: 480, y: 196 }
+      { npcId: 'dionysios', x: 480, y: 194 },
+      { npcId: 'homere', x: 760, y: 185 }
     ],
     interactables: [],
     spawns: []

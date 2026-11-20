@@ -445,31 +445,41 @@ export function updateEnemyVisual(enemy: EnemyEntity, time: number, mode: ViewMo
   if (enemy.state === 'windup') {
     enemy.telegraph.visible = true;
     enemy.telegraph.clear();
-    const pulse = 0.5 + 0.5 * Math.sin(time * 24);
+    const pulse = 0.5 + 0.5 * Math.sin(time * 22);
     const a = enemy.aimAngle;
     const cx = Math.cos(a);
     const sy = Math.sin(a);
     const px = -sy;
     const py = cx;
+    const step = enemy.patternStep;
 
-    if (arch.attackStyle === 'lunge' || arch.attackStyle === 'charge' || (arch.attackStyle === 'minotaur' && enemy.patternStep === 0)) {
-      const len = arch.attackStyle === 'charge' || arch.attackStyle === 'minotaur' ? 220 : 105;
-      const halfW = arch.attackStyle === 'charge' || arch.attackStyle === 'minotaur' ? 24 : 13;
+    // On affiche les grandes zones au sol uniquement pour les charges lourdes et les grosses AoE de boss/elites
+    if ((arch.attackStyle === 'charge' || arch.attackStyle === 'minotaur') && step === 0) {
+      const len = arch.attackStyle === 'minotaur' ? 235 : 205;
+      const halfW = arch.attackStyle === 'minotaur' ? 26 : 21;
       enemy.telegraph.poly([
         px * halfW, py * halfW,
         cx * len + px * halfW, sy * len + py * halfW,
         cx * len - px * halfW, sy * len - py * halfW,
         -px * halfW, -py * halfW
-      ]).fill({ color: 0xef4444, alpha: 0.16 + pulse * 0.14 }).stroke({ width: 1.8, color: 0xf87171, alpha: 0.9 });
-    } else if (arch.attackStyle === 'ranged_fan') {
-      enemy.telegraph.moveTo(0, 0).arc(0, 0, 120, a - 0.38, a + 0.38).closePath()
-        .fill({ color: 0x38bdf8, alpha: 0.14 + pulse * 0.1 })
-        .stroke({ width: 1.5, color: 0x7dd3fc, alpha: 0.85 });
-    } else {
-      const r = arch.attackStyle === 'boss_burst' || arch.attackStyle === 'minotaur' ? 115 : 74;
+      ]).fill({ color: 0xef4444, alpha: 0.14 + pulse * 0.12 }).stroke({ width: 1.8, color: 0xf87171, alpha: 0.85 });
+    } else if (
+      (arch.attackStyle === 'minotaur' && step === 1) ||
+      (arch.attackStyle === 'boss_burst' && step === 1) ||
+      (arch.attackStyle === 'hydra' && step === 1) ||
+      (arch.attackStyle === 'charge' && step === 1) ||
+      (arch.attackStyle === 'fire_slam' && step === 1)
+    ) {
+      const r = arch.attackStyle === 'minotaur' ? 136 : arch.attackStyle === 'hydra' ? 124 : arch.attackStyle === 'boss_burst' ? 126 : arch.attackStyle === 'charge' ? 115 : 102;
+      const col = arch.attackStyle === 'hydra' ? 0x22c55e : arch.attackStyle === 'minotaur' ? 0xdc2626 : 0xf97316;
       enemy.telegraph.circle(0, 0, r)
-        .fill({ color: 0xf97316, alpha: 0.15 + pulse * 0.12 })
-        .stroke({ width: 2, color: 0xfb923c, alpha: 0.9 });
+        .fill({ color: col, alpha: 0.12 + pulse * 0.1 })
+        .stroke({ width: 2, color: col, alpha: 0.85 });
+    } else {
+      // Attaques classiques / projectiles : simple halo discret autour du monstre sans encombrer le sol
+      const glowCol = arch.attackStyle === 'venom_spit' || arch.attackStyle === 'hydra' ? 0x4ade80 : arch.attackStyle === 'ranged_fan' ? 0x38bdf8 : 0xfacc15;
+      enemy.telegraph.circle(0, 0, arch.radius + 5 + pulse * 4)
+        .stroke({ width: 2, color: glowCol, alpha: 0.45 + pulse * 0.45 });
     }
   } else {
     enemy.telegraph.visible = false;
