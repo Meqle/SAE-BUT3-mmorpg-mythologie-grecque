@@ -1,56 +1,199 @@
-// ecran de jeu : assemble PixiJS, le clavier, le reseau et le HUD
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Application, Container } from 'pixi.js';
-import { GodAffinity, GODS_LORE, MAPS, portalAt, ServerInfo, SPAWN_POINT, stepMovement, ViewMode } from '@greek-myth/shared';
+import { GODS_LORE, ServerInfo, ViewMode } from '@greek-myth/shared';
 import { placeLayer, View, viewAround } from '../../game/camera';
+import { DIVINE_SKILLS, HERO_CLASSES } from '../../game/data/classes';
+import { ITEMS, RARITY_HEX, RARITY_LABEL } from '../../game/data/items';
+import { rollMonsterLoot } from '../../game/data/loot';
+import { getUnlockedActiveSkills } from '../../game/data/skillTrees';
+import { NPCS } from '../../game/data/story';
+import { stepZoneMovement, ZoneDefinition, ZoneId, zonePortalAt, ZONES } from '../../game/data/zones';
+import { sound } from '../../game/audio';
 import { createDust } from '../../game/effects';
+import { createCombatFxLayer, createInteractableSprite, InteractableSprite } from '../../game/entities/combat';
+import { createEnemyEntity, ENEMY_ARCHETYPES, EnemyEntity, redrawEnemyHp, updateEnemyVisual } from '../../game/entities/enemies';
+import { createNpcSprite, NpcSprite } from '../../game/entities/npcs';
 import { createKeyboard } from '../../game/input';
-import { useScreen } from '../../game/useScreen';
 import { connect } from '../../game/network';
 import { createHero, hexColor, HeroSprite, stackLabels } from '../../game/players';
+import { createZoneScene, Scene } from '../../game/scenes';
 import { COLORS, css } from '../../game/scenes/palette';
-import { createScene, Scene } from '../../game/scenes';
-import { Hud } from './Hud';
+import { GameSettings, loadSettings, saveSettings } from '../../game/settings';
+import {
+  acceptQuest,
+  addItemToState,
+  completeQuest,
+  consumeItem,
+  craftRecipe,
+  equipItem,
+  GameProgressState,
+  getComputedStats,
+  getNpcBadge,
+  grantXp,
+  markZoneDiscovered,
+  NpcDialogueView,
+  recordBestiaryKill,
+  recordQuestEvent,
+  recordZoneKill,
+  resetSkills,
+  resolveNpcDialogue,
+  saveGameState,
+  sellItem,
+  upgradeSkill,
+  xpRequiredForLevel
+} from '../../game/state/gameState';
+import { useScreen } from '../../game/useScreen';
+import { PrologueOverlay } from '../Story/PrologueOverlay';
+import { DialogueModal } from './DialogueModal';
+import { BossHudInfo, Hud } from './Hud';
+import { CraftStationMode, InventoryModal, ModalTab } from './InventoryModal';
+import { MinimapMarker } from './Minimap';
+import { PauseMenuModal } from './PauseMenuModal';
 import { TouchControls } from './TouchControls';
+import { WorldMapModal } from './WorldMapModal';
 
 interface GameCanvasProps {
   server: ServerInfo;
-  god: GodAffinity;
-  heroName: string;
+  initialState: GameProgressState;
   onLeave: () => void;
 }
 
-const INPUT_INTERVAL_MS = 50; // envoi des touches 20 fois par seconde
+const INPUT_INTERVAL_MS = 50;
 
-export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) {
+export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const screen = useScreen();
-  const [viewMode, setViewMode] = useState<ViewMode>('top-down');
+
+  const stateRef = useRef<GameProgressState>(JSON.parse(JSON.stringify(initialState)) as GameProgressState);
+  const [uiState, setUiState] = useState<GameProgressState>(() => JSON.parse(JSON.stringify(initialState)) as GameProgressState);
+  const [settings, setSettings] = useState<GameSettings>(() => loadSettings());
+  const settingsRef = useRef<GameSettings>(settings);
+  settingsRef.current = settings;
+
+  const [showPrologue, setShowPrologue] = useState(!initialState.prologueSeen);
+  const [pauseOpen, setPauseOpen] = useState(false);
+  const [worldMapOpen, setWorldMapOpen] = useState(false);
   const [status, setStatus] = useState('Connexion…');
-  const [fps, setFps] = useState(60);
-  const [coords, setCoords] = useState({ x: 0, y: 0 });
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [dialogue, setDialogue] = useState<NpcDialogueView | null>(null);
+  const [modalTab, setModalTab] = useState<ModalTab | null>(null);
+  const [craftStation, setCraftStation] = useState<CraftStationMode>('pocket');
+  const [interactPrompt, setInteractPrompt] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const [zoneBanner, setZoneBanner] = useState(true);
+  const [specialCd, setSpecialCd] = useState(0);
+  const [dashCd, setDashCd] = useState(0);
+  const [activeSkillCds, setActiveSkillCds] = useState<Record<string, number>>({});
+  const [bossInfo, setBossInfo] = useState<BossHudInfo | null>(null);
+  const [minimapMarkers, setMinimapMarkers] = useState<MinimapMarker[]>([]);
 
-  // le ticker PixiJS lit la vue via une ref (pas de re-rendu React a chaque image)
-  const viewModeRef = useRef<ViewMode>('top-down');
-  viewModeRef.current = viewMode;
-  const connectionRef = useRef<ReturnType<typeof connect> | null>(null);
+  const pausedRef = useRef(false);
+  const toastTimerRef = useRef<number | null>(null);
+  const bannerTimerRef = useRef<number | null>(null);
+  const keyboardRef = useRef<ReturnType<typeof createKeyboard> | null>(null);
+  const actionsRef = useRef<{
+    attack: (angle?: number) => void;
+    special: () => void;
+    dash: () => void;
+    potion: (itemId?: string) => void;
+    interact: () => void;
+    refreshNpcBadges: () => void;
+    travelToZone: (zoneId: ZoneId) => void;
+    castActiveSkill: (skillId: string) => void;
+  } | null>(null);
 
-  const godLore = GODS_LORE[god];
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 2800);
+  }, []);
+
+  const flashZoneBanner = useCallback(() => {
+    setZoneBanner(true);
+    if (bannerTimerRef.current) window.clearTimeout(bannerTimerRef.current);
+    bannerTimerRef.current = window.setTimeout(() => setZoneBanner(false), 2600);
+  }, []);
+
+  const syncUi = useCallback((persist = false) => {
+    const snapshot = JSON.parse(JSON.stringify(stateRef.current)) as GameProgressState;
+    setUiState(snapshot);
+    if (persist) saveGameState(stateRef.current);
+    actionsRef.current?.refreshNpcBadges();
+  }, []);
+
+  const handleSettingsChange = useCallback((next: GameSettings) => {
+    setSettings(next);
+    settingsRef.current = next;
+    saveSettings(next);
+    keyboardRef.current?.updateSettings(next);
+    sound.setEnabled(next.soundEnabled);
+  }, []);
+
+  const modalOpen = showPrologue || pauseOpen || worldMapOpen || dialogue !== null || modalTab !== null;
+  pausedRef.current = showPrologue || pauseOpen || worldMapOpen;
+
+  useEffect(() => {
+    keyboardRef.current?.setBlocked(modalOpen);
+  }, [modalOpen]);
+
+  useEffect(() => {
+    const onGlobalKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.code === 'Escape') {
+        if (showPrologue) {
+          stateRef.current.prologueSeen = true;
+          saveGameState(stateRef.current);
+          setShowPrologue(false);
+        } else if (dialogue) {
+          setDialogue(null);
+        } else if (worldMapOpen) {
+          setWorldMapOpen(false);
+        } else if (modalTab) {
+          setModalTab(null);
+        } else {
+          setPauseOpen((p) => !p);
+        }
+        return;
+      }
+      if (showPrologue || pauseOpen || dialogue) return;
+      const keys = settingsRef.current.keys;
+      if (e.code === keys.inventory.code) { setCraftStation('pocket'); setModalTab((prev) => (prev === 'inventory' ? null : 'inventory')); }
+      if (e.code === keys.quests.code) setModalTab((prev) => (prev === 'quests' ? null : 'quests'));
+      if (e.code === keys.codex.code) setModalTab((prev) => (prev === 'codex' ? null : 'codex'));
+      if (e.code === 'KeyT') setModalTab((prev) => (prev === 'talents' ? null : 'talents'));
+      if (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3' || e.code === 'Digit4') {
+        const idx = Number(e.code.replace('Digit', '')) - 1;
+        const unlocked = getUnlockedActiveSkills(stateRef.current.heroClass, stateRef.current.god, stateRef.current.unlockedSkills);
+        if (unlocked[idx]) actionsRef.current?.castActiveSkill(unlocked[idx].id);
+      }
+      if (e.code === keys.map.code || (keys.map.code === 'KeyM' && e.key.toLowerCase() === 'm')) { setModalTab(null); setWorldMapOpen((prev) => !prev); }
+    };
+    window.addEventListener('keydown', onGlobalKey);
+    return () => window.removeEventListener('keydown', onGlobalKey);
+  }, [showPrologue, pauseOpen, worldMapOpen, dialogue, modalTab]);
 
   useEffect(() => {
     let app: Application | null = null;
     let cleanedUp = false;
 
+    const currentZone = (): ZoneDefinition => ZONES[stateRef.current.zoneId];
+    const godLore = GODS_LORE[stateRef.current.god];
+    const cls = HERO_CLASSES[stateRef.current.heroClass];
+    const skill = DIVINE_SKILLS[stateRef.current.god];
+
     const connection = connect({
       roomId: server.id,
-      username: heroName,
-      god,
-      getViewMode: () => viewModeRef.current,
+      username: stateRef.current.heroName,
+      god: stateRef.current.god,
+      getViewMode: () => currentZone().viewMode,
       onStatus: (s) => { if (!cleanedUp) setStatus(s); }
     });
-    connectionRef.current = connection;
-    const keyboard = createKeyboard();
+    sound.setEnabled(settingsRef.current.soundEnabled);
+    const keyboard = createKeyboard(settingsRef.current);
+    keyboardRef.current = keyboard;
+    keyboard.setBlocked(!stateRef.current.prologueSeen);
+
+    let lastView: View | null = null;
 
     const start = async () => {
       app = new Application();
@@ -69,42 +212,729 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
       app.canvas.style.display = 'block';
       containerRef.current.appendChild(app.canvas);
 
-      // calques : decor de la scene (derriere), joueurs + poussiere, premier plan de la scene
       const actors = new Container();
-      const entities = new Container();
+      const interactLayer = new Container();
+      const npcLayer = new Container();
+      const enemyLayer = new Container();
+      const playerLayer = new Container();
       const dust = createDust();
-      actors.addChild(entities, dust.graphics);
-      let scene: Scene = createScene(viewModeRef.current);
-      app.stage.addChild(scene.back, actors, scene.front);
+      const fx = createCombatFxLayer();
+      actors.addChild(interactLayer, npcLayer, enemyLayer, playerLayer, dust.graphics, fx.container);
 
-      // change le decor quand on passe une porte
-      const changeScene = (mode: ViewMode) => {
-        app?.stage.removeChildren();
-        scene.back.destroy({ children: true });
-        scene.front.destroy({ children: true });
-        scene = createScene(mode);
-        app?.stage.addChild(scene.back, actors, scene.front);
-      };
-
-      const hero = createHero(`${heroName} (${godLore.name})`, hexColor(godLore.color), true);
-      entities.addChild(hero.container);
+      const hero = createHero(stateRef.current.heroName, hexColor(godLore.color), true, stateRef.current.heroClass);
+      playerLayer.addChild(hero.container);
       const others = new Map<string, HeroSprite>();
 
-      const player = { x: SPAWN_POINT.x, y: SPAWN_POINT.y, vx: 0, vy: 0, isGrounded: false };
-      let hasServerPosition = false;
+      let npcs: NpcSprite[] = [];
+      let interactables: InteractableSprite[] = [];
+      let enemies: EnemyEntity[] = [];
+      let scene: Scene | null = null;
 
-      // ajoute / deplace / retire les autres joueurs selon le dernier etat serveur
+      const startZone = currentZone();
+      const player = {
+        x: startZone.defaultSpawn.x,
+        y: startZone.defaultSpawn.y,
+        vx: 0,
+        vy: 0,
+        isGrounded: true
+      };
+
+      let facingAngle = -Math.PI / 2;
+      let facingDir = 1;
+      let attackCooldown = 0;
+      let specialCooldown = 0;
+      let dashCooldown = 0;
+      let dashTimer = 0;
+      let iFrames = 0;
+      let portalLockTimer = 0;
+      let previousJump = false;
+      let comboCount = 0;
+      let hasteTimer = 0;
+      let cameraShake = 0;
+      let pendingRespawn = false;
+      let potionCooldown = 0;
+      const activeCds: Record<string, number> = {};
+      let shieldBuffTimer = 0;
+      let shieldBuffPower = 0;
+      let hasteBuffTimer = 0;
+      let sanctuaryTimer = 0;
+      let sanctuaryTick = 0;
+      let regenTimer = 0;
+
+      const refreshNpcBadges = () => {
+        for (const npc of npcs) {
+          npc.setBadge(getNpcBadge(stateRef.current, npc.npcId));
+        }
+      };
+
+      const loadZone = (zoneId: ZoneId, spawnX?: number, spawnY?: number) => {
+        stateRef.current.zoneId = zoneId;
+        markZoneDiscovered(stateRef.current, zoneId);
+        const zone = ZONES[zoneId];
+
+        setBossInfo(null);
+
+        if (scene) {
+          sound.playPortal();
+          app?.stage.removeChildren();
+          scene.back.destroy({ children: true });
+          scene.front.destroy({ children: true });
+        }
+
+        npcLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
+        interactLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
+        enemyLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
+        dust.clear();
+        fx.clear();
+
+        scene = createZoneScene(zone);
+        app?.stage.addChild(scene.back, actors, scene.front);
+
+        npcs = zone.npcs.map((n) => {
+          const sprite = createNpcSprite(n.npcId, n.x, n.y);
+          npcLayer.addChild(sprite.container);
+          return sprite;
+        });
+        refreshNpcBadges();
+
+        interactables = zone.interactables.map((inter) => {
+          const sprite = createInteractableSprite(inter);
+          interactLayer.addChild(sprite.container);
+          return sprite;
+        });
+
+        enemies = zone.spawns.map((sp) => {
+          const entity = createEnemyEntity(sp, zone.viewMode);
+          if (entity.type === 'sentinelle_poseidon') {
+            entity.shielded = stateRef.current.activatedTrialSteles.length < 3;
+            redrawEnemyHp(entity);
+          }
+          enemyLayer.addChild(entity.container);
+          return entity;
+        });
+
+        player.x = spawnX ?? zone.defaultSpawn.x;
+        player.y = spawnY ?? zone.defaultSpawn.y;
+        player.vx = 0;
+        player.vy = 0;
+        lastView = null;
+        portalLockTimer = 0.65;
+
+        const readyQuests = recordQuestEvent(stateRef.current, 'enter_zone', zoneId);
+        if (readyQuests.length > 0) showToast(`Objectif accompli : ${readyQuests[0]}`);
+        flashZoneBanner();
+        syncUi(true);
+      };
+
+      const damageEnemy = (enemy: EnemyEntity, rawDamage: number, isCrit = false, stunSec = 0) => {
+        if (!enemy.alive) return;
+        let dmg = rawDamage;
+        if (enemy.shielded) {
+          dmg = Math.max(2, Math.round(rawDamage * 0.15));
+          if (settingsRef.current.showDamageNumbers) {
+            fx.spawnText(enemy.x, enemy.y - 42, `Bouclier -${dmg}`, COLORS.sky, 11);
+          }
+        } else if (settingsRef.current.showDamageNumbers) {
+          fx.spawnText(enemy.x, enemy.y - 26, isCrit ? `CRIT -${dmg}` : `-${dmg}`, isCrit ? COLORS.gold : 0xfff1f2, isCrit ? 15 : 13);
+        }
+        enemy.hp = Math.max(0, enemy.hp - dmg);
+        enemy.hitFlash = 0.15;
+        sound.playHit(isCrit);
+        cameraShake = Math.max(cameraShake, isCrit ? 4.5 : 2.2);
+        if (isCrit && stateRef.current.heroClass === 'ASSASSIN') hasteTimer = 1.5;
+        if (stunSec > 0 && !enemy.shielded) enemy.stunTimer = Math.max(enemy.stunTimer, stunSec);
+        redrawEnemyHp(enemy);
+
+        if (enemy.hp <= 0) {
+          enemy.alive = false;
+          enemy.respawnTimer = enemy.respawnSeconds;
+          enemy.container.visible = false;
+          const arch = ENEMY_ARCHETYPES[enemy.type];
+          dust.burst(enemy.x, enemy.y);
+
+          stateRef.current.gold += arch.goldReward;
+          const { leveledUp, newLevel } = grantXp(stateRef.current, arch.xpReward);
+          if (settingsRef.current.showDamageNumbers) {
+            fx.spawnText(enemy.x, enemy.y - 12, `+${arch.xpReward} XP  +${arch.goldReward}g`, COLORS.gold, 12);
+          }
+
+          if (arch.isBoss) {
+            setBossInfo(null);
+            if (!stateRef.current.defeatedBosses.includes(enemy.type)) {
+              stateRef.current.defeatedBosses.push(enemy.type);
+            }
+          }
+
+          recordBestiaryKill(stateRef.current, enemy.type);
+          const killsInZone = recordZoneKill(stateRef.current, stateRef.current.zoneId);
+          const curStats = getComputedStats(stateRef.current);
+          if (curStats.lifeOnKill > 0 && stateRef.current.hp > 0) {
+            stateRef.current.hp = Math.min(curStats.maxHp, stateRef.current.hp + curStats.lifeOnKill);
+            if (settingsRef.current.showDamageNumbers) {
+              fx.spawnText(player.x, player.y - 26, `+${curStats.lifeOnKill} PV`, 0x4ade80, 11);
+            }
+          }
+          // Verifier si un coffre scelle dans la zone vient de se deverrouiller
+          for (const inter of interactables) {
+            const seal = inter.def.seal;
+            if (!seal || stateRef.current.collectedInteractables.includes(inter.def.id)) continue;
+            const currentCount = seal.enemyType
+              ? (stateRef.current.bestiaryKills?.[seal.enemyType] ?? 0)
+              : killsInZone;
+            if (currentCount === seal.requiredKills && (!seal.enemyType || seal.enemyType === enemy.type)) {
+              sound.playQuest();
+              showToast(`Un sceau antique s'est brisé : ${inter.def.label} déverrouillé !`);
+            }
+          }
+          const readyQuests = recordQuestEvent(stateRef.current, 'kill', enemy.type);
+          const lootDrops = rollMonsterLoot(enemy.type);
+          if (lootDrops.length > 0) {
+            let bestRarity: 'commun' | 'rare' | 'epique' | 'legendaire' = 'commun';
+            const rank = { commun: 0, rare: 1, epique: 2, legendaire: 3 };
+            for (const drop of lootDrops) {
+              const def = ITEMS[drop.itemId];
+              if (!def) continue;
+              fx.spawnLootDrop(enemy.x, enemy.y, def.id, def.name, def.rarity, RARITY_HEX[def.rarity]);
+              if (rank[def.rarity] > rank[bestRarity]) bestRarity = def.rarity;
+            }
+            sound.playLoot(bestRarity);
+          }
+          if (leveledUp) {
+            sound.playLevelUp();
+            fx.spawnSlash(player.x, player.y, 0, 75, COLORS.gold, 'ring');
+            showToast(`Niveau ${newLevel} atteint !`);
+          } else if (readyQuests.length > 0) {
+            showToast(`Quête prête : ${readyQuests[0]}`);
+          } else if (enemy.type === 'sentinelle_poseidon') {
+            showToast('Sentinelle de Poséidon vaincue !');
+          }
+          syncUi(true);
+        }
+      };
+
+      const damagePlayer = (amount: number, sourceX: number) => {
+        if (iFrames > 0) return;
+        const zone = currentZone();
+        if (zone.safeZone) return;
+
+        const parry = stateRef.current.god === 'ATHENA' && Math.random() < 0.18;
+        if (parry) {
+          if (settingsRef.current.showDamageNumbers) fx.spawnText(player.x, player.y - 26, 'Paré', COLORS.sky, 12);
+          iFrames = 0.35;
+          return;
+        }
+
+        const statsNow = getComputedStats(stateRef.current);
+        const totalDr = Math.min(0.82, statsNow.damageReduction + (shieldBuffTimer > 0 ? shieldBuffPower : 0));
+        const mitigated = Math.max(1, Math.round(amount * (1 - totalDr)));
+        stateRef.current.hp = Math.max(0, stateRef.current.hp - mitigated);
+        iFrames = 0.48;
+        sound.playPlayerHurt();
+        cameraShake = Math.max(cameraShake, 6.5);
+        hero.setHitFlash(true);
+        if (settingsRef.current.showDamageNumbers) {
+          fx.spawnText(player.x, player.y - 24, `-${mitigated}`, 0xf87171, 13);
+        }
+        const knockDir = player.x >= sourceX ? 1 : -1;
+        player.vx += knockDir * 165;
+
+        if (stateRef.current.hp <= 0) {
+          pendingRespawn = true;
+          return;
+        }
+        syncUi(false);
+      };
+
+      const performAttack = (overrideAngle?: number) => {
+        if (attackCooldown > 0) return;
+        const zone = currentZone();
+        const stats = getComputedStats(stateRef.current);
+        attackCooldown = cls.attackCooldown;
+        comboCount = (comboCount + 1) % 3;
+        const isFinisher = comboCount === 0;
+        hero.pulseAttack();
+        sound.playAttack(stateRef.current.heroClass === 'ARCHER' ? 'bow' : stateRef.current.heroClass === 'MAGE' ? 'magic' : stateRef.current.heroClass === 'ASSASSIN' ? 'dagger' : 'melee');
+
+        const angle =
+          overrideAngle !== undefined
+            ? overrideAngle
+            : zone.viewMode === 'side-view'
+              ? (facingDir >= 0 ? 0 : Math.PI)
+              : facingAngle;
+
+        facingAngle = angle;
+        facingDir = Math.cos(angle) >= 0 ? 1 : -1;
+        hero.face(facingDir);
+        if (zone.viewMode === 'top-down') hero.aimAngle(angle);
+
+        if (cls.isRanged) {
+          const speed = cls.projectileSpeed;
+          const offsets = stateRef.current.heroClass === 'ARCHER' && isFinisher ? [-0.09, 0.09] : [0];
+          for (const off of offsets) {
+            const a = angle + off;
+            fx.spawnProjectile({
+              x: player.x + Math.cos(a) * 16,
+              y: player.y + Math.sin(a) * 16,
+              vx: Math.cos(a) * speed,
+              vy: Math.sin(a) * speed,
+              damage: Math.round(stats.attack * (isFinisher && stateRef.current.heroClass === 'MAGE' ? 1.25 : 1)),
+              radius: stateRef.current.heroClass === 'MAGE' ? (isFinisher ? 9 : 7) : 5,
+              fromPlayer: true,
+              life: cls.attackRange / speed,
+              color: stateRef.current.heroClass === 'MAGE' ? hexColor(godLore.color) : COLORS.gold,
+              style: stateRef.current.heroClass === 'ARCHER' ? 'arrow' : 'orb'
+            });
+          }
+          return;
+        }
+
+        if (stateRef.current.heroClass === 'ASSASSIN') {
+          // Assassin : double entaille rapide en croix + micro-pas vers l'avant + rafale triple au 3e coup
+          const isCrit = isFinisher || Math.random() < stats.critChance + 0.14;
+          const range = cls.attackRange + (isFinisher ? 10 : 0);
+          const dmg = Math.round(stats.attack * (isFinisher ? 1.48 : isCrit ? 1.38 : 0.86));
+          player.vx += Math.cos(angle) * 110;
+          player.vy += Math.sin(angle) * 110;
+          const slashCol = isFinisher ? 0xe879f9 : 0xc084fc;
+          const sideSign = comboCount % 2 === 0 ? 1 : -1;
+          fx.spawnSlash(player.x, player.y, angle + sideSign * 0.28, range, slashCol, 'arc');
+          if (isFinisher) {
+            fx.spawnSlash(player.x, player.y, angle - sideSign * 0.28, range + 8, 0xf8fafc, 'arc');
+            hasteBuffTimer = Math.max(hasteBuffTimer, 1.4);
+          }
+          for (const enemy of enemies) {
+            if (!enemy.alive) continue;
+            const arch = ENEMY_ARCHETYPES[enemy.type];
+            const dx = enemy.x - player.x;
+            const dy = enemy.y - player.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > range + arch.radius) continue;
+            const dirAngle = Math.atan2(dy, dx);
+            const diff = Math.abs(Math.atan2(Math.sin(dirAngle - angle), Math.cos(dirAngle - angle)));
+            if (dist < arch.radius + 22 || diff < 0.95) {
+              damageEnemy(enemy, dmg, isCrit, 0.08);
+            }
+          }
+        } else {
+          // Guerrier : grand balayage lourd de lance avec recul + onde de choc 360 au 3e coup
+          const isCrit = isFinisher || Math.random() < stats.critChance;
+          const range = cls.attackRange + (isFinisher ? 18 : 0);
+          const dmg = Math.round(stats.attack * (isFinisher ? 1.45 : isCrit ? 1.32 : 1.05));
+          if (isFinisher) {
+            cameraShake = Math.max(cameraShake, 4.5);
+            fx.spawnSlash(player.x, player.y, 0, range, COLORS.gold, 'ring');
+          } else {
+            fx.spawnSlash(player.x, player.y, angle, range, hexColor(cls.accentColor), 'arc');
+          }
+          for (const enemy of enemies) {
+            if (!enemy.alive) continue;
+            const arch = ENEMY_ARCHETYPES[enemy.type];
+            const dx = enemy.x - player.x;
+            const dy = enemy.y - player.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist > range + arch.radius) continue;
+            const dirAngle = Math.atan2(dy, dx);
+            const diff = Math.abs(Math.atan2(Math.sin(dirAngle - angle), Math.cos(dirAngle - angle)));
+            if (isFinisher || dist < arch.radius + 26 || diff < 1.3) {
+              damageEnemy(enemy, dmg, isCrit, isFinisher ? 0.34 : 0.22);
+            }
+          }
+        }
+      };
+
+      const performSpecial = () => {
+        if (specialCooldown > 0) return;
+        const stats = getComputedStats(stateRef.current);
+        specialCooldown = skill.cooldown * stats.specialCooldownMult;
+        hero.pulseAttack();
+        sound.playSpecial();
+        cameraShake = Math.max(cameraShake, 5.5);
+        const dmg = Math.round(stats.attack * skill.damageMultiplier * stats.specialDamageMult);
+        const color = hexColor(godLore.color);
+        fx.spawnSlash(player.x, player.y, 0, skill.radius, color, stateRef.current.god === 'ZEUS' ? 'bolt' : 'ring');
+
+        let hitCount = 0;
+        for (const enemy of enemies) {
+          if (!enemy.alive) continue;
+          const arch = ENEMY_ARCHETYPES[enemy.type];
+          const dist = Math.hypot(enemy.x - player.x, enemy.y - player.y);
+          if (dist <= skill.radius + arch.radius) {
+            damageEnemy(enemy, dmg, true, stateRef.current.god === 'ZEUS' || stateRef.current.god === 'ATHENA' ? 1.1 : 0.35);
+            hitCount++;
+          }
+        }
+
+        if (skill.healRatio && (hitCount > 0 || stateRef.current.god === 'ATHENA')) {
+          const heal = Math.round(stats.maxHp * skill.healRatio);
+          stateRef.current.hp = Math.min(stats.maxHp, stateRef.current.hp + heal);
+          if (settingsRef.current.showDamageNumbers) fx.spawnText(player.x, player.y - 30, `+${heal} PV`, 0x4ade80, 13);
+          syncUi(false);
+        }
+      };
+
+      const performDash = () => {
+        if (dashCooldown > 0) return;
+        dashCooldown = 2.2 * getComputedStats(stateRef.current).dashCooldownMult;
+        dashTimer = 0.22;
+        sound.playDash();
+        iFrames = Math.max(iFrames, 0.35);
+        dust.burst(player.x, player.y + 10);
+      };
+
+      const performPotion = (preferredId?: string) => {
+        const stats = getComputedStats(stateRef.current);
+        if (stateRef.current.hp >= stats.maxHp) return;
+        const itemId = preferredId ?? (
+          stateRef.current.inventory.some((s) => s.itemId === 'potion_ambroisie')
+            ? 'potion_ambroisie'
+            : 'nectar_divin'
+        );
+        const item = ITEMS[itemId];
+        if (!item?.healAmount || !consumeItem(stateRef.current, itemId)) {
+          showToast('Aucune potion disponible.');
+          return;
+        }
+        const heal = Math.round(stats.maxHp * item.healAmount);
+        stateRef.current.hp = Math.min(stats.maxHp, stateRef.current.hp + heal);
+        sound.playHeal();
+        if (settingsRef.current.showDamageNumbers) fx.spawnText(player.x, player.y - 26, `+${heal} PV`, 0x4ade80, 14);
+        syncUi(true);
+      };
+
+      const findNearestInteraction = (): { kind: 'npc'; npcId: string; label: string } | { kind: 'obj'; sprite: InteractableSprite; label: string } | null => {
+        let bestDist = 66;
+        let bestNpc: string | null = null;
+        for (const npc of npcs) {
+          const d = Math.hypot(npc.x - player.x, npc.y - player.y);
+          if (d < bestDist) {
+            bestDist = d;
+            bestNpc = npc.npcId;
+          }
+        }
+        if (bestNpc) {
+          const def = NPCS[bestNpc];
+          return { kind: 'npc', npcId: bestNpc, label: `Parler à ${def.name}` };
+        }
+
+        for (const sprite of interactables) {
+          const def = sprite.def;
+          const isDone = def.kind === 'trial_stele'
+            ? stateRef.current.activatedTrialSteles.includes(def.id)
+            : stateRef.current.collectedInteractables.includes(def.id);
+          if (isDone) continue;
+          const d = Math.hypot(def.x - player.x, def.y - player.y);
+          if (d <= def.radius + 16) {
+            return { kind: 'obj', sprite, label: def.label };
+          }
+        }
+        return null;
+      };
+
+      const castActiveSkill = (skillId: string) => {
+        const unlocked = getUnlockedActiveSkills(stateRef.current.heroClass, stateRef.current.god, stateRef.current.unlockedSkills);
+        const sk = unlocked.find((s) => s.id === skillId);
+        if (!sk || (activeCds[sk.id] ?? 0) > 0) return;
+
+        const stats = getComputedStats(stateRef.current);
+        activeCds[sk.id] = sk.cooldown * stats.specialCooldownMult;
+        const col = hexColor(sk.color);
+        hero.pulseAttack();
+        sound.playSpecial();
+
+        const eff = sk.effect;
+        if (eff === 'tank_taunt') {
+          shieldBuffTimer = 5;
+          shieldBuffPower = 0.3;
+          fx.spawnSlash(player.x, player.y, 0, 145, col, 'ring');
+          fx.spawnText(player.x, player.y - 28, 'Provocation !', col, 12);
+          for (const e of enemies) {
+            if (!e.alive) continue;
+            if (Math.hypot(e.x - player.x, e.y - player.y) <= 155) {
+              damageEnemy(e, Math.round(stats.attack * 1.1), false, 1.1);
+            }
+          }
+        } else if (eff === 'tank_shield_wall' || eff === 'divine_ath_aegis') {
+          shieldBuffTimer = eff === 'tank_shield_wall' ? 4.5 : 5;
+          shieldBuffPower = eff === 'tank_shield_wall' ? 0.6 : 0.55;
+          fx.spawnSlash(player.x, player.y, 0, 110, col, 'ring');
+          if (eff === 'divine_ath_aegis') {
+            const h = Math.round(stats.maxHp * 0.2 * stats.healPowerMult);
+            stateRef.current.hp = Math.min(stats.maxHp, stateRef.current.hp + h);
+            fx.spawnText(player.x, player.y - 28, `+${h} PV • Égide`, 0x4ade80, 12);
+          } else {
+            fx.spawnText(player.x, player.y - 28, 'Mur de Bouclier !', col, 12);
+          }
+        } else if (eff === 'tank_fortress') {
+          shieldBuffTimer = 6;
+          shieldBuffPower = 0.5;
+          const h = Math.round(stats.maxHp * 0.35 * stats.healPowerMult);
+          stateRef.current.hp = Math.min(stats.maxHp, stateRef.current.hp + h);
+          fx.spawnSlash(player.x, player.y, 0, 160, col, 'ring');
+          fx.spawnText(player.x, player.y - 28, `+${h} PV • Forteresse`, col, 13);
+        } else if (eff === 'heal_light' || eff === 'heal_revive_grace' || eff === 'divine_apo_hymn') {
+          const ratio = eff === 'heal_revive_grace' ? 0.65 : eff === 'heal_light' ? 0.3 : 0.28;
+          const h = Math.round(stats.maxHp * ratio * stats.healPowerMult);
+          stateRef.current.hp = Math.min(stats.maxHp, stateRef.current.hp + h);
+          if (eff === 'heal_revive_grace') { shieldBuffTimer = 5; shieldBuffPower = 0.35; }
+          sound.playHeal();
+          fx.spawnSlash(player.x, player.y, 0, 135, col, 'ring');
+          fx.spawnText(player.x, player.y - 28, `+${h} PV`, 0x4ade80, 13);
+          if (eff === 'divine_apo_hymn') {
+            for (const e of enemies) {
+              if (e.alive && Math.hypot(e.x - player.x, e.y - player.y) <= 145) damageEnemy(e, Math.round(stats.attack * 1.6), true, 0.3);
+            }
+          }
+        } else if (eff === 'heal_sanctuary') {
+          sanctuaryTimer = 5;
+          sanctuaryTick = 0;
+          sound.playHeal();
+          fx.spawnSlash(player.x, player.y, 0, 145, col, 'ring');
+          fx.spawnText(player.x, player.y - 28, 'Sanctuaire actif !', 0x4ade80, 12);
+        } else if (eff === 'dps_arrow_rain' || eff === 'dps_artemis_storm') {
+          const angles = eff === 'dps_arrow_rain'
+            ? [-0.36, -0.18, 0, 0.18, 0.36].map((o) => facingAngle + o)
+            : Array.from({ length: 12 }, (_, k) => (k / 12) * Math.PI * 2);
+          for (const ang of angles) {
+            fx.spawnProjectile({
+              x: player.x, y: player.y,
+              vx: Math.cos(ang) * 430, vy: Math.sin(ang) * 430,
+              damage: Math.round(stats.attack * (eff === 'dps_artemis_storm' ? 1.55 : 1.15)),
+              radius: 7, fromPlayer: true, life: 1.1, color: col, style: 'arrow', piercing: true
+            });
+          }
+        } else if (eff === 'dps_piercing_mark') {
+          fx.spawnProjectile({
+            x: player.x, y: player.y,
+            vx: Math.cos(facingAngle) * 560, vy: Math.sin(facingAngle) * 560,
+            damage: Math.round(stats.attack * 2.8),
+            radius: 10, fromPlayer: true, life: 1.2, color: col, style: 'arrow', piercing: true
+          });
+        } else if (eff === 'dps_shadow_step') {
+          player.vx += Math.cos(facingAngle) * 520;
+          player.vy += Math.sin(facingAngle) * 520;
+          iFrames = Math.max(iFrames, 0.4);
+          fx.spawnSlash(player.x, player.y, facingAngle, 120, col, 'arc');
+          for (const e of enemies) {
+            if (e.alive && Math.hypot(e.x - player.x, e.y - player.y) <= 135) damageEnemy(e, Math.round(stats.attack * 2.2), true, 0.25);
+          }
+        } else if (eff === 'dps_venom_spin' || eff === 'dps_styx_execute') {
+          const mult = eff === 'dps_styx_execute' ? 3.6 : 2.3;
+          if (eff === 'dps_styx_execute') dashCooldown = 0;
+          cameraShake = Math.max(cameraShake, 6);
+          fx.spawnSlash(player.x, player.y, 0, 130, col, 'ring');
+          for (const e of enemies) {
+            if (e.alive && Math.hypot(e.x - player.x, e.y - player.y) <= 140) damageEnemy(e, Math.round(stats.attack * mult), true, 0.3);
+          }
+        } else if (eff === 'war_brutal' || eff === 'war_whirlwind' || eff === 'war_execute') {
+          const mult = eff === 'war_execute' ? 3.8 : eff === 'war_whirlwind' ? 2.5 : 2.1;
+          const r = eff === 'war_whirlwind' ? 145 : 120;
+          cameraShake = Math.max(cameraShake, eff === 'war_execute' ? 7 : 5);
+          fx.spawnSlash(player.x, player.y, facingAngle, r, col, eff === 'war_whirlwind' ? 'ring' : 'arc');
+          for (const e of enemies) {
+            if (e.alive && Math.hypot(e.x - player.x, e.y - player.y) <= r + 15) {
+              damageEnemy(e, Math.round(stats.attack * mult), true, 0.4);
+            }
+          }
+        } else if (eff === 'mage_bolt') {
+          fx.spawnProjectile({
+            x: player.x, y: player.y,
+            vx: Math.cos(facingAngle) * 480, vy: Math.sin(facingAngle) * 480,
+            damage: Math.round(stats.attack * 2.1), radius: 10, fromPlayer: true, life: 1.2, color: col, style: 'orb', piercing: true
+          });
+        } else if (eff === 'mage_meteor' || eff === 'mage_cataclysm') {
+          const mult = eff === 'mage_cataclysm' ? 3.8 : 2.8;
+          const r = eff === 'mage_cataclysm' ? 170 : 140;
+          cameraShake = Math.max(cameraShake, 6.5);
+          fx.spawnSlash(player.x, player.y, 0, r, col, 'ring');
+          for (const e of enemies) {
+            if (e.alive && Math.hypot(e.x - player.x, e.y - player.y) <= r + 15) {
+              damageEnemy(e, Math.round(stats.attack * mult), true, 0.45);
+            }
+          }
+        } else if (eff === 'dps_hunter_mark' || eff === 'dps_apollo_arrow') {
+          const mult = eff === 'dps_apollo_arrow' ? 4.0 : 2.6;
+          hasteBuffTimer = Math.max(hasteBuffTimer, 3.5);
+          fx.spawnProjectile({
+            x: player.x, y: player.y,
+            vx: Math.cos(facingAngle) * 580, vy: Math.sin(facingAngle) * 580,
+            damage: Math.round(stats.attack * mult), radius: 11, fromPlayer: true, life: 1.3, color: col, style: 'arrow', piercing: true
+          });
+        } else if (eff === 'dps_explosive' || eff === 'dps_venom_blades' || eff === 'dps_viper_swarm') {
+          const angles = eff === 'dps_viper_swarm'
+            ? Array.from({ length: 10 }, (_, k) => (k / 10) * Math.PI * 2)
+            : [-0.24, 0, 0.24].map((o) => facingAngle + o);
+          for (const ang of angles) {
+            fx.spawnProjectile({
+              x: player.x, y: player.y,
+              vx: Math.cos(ang) * 430, vy: Math.sin(ang) * 430,
+              damage: Math.round(stats.attack * (eff === 'dps_explosive' ? 1.65 : 1.35)),
+              radius: 8, fromPlayer: true, life: 1.0, color: col, style: eff === 'dps_explosive' ? 'fireball' : 'venom', piercing: true
+            });
+          }
+        } else if (eff === 'dps_backstab') {
+          player.vx += Math.cos(facingAngle) * 320;
+          player.vy += Math.sin(facingAngle) * 320;
+          fx.spawnSlash(player.x, player.y, facingAngle + 0.25, 95, col, 'arc');
+          fx.spawnSlash(player.x, player.y, facingAngle - 0.25, 95, 0xf8fafc, 'arc');
+          for (const e of enemies) {
+            if (e.alive && Math.hypot(e.x - player.x, e.y - player.y) <= 110) damageEnemy(e, Math.round(stats.attack * 2.6), true, 0.3);
+          }
+                } else {
+          // Pouvoirs actifs de Faction Divine (Zeus, Poseidon, Hades, Athena, Ares, Apollo)
+          const mult = eff.includes('tempest') || eff.includes('rampage') || eff.includes('maelstrom') || eff.includes('legion') || eff.includes('spear') || eff.includes('nova') ? 3.2 : 2.1;
+          cameraShake = Math.max(cameraShake, 6);
+          fx.spawnSlash(player.x, player.y, 0, 155, col, eff.includes('zeus') ? 'bolt' : 'ring');
+          if (eff === 'divine_ares_warcry') hasteBuffTimer = 5;
+          if (eff === 'divine_pos_geyser') { shieldBuffTimer = 4; shieldBuffPower = 0.3; }
+          let hits = 0;
+          for (const e of enemies) {
+            if (!e.alive) continue;
+            if (Math.hypot(e.x - player.x, e.y - player.y) <= 165) {
+              damageEnemy(e, Math.round(stats.attack * mult * stats.specialDamageMult), true, eff.includes('zeus') || eff.includes('spear') ? 1.2 : 0.35);
+              hits++;
+            }
+          }
+          if (eff === 'divine_pos_geyser' || eff === 'divine_pos_maelstrom' || eff === 'divine_apo_nova' || ((eff === 'divine_had_pact' || eff === 'divine_had_legion') && hits > 0)) {
+            const h = Math.round(stats.maxHp * 0.28 * stats.healPowerMult);
+            stateRef.current.hp = Math.min(stats.maxHp, stateRef.current.hp + h);
+            sound.playHeal();
+            fx.spawnText(player.x, player.y - 28, `+${h} PV`, 0x4ade80, 12);
+          }
+        }
+        syncUi(false);
+      };
+
+      const performInteract = () => {
+        const nearest = findNearestInteraction();
+        if (!nearest) return;
+
+        if (nearest.kind === 'npc') {
+          setDialogue(resolveNpcDialogue(stateRef.current, nearest.npcId));
+          return;
+        }
+
+        const def = nearest.sprite.def;
+        if (def.kind === 'workbench') {
+          setCraftStation(def.targetId === 'craft_alchimie' ? 'alchimie' : 'forge');
+          setModalTab('craft');
+          return;
+        }
+        if (def.kind === 'trial_stele') {
+          if (!stateRef.current.activatedTrialSteles.includes(def.id)) {
+            stateRef.current.activatedTrialSteles.push(def.id);
+            sound.playQuest();
+            cameraShake = Math.max(cameraShake, 4.5);
+            fx.spawnSlash(def.x, def.y - 16, 0, 68, COLORS.gold, 'ring');
+            const count = stateRef.current.activatedTrialSteles.length;
+            const ready = recordQuestEvent(stateRef.current, 'interact', def.targetId);
+            if (count >= 3) {
+              for (const enemy of enemies) {
+                if (enemy.type === 'sentinelle_poseidon') {
+                  enemy.shielded = false;
+                  redrawEnemyHp(enemy);
+                  fx.spawnSlash(enemy.x, enemy.y - 18, 0, 110, 0x7dd3fc, 'ring');
+                }
+              }
+              showToast('Le bouclier divin de la Sentinelle est brisé !');
+            } else {
+              showToast(`Stèle activée (${count}/3)`);
+            }
+            if (ready.length > 0) showToast(`Objectif accompli : ${ready[0]}`);
+            syncUi(true);
+          }
+          return;
+        }
+
+        if (def.questId && stateRef.current.quests[def.questId]?.status === 'available') {
+          showToast("Parlez d'abord au donneur de quête dans la cité.");
+          return;
+        }
+
+        if (def.seal && !stateRef.current.collectedInteractables.includes(def.id)) {
+          const curKills = def.seal.enemyType
+            ? (stateRef.current.bestiaryKills?.[def.seal.enemyType] ?? 0)
+            : (stateRef.current.zoneKillCounts?.[def.seal.zoneId] ?? 0);
+          if (curKills < def.seal.requiredKills) {
+            showToast(`${def.seal.hint} (${curKills}/${def.seal.requiredKills})`);
+            return;
+          }
+        }
+        if (!stateRef.current.collectedInteractables.includes(def.id)) {
+          stateRef.current.collectedInteractables.push(def.id);
+          if (def.kind === 'chest') {
+            const goldLoot = stateRef.current.zoneId === 'marecages' ? 38 : stateRef.current.zoneId === 'labyrinthe' ? 32 : stateRef.current.zoneId === 'sanctuaire' ? 24 : 16;
+            const bonusItem = stateRef.current.zoneId === 'labyrinthe' || stateRef.current.zoneId === 'marecages' ? 'nectar_divin' : 'potion_ambroisie';
+            stateRef.current.gold += goldLoot;
+            addItemToState(stateRef.current, bonusItem, 1);
+            sound.playChest();
+            fx.spawnSlash(def.x, def.y, 0, 56, COLORS.gold, 'ring');
+            showToast(`Coffre ouvert : +${goldLoot} drachmes & ${ITEMS[bonusItem].name}`);
+            syncUi(true);
+            return;
+          }
+          sound.playQuest();
+          if (def.kind === 'bronze') addItemToState(stateRef.current, 'fragment_bronze', 1);
+          if (def.kind === 'herb') addItemToState(stateRef.current, 'herbe_ambroisie', 1);
+          fx.spawnSlash(def.x, def.y, 0, 52, COLORS.gold, 'ring');
+          const ready = recordQuestEvent(stateRef.current, 'interact', def.targetId);
+          showToast(ready.length > 0 ? `Quête prête : ${ready[0]}` : `${def.label} récupéré`);
+          syncUi(true);
+        }
+      };
+
+      actionsRef.current = {
+        attack: performAttack,
+        special: performSpecial,
+        dash: performDash,
+        potion: performPotion,
+        interact: performInteract,
+        refreshNpcBadges,
+        castActiveSkill,
+        travelToZone: (targetZone: ZoneId) => {
+          if (stateRef.current.zoneId !== targetZone) {
+            const dest = ZONES[targetZone];
+            loadZone(targetZone, dest.defaultSpawn.x, dest.defaultSpawn.y);
+            showToast(`Voyage rapide : ${dest.name}`);
+          }
+        }
+      };
+
+      const onPointerDown = (e: PointerEvent) => {
+        if (pausedRef.current || e.target !== app?.canvas) return;
+        const mouseCode = `Mouse${e.button}`;
+        const keys = settingsRef.current.keys;
+        if (mouseCode === keys.special.code || (keys.special.code !== 'Mouse0' && e.button === 2)) {
+          performSpecial();
+          return;
+        }
+        if ((mouseCode === keys.attack.code || (keys.attack.code !== 'Mouse2' && e.button === 0)) && lastView) {
+          const rect = app.canvas.getBoundingClientRect();
+          const worldX = (e.clientX - rect.left) / lastView.zoom + lastView.x;
+          const worldY = (e.clientY - rect.top) / lastView.zoom + lastView.y;
+          const angle = Math.atan2(worldY - player.y, worldX - player.x);
+          performAttack(angle);
+        }
+      };
+      const onContextMenu = (e: MouseEvent) => e.preventDefault();
+      app.canvas.addEventListener('pointerdown', onPointerDown);
+      app.canvas.addEventListener('contextmenu', onContextMenu);
+
+      loadZone(stateRef.current.zoneId);
+
       const syncOthers = (mode: ViewMode, time: number) => {
         const myId = connection.getPlayerId();
+        const showRemotes = stateRef.current.zoneId === 'agora';
         for (const [id, state] of connection.players) {
           if (id === myId) continue;
           let other = others.get(id);
           if (!other) {
             const lore = GODS_LORE[state.god];
-            other = createHero(`${state.username} (${lore.name})`, hexColor(lore.color), false);
-            entities.addChild(other.container);
+            other = createHero(state.username, hexColor(lore.color), false);
+            playerLayer.addChild(other.container);
             others.set(id, other);
           }
+          other.container.visible = showRemotes;
+          if (!showRemotes) continue;
           const c = other.container;
           const dx = state.position.x - c.x;
           const dy = state.position.y - c.y;
@@ -122,14 +952,65 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
         stackLabels([hero, ...others.values()]);
       };
 
-      let view: View | null = null; // null = la camera saute directement au joueur (debut, portail)
       let inputTimer = 0;
-      let previousJump = false;
-      let frames = 0;
-      let lastFpsTime = performance.now();
+      let hudSyncTimer = 0;
 
       app.ticker.add((ticker) => {
-        // 1. envoi des touches au serveur
+        if (pausedRef.current) return;
+
+        const dt = Math.min(ticker.deltaMS / 1000, 0.05);
+        const time = performance.now() / 1000;
+        const zone = currentZone();
+        const mode = zone.viewMode;
+        const stats = getComputedStats(stateRef.current);
+
+        if (pendingRespawn) {
+          pendingRespawn = false;
+          const goldLost = Math.floor(stateRef.current.gold * 0.15);
+          const xpLost = Math.min(stateRef.current.xp, Math.floor(xpRequiredForLevel(stateRef.current.level) * 0.25));
+          stateRef.current.gold = Math.max(0, stateRef.current.gold - goldLost);
+          stateRef.current.xp = Math.max(0, stateRef.current.xp - xpLost);
+          const respawnStats = getComputedStats(stateRef.current);
+          stateRef.current.hp = respawnStats.maxHp;
+          iFrames = 1.2;
+          player.vx = 0;
+          player.vy = 0;
+          showToast(`Vaincu ! -${goldLost} drachmes, -${xpLost} XP. Retour à l'Agora.`);
+          loadZone('agora', ZONES.agora.defaultSpawn.x, ZONES.agora.defaultSpawn.y);
+          syncUi(true);
+          return;
+        }
+
+        attackCooldown = Math.max(0, attackCooldown - dt);
+        specialCooldown = Math.max(0, specialCooldown - dt);
+        potionCooldown = Math.max(0, potionCooldown - dt);
+        shieldBuffTimer = Math.max(0, shieldBuffTimer - dt);
+        hasteBuffTimer = Math.max(0, hasteBuffTimer - dt);
+        for (const k of Object.keys(activeCds)) {
+          if (activeCds[k] > 0) activeCds[k] = Math.max(0, activeCds[k] - dt);
+        }
+        if (sanctuaryTimer > 0) {
+          sanctuaryTimer = Math.max(0, sanctuaryTimer - dt);
+          sanctuaryTick += dt;
+          if (sanctuaryTick >= 1) {
+            sanctuaryTick = 0;
+            const h = Math.round(stats.maxHp * 0.1 * stats.healPowerMult);
+            stateRef.current.hp = Math.min(stats.maxHp, stateRef.current.hp + h);
+            fx.spawnSlash(player.x, player.y, 0, 95, 0x4ade80, 'ring');
+            fx.spawnText(player.x, player.y - 24, `+${h} PV`, 0x4ade80, 11);
+          }
+        }
+        dashCooldown = Math.max(0, dashCooldown - dt);
+        dashTimer = Math.max(0, dashTimer - dt);
+        hasteTimer = Math.max(0, hasteTimer - dt);
+        cameraShake = Math.max(0, cameraShake - dt * 18);
+        portalLockTimer = Math.max(0, portalLockTimer - dt);
+        if (iFrames > 0) {
+          iFrames = Math.max(0, iFrames - dt);
+          if (iFrames === 0) hero.setHitFlash(false);
+        }
+
+        // 1. Envoi des entrees reseau
         inputTimer += ticker.deltaMS;
         if (inputTimer >= INPUT_INTERVAL_MS) {
           inputTimer %= INPUT_INTERVAL_MS;
@@ -142,53 +1023,477 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
           });
         }
 
-        // 2. deplacement local avec collisions (shared/physics)
-        const dt = Math.min(ticker.deltaMS / 1000, 0.05);
+        // 2. Actions joueur
+        if (keyboard.consumeInteract()) performInteract();
+        if (keyboard.consumeAttack()) performAttack();
+        if (keyboard.consumeSpecial()) performSpecial();
+        if (keyboard.consumeDash()) performDash();
+        if (keyboard.consumePotion()) performPotion();
+
+        // 3. Deplacement et physique de zone
         const jump = keyboard.isJump();
         const jumpStarted = jump && !previousJump;
         const wasGrounded = player.isGrounded;
-        stepMovement(player, {
+        const speedMult = stats.speedMultiplier * (dashTimer > 0 ? 2.4 : 1) * (hasteTimer > 0 ? 1.28 : 1);
+
+        stepZoneMovement(player, {
           up: keyboard.isUp(),
           down: keyboard.isDown(),
           left: keyboard.isLeft(),
           right: keyboard.isRight(),
           jumpStarted
-        }, viewModeRef.current, dt);
-        const jumped = jumpStarted && wasGrounded;
-        const landed = !wasGrounded && player.isGrounded;
-        if (viewModeRef.current === 'side-view' && (jumped || landed)) dust.burst(player.x, player.y + 16);
+        }, zone, dt, speedMult);
+
+        // Attaque geree par Clic gauche ou touche configuree
+        if (mode === 'side-view' && ((jumpStarted && wasGrounded) || (!wasGrounded && player.isGrounded))) {
+          dust.burst(player.x, player.y + 16);
+        }
         previousJump = jump;
 
-        // 3. porte : on change de vue et on repart de l'autre cote
-        const portal = portalAt(player, viewModeRef.current);
-        if (portal) {
-          viewModeRef.current = portal.to;
-          setViewMode(portal.to);
-          Object.assign(player, { x: portal.spawnX, y: portal.spawnY, vx: 0, vy: 0 });
-          changeScene(portal.to);
-          dust.clear();
-          view = null;
+        if (Math.hypot(player.vx, player.vy) > 12) {
+          if (mode === 'top-down') facingAngle = Math.atan2(player.vy, player.vx);
+          if (Math.abs(player.vx) > 4) facingDir = Math.sign(player.vx);
         }
-        const mode = viewModeRef.current;
 
-        const playerId = connection.getPlayerId();
-        const serverPlayer = playerId ? connection.players.get(playerId) : undefined;
-        if (serverPlayer?.viewMode === mode) {
-          if (!hasServerPosition) {
-            Object.assign(player, serverPlayer.position);
-            hasServerPosition = true;
-          } else {
-            const dx = serverPlayer.position.x - player.x;
-            const dy = serverPlayer.position.y - player.y;
-            const correction = Math.hypot(dx, dy) > 64 ? 1 : 0.2;
-            player.x += dx * correction;
-            player.y += dy * correction;
+        // 4. Portails de changement de zone
+        if (portalLockTimer <= 0) {
+          const portal = zonePortalAt(player, zone);
+          if (portal) {
+            if (portal.requiredQuestCompleted && stateRef.current.quests[portal.requiredQuestCompleted]?.status !== 'completed') {
+              showToast(portal.lockedHint ?? 'Passage verrouillé.');
+              portalLockTimer = 1.6;
+              player.x += portal.x < zone.width / 2 ? 48 : -48;
+            } else {
+              loadZone(portal.toZone, portal.spawnX, portal.spawnY);
+              return;
+            }
           }
         }
 
-        // 4. personnages et poussiere
-        const time = performance.now() / 1000;
-        const moving = Math.abs(player.vx) + Math.abs(player.vy) > 0.5;
+        // 5. IA ennemis diversifiee par archetype
+        for (const enemy of enemies) {
+          const arch = ENEMY_ARCHETYPES[enemy.type];
+          if (!enemy.alive) {
+            enemy.respawnTimer -= dt;
+            if (enemy.respawnTimer <= 0) {
+              enemy.alive = true;
+              enemy.hp = enemy.maxHp;
+              enemy.x = enemy.homeX;
+              enemy.y = enemy.homeY;
+              enemy.state = 'patrol';
+              if (enemy.type === 'sentinelle_poseidon') {
+                enemy.shielded = stateRef.current.activatedTrialSteles.length < 3;
+              }
+              redrawEnemyHp(enemy);
+            }
+            continue;
+          }
+
+          enemy.hitFlash = Math.max(0, enemy.hitFlash - dt);
+          if (enemy.stunTimer > 0) {
+            enemy.stunTimer = Math.max(0, enemy.stunTimer - dt);
+            enemy.vx = 0;
+            enemy.vy = 0;
+            updateEnemyVisual(enemy, time, mode);
+            continue;
+          }
+
+          const dx = player.x - enemy.x;
+          const dy = player.y - enemy.y;
+          const dist = Math.hypot(dx, dy);
+
+          // Capacites speciales du boss Sentinelle de Poseidon
+          if (enemy.type === 'sentinelle_poseidon' && dist < 580) {
+            enemy.waveCooldown -= dt;
+            if (enemy.waveCooldown <= 0) {
+              enemy.waveCooldown = enemy.shielded ? 4.2 : 3.0;
+              const waveDir = dx >= 0 ? 1 : -1;
+              fx.spawnProjectile({
+                x: enemy.x + waveDir * 24,
+                y: 454,
+                vx: waveDir * 245,
+                vy: 0,
+                damage: 18,
+                radius: 18,
+                fromPlayer: false,
+                life: 3.4,
+                color: COLORS.seaLight,
+                style: 'wave',
+                piercing: true
+              });
+            }
+            enemy.skyCooldown -= dt;
+            if (enemy.skyCooldown <= 0) {
+              enemy.skyCooldown = enemy.shielded ? 5.6 : 4.2;
+              fx.spawnHazard(player.x, player.y, 44, 1.05, 20, COLORS.seaLight);
+            }
+          }
+
+          if (enemy.state === 'dashing') {
+            enemy.x += enemy.dashVx * dt;
+            enemy.y += enemy.dashVy * dt;
+            enemy.stateTimer -= dt;
+            dust.trail(enemy.x, enemy.y + 8);
+            if (!enemy.dashHitDone && Math.hypot(player.x - enemy.x, player.y - enemy.y) <= arch.radius + 18) {
+              enemy.dashHitDone = true;
+              damagePlayer(arch.attack, enemy.x);
+              if (pendingRespawn) break;
+            }
+            if (enemy.stateTimer <= 0) {
+              enemy.state = 'cooldown';
+              enemy.stateTimer = arch.isBoss && enemy.hp < enemy.maxHp * 0.5 ? arch.attackCooldown * 0.72 : arch.attackCooldown;
+            }
+          } else if (enemy.state === 'windup') {
+            enemy.vx = 0;
+            enemy.vy = 0;
+            enemy.stateTimer -= dt;
+            if (enemy.stateTimer <= 0) {
+              const a = enemy.aimAngle;
+              if (arch.attackStyle === 'lunge') {
+                const step = enemy.patternStep;
+                if (step === 0) {
+                  enemy.state = 'dashing';
+                  enemy.stateTimer = 0.28;
+                  enemy.dashVx = Math.cos(a) * 340;
+                  enemy.dashVy = Math.sin(a) * 340;
+                  enemy.dashHitDone = false;
+                  dust.burst(enemy.x, enemy.y + 8);
+                } else {
+                  fx.spawnSlash(enemy.x, enemy.y, 0, 86, 0xf97316, 'ring');
+                  if (dist <= 92) damagePlayer(Math.round(arch.attack * 1.15), enemy.x);
+                  enemy.state = 'cooldown';
+                  enemy.stateTimer = arch.attackCooldown;
+                }
+              } else if (arch.attackStyle === 'charge') {
+                const step = enemy.patternStep;
+                if (step === 0) {
+                  enemy.state = 'dashing';
+                  enemy.stateTimer = 0.45;
+                  enemy.dashVx = Math.cos(a) * 425;
+                  enemy.dashVy = Math.sin(a) * 425;
+                  enemy.dashHitDone = false;
+                  dust.burst(enemy.x, enemy.y + 10);
+                } else {
+                  fx.spawnSlash(enemy.x, enemy.y, 0, 115, 0xf59e0b, 'ring');
+                  cameraShake = Math.max(cameraShake, 4.5);
+                  if (dist <= 118) damagePlayer(arch.attack, enemy.x);
+                  for (const off of [-0.35, 0.35]) {
+                    fx.spawnProjectile({
+                      x: enemy.x, y: enemy.y,
+                      vx: Math.cos(a + off) * 265, vy: Math.sin(a + off) * 265,
+                      damage: Math.round(arch.attack * 0.8), radius: 8, fromPlayer: false, life: 1.35, color: 0xf59e0b, style: 'orb'
+                    });
+                  }
+                  enemy.state = 'cooldown';
+                  enemy.stateTimer = arch.attackCooldown;
+                }
+              } else if (arch.attackStyle === 'ranged_fan') {
+                const step = enemy.patternStep;
+                if (step === 0) {
+                  for (const offset of [-0.28, 0, 0.28]) {
+                    fx.spawnProjectile({
+                      x: enemy.x, y: enemy.y,
+                      vx: Math.cos(a + offset) * 270, vy: Math.sin(a + offset) * 270,
+                      damage: arch.attack, radius: 7, fromPlayer: false, life: 1.4, color: COLORS.sky, style: 'feather'
+                    });
+                  }
+                  enemy.state = 'cooldown';
+                  enemy.stateTimer = arch.attackCooldown;
+                } else {
+                  enemy.state = 'dashing';
+                  enemy.stateTimer = 0.34;
+                  enemy.dashVx = Math.cos(a) * 380;
+                  enemy.dashVy = Math.sin(a) * 380;
+                  enemy.dashHitDone = false;
+                  fx.spawnSlash(enemy.x, enemy.y, a, 70, COLORS.sky, 'arc');
+                }
+              } else if (arch.attackStyle === 'fire_slam') {
+                const step = enemy.patternStep;
+                if (step === 0) {
+                  for (const off of [-0.24, 0, 0.24]) {
+                    fx.spawnProjectile({
+                      x: enemy.x, y: enemy.y,
+                      vx: Math.cos(a + off) * 255, vy: Math.sin(a + off) * 255,
+                      damage: arch.attack - 2, radius: 8.5, fromPlayer: false, life: 1.45, color: 0xf97316, style: 'fireball'
+                    });
+                  }
+                } else {
+                  fx.spawnSlash(enemy.x, enemy.y, 0, 105, 0xf97316, 'ring');
+                  if (dist <= 108) damagePlayer(arch.attack, enemy.x);
+                  fx.spawnHazard(player.x, player.y, 38, 1.0, Math.round(arch.attack * 0.85), 0xf97316);
+                }
+                enemy.state = 'cooldown';
+                enemy.stateTimer = arch.attackCooldown;
+              } else if (arch.attackStyle === 'boss_burst') {
+                const enraged = enemy.hp < enemy.maxHp * 0.5;
+                const step = enemy.patternStep;
+                if (step === 0) {
+                  const count = enraged ? 10 : 8;
+                  for (let k = 0; k < count; k++) {
+                    const ra = a + (k / count) * Math.PI * 2;
+                    fx.spawnProjectile({
+                      x: enemy.x, y: enemy.y,
+                      vx: Math.cos(ra) * 315, vy: Math.sin(ra) * 315,
+                      damage: Math.round(arch.attack * 0.78), radius: 9.5, fromPlayer: false, life: 1.7, color: 0xf97316, style: 'fireball'
+                    });
+                  }
+                } else if (step === 1) {
+                  fx.spawnSlash(enemy.x, enemy.y, 0, 142, 0xef4444, 'ring');
+                  cameraShake = Math.max(cameraShake, 6);
+                  if (dist <= 146) damagePlayer(Math.round(arch.attack * 1.15), enemy.x);
+                } else {
+                  const pts = enraged
+                    ? [[0, 0], [72, 0], [-72, 0], [0, 72], [0, -72]]
+                    : [[0, 0], [74, 0], [-74, 0], [0, 68]];
+                  for (const [ox, oy] of pts) {
+                    fx.spawnHazard(player.x + player.vx * 0.25 + ox, player.y + player.vy * 0.25 + oy, 44, 0.82, Math.round(arch.attack * 0.9), 0xfacc15);
+                  }
+                }
+                enemy.state = 'cooldown';
+                enemy.stateTimer = enraged ? arch.attackCooldown * 0.74 : arch.attackCooldown;
+              } else if (arch.attackStyle === 'minotaur') {
+                const enraged = enemy.hp < enemy.maxHp * 0.5;
+                const step = enemy.patternStep;
+                if (step === 0) {
+                  // 1. Charge furieuse avec visee anticipee + onde a l'impact
+                  const leadA = Math.atan2(player.y + player.vy * 0.26 - enemy.y, player.x + player.vx * 0.26 - enemy.x);
+                  enemy.state = 'dashing';
+                  enemy.stateTimer = 0.52;
+                  enemy.dashVx = Math.cos(leadA) * (enraged ? 550 : 500);
+                  enemy.dashVy = Math.sin(leadA) * (enraged ? 550 : 500);
+                  enemy.dashHitDone = false;
+                  dust.burst(enemy.x, enemy.y + 10);
+                } else if (step === 1) {
+                  // 2. Tourbillon de Labrys (large zone + 4 arcs rapides)
+                  const r = enraged ? 162 : 148;
+                  fx.spawnSlash(enemy.x, enemy.y, 0, r, 0xdc2626, 'ring');
+                  for (let k = 0; k < 4; k++) {
+                    fx.spawnSlash(enemy.x, enemy.y, a + (k * Math.PI) / 2, r - 12, COLORS.gold, 'arc');
+                  }
+                  cameraShake = Math.max(cameraShake, 7.5);
+                  if (dist <= r + 4) damagePlayer(Math.round(arch.attack * 1.25), enemy.x);
+                  enemy.state = 'cooldown';
+                  enemy.stateTimer = enraged ? arch.attackCooldown * 0.75 : arch.attackCooldown;
+                } else {
+                  // 3. Seisme du Labyrinthe (secousses anticipees rapides + 8 eclats radiaux)
+                  const pts = enraged
+                    ? [[0, 0], [82, -38], [-82, -38], [82, 46], [-82, 46]]
+                    : [[0, 0], [80, -38], [-80, -38], [0, 74]];
+                  for (const [ox, oy] of pts) {
+                    fx.spawnHazard(player.x + player.vx * 0.22 + ox, player.y + player.vy * 0.22 + oy, 46, 0.8, Math.round(arch.attack * 0.92), 0xf97316);
+                  }
+                  const shards = enraged ? 10 : 8;
+                  for (let k = 0; k < shards; k++) {
+                    const ra = a + (k / shards) * Math.PI * 2;
+                    fx.spawnProjectile({
+                      x: enemy.x, y: enemy.y,
+                      vx: Math.cos(ra) * 320, vy: Math.sin(ra) * 320,
+                      damage: Math.round(arch.attack * 0.75), radius: 8.5, fromPlayer: false, life: 1.6, color: COLORS.gold, style: 'fireball'
+                    });
+                  }
+                  enemy.state = 'cooldown';
+                  enemy.stateTimer = enraged ? arch.attackCooldown * 0.75 : arch.attackCooldown;
+                }
+              } else if (arch.attackStyle === 'venom_spit') {
+                const step = enemy.patternStep;
+                if (step === 0) {
+                  for (const off of [-0.14, 0.14]) {
+                    fx.spawnProjectile({
+                      x: enemy.x, y: enemy.y - 6,
+                      vx: Math.cos(a + off) * 315, vy: Math.sin(a + off) * 315,
+                      damage: Math.round(arch.attack * 0.9), radius: 6.5, fromPlayer: false, life: 1.4, color: 0x4ade80, style: 'venom'
+                    });
+                  }
+                } else {
+                  fx.spawnSlash(enemy.x, enemy.y, 0, 98, 0x22c55e, 'ring');
+                  fx.spawnHazard(player.x + player.vx * 0.2, player.y + player.vy * 0.2, 40, 0.85, Math.round(arch.attack * 0.85), 0x4ade80);
+                  if (dist <= 98) damagePlayer(arch.attack, enemy.x);
+                }
+                enemy.state = 'cooldown';
+                enemy.stateTimer = arch.attackCooldown;
+              } else if (arch.attackStyle === 'hydra') {
+                const enraged = enemy.hp < enemy.maxHp * 0.5;
+                const step = enemy.patternStep;
+                if (step === 0) {
+                  const offsets = enraged ? [-0.54, -0.36, -0.18, 0, 0.18, 0.36, 0.54] : [-0.42, -0.21, 0, 0.21, 0.42];
+                  for (const offset of offsets) {
+                    const ang = a + offset;
+                    fx.spawnProjectile({
+                      x: enemy.x, y: enemy.y - 10,
+                      vx: Math.cos(ang) * 355, vy: Math.sin(ang) * 355,
+                      damage: Math.round(arch.attack * 0.82), radius: 7, fromPlayer: false, life: 1.6, color: 0x4ade80, style: 'venom'
+                    });
+                  }
+                } else if (step === 1) {
+                  const r = enraged ? 150 : 136;
+                  for (const offset of [-0.38, 0, 0.38]) {
+                    fx.spawnSlash(enemy.x, enemy.y - 4, a + offset, r, 0x4ade80, 'arc');
+                  }
+                  cameraShake = Math.max(cameraShake, 7);
+                  if (dist <= r + 4) damagePlayer(Math.round(arch.attack * 1.2), enemy.x);
+                } else {
+                  const pts = enraged
+                    ? [[0, 0], [85, -42], [-85, -42], [85, 48], [-85, 48]]
+                    : [[0, 0], [82, -40], [-82, -40], [0, 78]];
+                  for (const [ox, oy] of pts) {
+                    fx.spawnHazard(player.x + player.vx * 0.24 + ox, player.y + player.vy * 0.24 + oy, 46, 0.8, Math.round(arch.attack * 0.9), 0x4ade80);
+                  }
+                }
+                enemy.state = 'cooldown';
+                enemy.stateTimer = enraged ? arch.attackCooldown * 0.74 : arch.attackCooldown;
+              } else {
+                // poseidon coup de trident rapproche
+                fx.spawnSlash(enemy.x, enemy.y - 10, a, 76, COLORS.seaLight, 'arc');
+                if (dist <= 84) damagePlayer(arch.attack, enemy.x);
+                enemy.state = 'cooldown';
+                enemy.stateTimer = arch.attackCooldown;
+              }
+            }
+          } else if (enemy.state === 'cooldown') {
+            enemy.vx *= 0.85;
+            enemy.vy *= 0.85;
+            enemy.stateTimer -= dt;
+            if (enemy.stateTimer <= 0) enemy.state = 'chase';
+          } else if (dist <= arch.aggroRange) {
+            if (dist <= arch.attackRange) {
+              enemy.state = 'windup';
+              enemy.stateTimer = arch.windupDuration;
+              enemy.aimAngle = Math.atan2(dy, dx);
+              // Choix aleatoire de la prochaine attaque (2 pour monstres normaux, 3 pour boss)
+              const count = arch.attackStyle === 'minotaur' || arch.attackStyle === 'boss_burst' || arch.attackStyle === 'hydra' ? 3 : 2;
+              let pick = Math.floor(Math.random() * count);
+              if (pick === enemy.patternStep && Math.random() < 0.65) {
+                pick = (pick + 1 + Math.floor(Math.random() * (count - 1))) % count;
+              }
+              enemy.patternStep = pick;
+            } else {
+              enemy.state = 'chase';
+              if (mode === 'side-view' && !arch.flying) {
+                enemy.vx = Math.sign(dx) * arch.speed;
+                enemy.vy = 0;
+              } else {
+                enemy.vx = (dx / (dist || 1)) * arch.speed;
+                enemy.vy = (dy / (dist || 1)) * arch.speed;
+              }
+              enemy.x += enemy.vx * dt;
+              enemy.y += enemy.vy * dt;
+            }
+          } else {
+            enemy.state = 'patrol';
+            enemy.patrolAngle += dt * 0.8;
+            const targetX = enemy.homeX + Math.cos(enemy.patrolAngle) * enemy.patrolRadius;
+            const targetY = mode === 'side-view' && !arch.flying
+              ? enemy.homeY
+              : enemy.homeY + Math.sin(enemy.patrolAngle) * (enemy.patrolRadius * 0.6);
+            enemy.vx = (targetX - enemy.x) * 1.1;
+            enemy.vy = (targetY - enemy.y) * 1.1;
+            enemy.x += enemy.vx * dt;
+            enemy.y += enemy.vy * dt;
+          }
+
+          enemy.x = Math.min(Math.max(enemy.x, 40), zone.width - 40);
+          if (mode === 'top-down') {
+            enemy.y = Math.min(Math.max(enemy.y, 40), zone.height - 40);
+          }
+
+          updateEnemyVisual(enemy, time, mode);
+        }
+
+        // 6. Zones de danger telegraphees (foudre/eau du boss)
+        for (let i = fx.hazards.length - 1; i >= 0; i--) {
+          if (pendingRespawn) break;
+          const h = fx.hazards[i];
+          h.delay -= dt;
+          if (h.delay <= 0) {
+            fx.spawnSlash(h.x, h.y, 0, h.radius, h.color, 'bolt');
+            if (Math.hypot(player.x - h.x, player.y - h.y) <= h.radius + 14) {
+              damagePlayer(h.damage, h.x);
+            }
+            fx.hazards.splice(i, 1);
+          }
+        }
+
+        // 7. Projectiles
+        for (let i = fx.projectiles.length - 1; i >= 0; i--) {
+          if (pendingRespawn) break;
+          const p = fx.projectiles[i];
+          p.life -= dt;
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          if (p.life <= 0 || p.x < 0 || p.x > zone.width || p.y < 0 || p.y > zone.height) {
+            fx.projectiles.splice(i, 1);
+            continue;
+          }
+
+          if (p.fromPlayer) {
+            let hit = false;
+            for (const enemy of enemies) {
+              if (!enemy.alive || p.hitIds.has(enemy.spawnId)) continue;
+              const arch = ENEMY_ARCHETYPES[enemy.type];
+              if (Math.hypot(enemy.x - p.x, enemy.y - p.y) <= arch.radius + p.radius) {
+                p.hitIds.add(enemy.spawnId);
+                damageEnemy(enemy, p.damage);
+                if (p.style === 'orb') {
+                  fx.spawnSlash(p.x, p.y, 0, 44, p.color, 'ring');
+                  for (const splash of enemies) {
+                    if (!splash.alive || splash.spawnId === enemy.spawnId) continue;
+                    if (Math.hypot(splash.x - p.x, splash.y - p.y) <= 46 + ENEMY_ARCHETYPES[splash.type].radius) {
+                      damageEnemy(splash, Math.round(p.damage * 0.45));
+                    }
+                  }
+                }
+                hit = true;
+                if (!p.piercing) break;
+              }
+            }
+            if (hit && !p.piercing) fx.projectiles.splice(i, 1);
+          } else {
+            if (Math.hypot(player.x - p.x, player.y - p.y) <= 16 + p.radius) {
+              damagePlayer(p.damage, p.x);
+              if (!p.piercing) fx.projectiles.splice(i, 1);
+            }
+          }
+        }
+
+        // 8. PNJ & Objets
+        for (const npc of npcs) {
+          const near = Math.hypot(npc.x - player.x, npc.y - player.y) < 66;
+          npc.update(time, near);
+        }
+        for (const inter of interactables) {
+          const done = inter.def.kind === 'trial_stele'
+            ? stateRef.current.activatedTrialSteles.includes(inter.def.id)
+            : stateRef.current.collectedInteractables.includes(inter.def.id);
+          const near = Math.hypot(inter.def.x - player.x, inter.def.y - player.y) <= inter.def.radius + 16;
+          const sealed = Boolean(
+            inter.def.seal &&
+            !done &&
+            ((inter.def.seal.enemyType
+              ? (stateRef.current.bestiaryKills?.[inter.def.seal.enemyType] ?? 0)
+              : (stateRef.current.zoneKillCounts?.[inter.def.seal.zoneId] ?? 0)) < inter.def.seal.requiredKills)
+          );
+          inter.update(time, done, near, sealed);
+        }
+
+        if (pendingRespawn) {
+          pendingRespawn = false;
+          const goldLost = Math.floor(stateRef.current.gold * 0.15);
+          const xpLost = Math.min(stateRef.current.xp, Math.floor(xpRequiredForLevel(stateRef.current.level) * 0.25));
+          stateRef.current.gold = Math.max(0, stateRef.current.gold - goldLost);
+          stateRef.current.xp = Math.max(0, stateRef.current.xp - xpLost);
+          const respawnStats = getComputedStats(stateRef.current);
+          stateRef.current.hp = respawnStats.maxHp;
+          iFrames = 1.2;
+          player.vx = 0;
+          player.vy = 0;
+          showToast(`Vaincu ! -${goldLost} drachmes, -${xpLost} XP. Retour à l'Agora.`);
+          loadZone('agora', ZONES.agora.defaultSpawn.x, ZONES.agora.defaultSpawn.y);
+          syncUi(true);
+          return;
+        }
+
+        // 9. Rendu heros, poussiere et effets
+        const moving = Math.abs(player.vx) + Math.abs(player.vy) > 1;
         const airborne = mode === 'side-view' && !player.isGrounded;
         hero.setView(mode);
         hero.face(player.vx);
@@ -196,23 +1501,106 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
         hero.container.position.set(player.x, player.y);
         syncOthers(mode, time);
         if (moving && !airborne) dust.trail(player.x, mode === 'top-down' ? player.y + 8 : player.y + 16);
+        const pickedLoot = fx.collectNearbyLoot(player.x, player.y, 44);
+        if (pickedLoot.length > 0) {
+          for (const drop of pickedLoot) {
+            const def = ITEMS[drop.itemId];
+            if (!def) continue;
+            addItemToState(stateRef.current, def.id, 1);
+            fx.spawnText(player.x, player.y - 28, `+1 ${def.name}`, RARITY_HEX[def.rarity], def.rarity === 'legendaire' ? 14 : 11.5);
+            if (def.rarity !== 'commun') {
+              showToast(`Butin ${RARITY_LABEL[def.rarity]} : ${def.name}`);
+            }
+          }
+          sound.playCoin();
+          syncUi(true);
+        }
+
         dust.update();
+        fx.render(dt);
 
-        // 5. camera qui suit le joueur sans sortir de la carte, puis decor (parallaxe, animations)
-        const margin = mode === 'top-down' ? 48 : 0; // en vue du dessus on voit le muret autour de la place
-        const target = viewAround(player.x, player.y, MAPS[mode], window.innerWidth, window.innerHeight, margin);
-        view = view ? { ...target, x: view.x + (target.x - view.x) * 0.1, y: view.y + (target.y - view.y) * 0.1 } : target;
-        scene.update(view, time);
-        placeLayer(actors, view);
+        // 10. Camera
+        const target = viewAround(
+          player.x,
+          player.y,
+          { width: zone.width, height: zone.height, solids: [], portals: [] },
+          window.innerWidth,
+          window.innerHeight,
+          zone.cameraMargin
+        );
+        lastView = lastView
+          ? { ...target, x: lastView.x + (target.x - lastView.x) * 0.12, y: lastView.y + (target.y - lastView.y) * 0.12 }
+          : target;
+        // Regen douce pres de la fontaine de Cassandre ou du brasero dans la cite
+        if (zone.id === 'agora' && stateRef.current.hp < stats.maxHp) {
+          const nearFountain = Math.hypot(player.x - 634, player.y - 984) < 110;
+          const nearBrazier = Math.hypot(player.x - 1080, player.y - 660) < 105;
+          if (nearFountain || nearBrazier) {
+            regenTimer += dt;
+            if (regenTimer >= 1) {
+              regenTimer = 0;
+              stateRef.current.hp = Math.min(stats.maxHp, stateRef.current.hp + 10);
+              if (settingsRef.current.showDamageNumbers) fx.spawnText(player.x, player.y - 24, '+10 PV', 0x4ade80, 11);
+              syncUi(false);
+            }
+          }
+        }
+        const shakenView: View = cameraShake > 0.2
+          ? { ...lastView, x: lastView.x + (Math.random() - 0.5) * cameraShake, y: lastView.y + (Math.random() - 0.5) * cameraShake }
+          : lastView;
+        scene?.update(shakenView, time);
+        placeLayer(actors, shakenView);
 
-        // 6. FPS et coordonnees pour le HUD (2 fois par seconde)
-        frames++;
-        const now = performance.now();
-        if (now - lastFpsTime >= 500) {
-          setFps(Math.round((frames * 1000) / (now - lastFpsTime)));
-          setCoords({ x: Math.round(player.x), y: Math.round(player.y) });
-          frames = 0;
-          lastFpsTime = now;
+        // 11. Mise a jour HUD (uniquement si un boss de la zone est reellement proche/engage)
+        hudSyncTimer += dt;
+        if (hudSyncTimer >= 0.12) {
+          hudSyncTimer = 0;
+          setSpecialCd(specialCooldown > 0.05 ? specialCooldown : 0);
+          setActiveSkillCds({ ...activeCds });
+          setDashCd(dashCooldown > 0.05 ? dashCooldown : 0);
+
+          const nearest = findNearestInteraction();
+          setInteractPrompt(nearest ? nearest.label : null);
+
+          const engageDist = zone.id === 'rivage' ? 680 : 460;
+          const boss = enemies.find(
+            (e) => e.alive && ENEMY_ARCHETYPES[e.type].isBoss && Math.hypot(e.x - player.x, e.y - player.y) < engageDist
+          );
+          if (boss) {
+            setBossInfo({
+              name: boss.name,
+              hp: boss.hp,
+              maxHp: boss.maxHp,
+              shielded: boss.shielded,
+              stelesActivated: stateRef.current.activatedTrialSteles.length,
+              stelesTotal: 3
+            });
+          } else {
+            setBossInfo(null);
+          }
+
+          const markers: MinimapMarker[] = [
+            { x: player.x, y: player.y, kind: 'player', angle: mode === 'side-view' ? (facingDir >= 0 ? 0 : Math.PI) : facingAngle },
+            ...zone.portals.map((p): MinimapMarker => ({ x: p.x + p.w / 2, y: p.y + p.h / 2, kind: 'portal' })),
+            ...npcs.map((n): MinimapMarker => {
+              const b = getNpcBadge(stateRef.current, n.npcId);
+              return { x: n.x, y: n.y, kind: b && b !== 'active' ? 'npc_quest' : 'npc' };
+            }),
+            ...interactables
+              .filter((inter) => inter.def.kind !== 'chest' && !(inter.def.kind === 'trial_stele'
+                ? stateRef.current.activatedTrialSteles.includes(inter.def.id)
+                : stateRef.current.collectedInteractables.includes(inter.def.id)))
+              .map((inter): MinimapMarker => ({ x: inter.def.x, y: inter.def.y, kind: 'interact' })),
+            ...enemies
+              .filter((e) => e.alive)
+              .map((e): MinimapMarker => ({
+                x: e.x,
+                y: e.y,
+                kind: ENEMY_ARCHETYPES[e.type].isBoss ? 'boss' : 'enemy'
+              })),
+            ...fx.lootDrops.map((d): MinimapMarker => ({ x: d.x, y: d.y, kind: 'loot' }))
+          ];
+          setMinimapMarkers(markers);
         }
       });
     };
@@ -224,38 +1612,212 @@ export function GameCanvas({ server, god, heroName, onLeave }: GameCanvasProps) 
 
     return () => {
       cleanedUp = true;
+      saveGameState(stateRef.current);
       connection.close();
-      connectionRef.current = null;
       keyboard.dispose();
+      keyboardRef.current = null;
+      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+      if (bannerTimerRef.current) window.clearTimeout(bannerTimerRef.current);
       try {
         app?.destroy(true, { children: true });
       } catch {
-        // PixiJS pas encore initialise : rien a detruire
+        // ignore
       }
     };
-  }, [server.id, god, heroName]);
+  }, [server.id, showToast, flashZoneBanner, syncUi]);
 
-  // previent le serveur quand la vue change (porte)
-  useEffect(() => {
-    connectionRef.current?.sendViewMode(viewMode);
-  }, [viewMode]);
+  const handleFinishPrologue = () => {
+    stateRef.current.prologueSeen = true;
+    saveGameState(stateRef.current);
+    setShowPrologue(false);
+  };
+
+  const handleAcceptQuest = (questId: string) => {
+    if (acceptQuest(stateRef.current, questId)) {
+      sound.playQuest();
+      syncUi(true);
+      if (dialogue) setDialogue(resolveNpcDialogue(stateRef.current, dialogue.npcId));
+      showToast('Quête acceptée');
+    }
+  };
+
+  const handleCompleteQuest = (questId: string) => {
+    const res = completeQuest(stateRef.current, questId);
+    if (res.completed) {
+      if (res.leveledUp) sound.playLevelUp();
+      else sound.playQuest();
+      syncUi(true);
+      if (dialogue) setDialogue(resolveNpcDialogue(stateRef.current, dialogue.npcId));
+      showToast(res.leveledUp ? `Niveau ${res.newLevel} ! ${res.rewardSummary}` : `Quête terminée • ${res.rewardSummary}`);
+    }
+  };
+
+  const handleHeal = () => {
+    const stats = getComputedStats(stateRef.current);
+    stateRef.current.hp = stats.maxHp;
+    sound.playHeal();
+    syncUi(true);
+    showToast('Points de vie restaurés');
+  };
+
+  const handleBuyItem = (itemId: string) => {
+    const item = ITEMS[itemId];
+    if (!item || stateRef.current.gold < item.price) return;
+    if (!item.stackable && stateRef.current.inventory.some((s) => s.itemId === itemId)) return;
+    stateRef.current.gold -= item.price;
+    addItemToState(stateRef.current, itemId, 1);
+    sound.playChest();
+    syncUi(true);
+    showToast(`${item.name} acquis`);
+  };
+
+  const handleSellItem = (itemId: string) => {
+    const item = ITEMS[itemId];
+    const payout = sellItem(stateRef.current, itemId);
+    if (payout > 0 && item) {
+      sound.playCoin();
+      syncUi(true);
+      showToast(`${item.name} vendu (+${payout} drachmes)`);
+    }
+  };
+
+  const handleCraftRecipe = (recipeId: string) => {
+    if (craftRecipe(stateRef.current, recipeId)) {
+      sound.playChest();
+      syncUi(true);
+      showToast('Objet fabriqué avec succès !');
+    }
+  };
+
+  const handleUpgradeSkill = (skillId: string) => {
+    if (upgradeSkill(stateRef.current, skillId)) {
+      sound.playQuest();
+      syncUi(true);
+      showToast('Talent divin amélioré !');
+    }
+  };
+
+  const handleResetSkills = () => {
+    resetSkills(stateRef.current);
+    sound.playCoin();
+    syncUi(true);
+    showToast('Points de compétences réinitialisés.');
+  };
+
+  const handleEquipItem = (itemId: string) => {
+    if (equipItem(stateRef.current, itemId)) {
+      sound.playQuest();
+      syncUi(true);
+      showToast(`${ITEMS[itemId]?.name ?? 'Objet'} équipé`);
+    }
+  };
+
+  const activeZone = ZONES[uiState.zoneId];
+  const stats = getComputedStats(uiState);
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100dvh', overflow: 'hidden', background: css(COLORS.sea), touchAction: 'none' }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
+
       <Hud
         server={server}
-        god={godLore}
+        god={GODS_LORE[uiState.god]}
         status={status}
-        viewMode={viewMode}
-        coords={coords}
-        fps={fps}
+        zone={activeZone}
+        state={uiState}
+        settings={settings}
+        specialCooldown={specialCd}
+        dashCooldown={dashCd}
+        activeSkillCooldowns={activeSkillCds}
+        interactPrompt={modalOpen ? null : interactPrompt}
+        toast={toast}
+        zoneBanner={zoneBanner}
+        bossInfo={bossInfo}
+        minimapMarkers={minimapMarkers}
         loadError={loadError}
         compact={screen.compact}
         touch={screen.touch}
-        onLeave={onLeave}
+        onTriggerAttack={() => actionsRef.current?.attack()}
+        onTriggerSpecial={() => actionsRef.current?.special()}
+        onTriggerDash={() => actionsRef.current?.dash()}
+        onTriggerPotion={() => actionsRef.current?.potion()}
+        onTriggerActiveSkill={(id) => actionsRef.current?.castActiveSkill(id)}
+        onTriggerInteract={() => actionsRef.current?.interact()}
+        onOpenModal={(tab) => { setCraftStation('pocket'); setModalTab(tab); }}
+        onOpenPause={() => setPauseOpen(true)}
+        onOpenWorldMap={() => setWorldMapOpen(true)}
+        onLeave={() => {
+          saveGameState(stateRef.current);
+          onLeave();
+        }}
       />
-      {screen.touch && <TouchControls viewMode={viewMode} />}
+
+      {screen.touch && !modalOpen && <TouchControls viewMode={activeZone.viewMode} />}
+
+      {showPrologue && (
+        <PrologueOverlay heroName={uiState.heroName} onFinish={handleFinishPrologue} />
+      )}
+
+      {pauseOpen && !showPrologue && (
+        <PauseMenuModal
+          settings={settings}
+          bestiaryKills={uiState.bestiaryKills}
+          onChangeSettings={handleSettingsChange}
+          onSaveNow={() => {
+            saveGameState(stateRef.current);
+            showToast('Partie sauvegardée');
+          }}
+          onResume={() => setPauseOpen(false)}
+          onQuitToLobby={() => {
+            saveGameState(stateRef.current);
+            onLeave();
+          }}
+        />
+      )}
+
+      {dialogue && !showPrologue && !pauseOpen && (
+        <DialogueModal
+          view={dialogue}
+          gold={uiState.gold}
+          hp={uiState.hp}
+          maxHp={stats.maxHp}
+          inventory={uiState.inventory}
+          onAcceptQuest={handleAcceptQuest}
+          onCompleteQuest={handleCompleteQuest}
+          onHeal={handleHeal}
+          onBuyItem={handleBuyItem}
+          onSellItem={handleSellItem}
+          onClose={() => setDialogue(null)}
+        />
+      )}
+
+      {modalTab && !showPrologue && !pauseOpen && !worldMapOpen && (
+        <InventoryModal
+          state={uiState}
+          initialTab={modalTab}
+          craftStation={craftStation}
+          onUseConsumable={(itemId) => actionsRef.current?.potion(itemId)}
+          onEquipItem={handleEquipItem}
+          onCraftRecipe={handleCraftRecipe}
+          onUpgradeSkill={handleUpgradeSkill}
+          onResetSkills={handleResetSkills}
+          onClose={() => setModalTab(null)}
+        />
+      )}
+
+      {worldMapOpen && !showPrologue && !pauseOpen && (
+        <WorldMapModal
+          currentZone={uiState.zoneId}
+          discoveredZones={uiState.discoveredZones ?? ['agora']}
+          markers={minimapMarkers}
+          mapKeyLabel={settings.keys.map.label}
+          onFastTravel={(targetZone) => {
+            setWorldMapOpen(false);
+            actionsRef.current?.travelToZone(targetZone);
+          }}
+          onClose={() => setWorldMapOpen(false)}
+        />
+      )}
     </div>
   );
 }

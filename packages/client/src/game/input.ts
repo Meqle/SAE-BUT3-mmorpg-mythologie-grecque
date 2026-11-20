@@ -1,4 +1,4 @@
-// lecture du clavier (fleches, ZQSD / WASD, espace)
+import type { GameSettings } from './settings';
 
 export interface Keyboard {
   isUp: () => boolean;
@@ -6,28 +6,65 @@ export interface Keyboard {
   isLeft: () => boolean;
   isRight: () => boolean;
   isJump: () => boolean;
+  consumeAttack: () => boolean;
+  consumeSpecial: () => boolean;
+  consumeInteract: () => boolean;
+  consumeDash: () => boolean;
+  consumePotion: () => boolean;
+  updateSettings: (settings: GameSettings) => void;
+  setBlocked: (blocked: boolean) => void;
   dispose: () => void;
 }
 
-// touches virtuelles du telephone (remplies par TouchControls)
-export const touch = { up: false, down: false, left: false, right: false, jump: false };
+export const touch = {
+  up: false,
+  down: false,
+  left: false,
+  right: false,
+  jump: false,
+  attack: false,
+  special: false,
+  interact: false
+};
 
-const WATCHED_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyS', 'KeyA', 'KeyD', 'Space'];
+export function createKeyboard(initialSettings: GameSettings): Keyboard {
+  let settings = initialSettings;
+  const pressed = new Set<string>();
+  let blocked = false;
+  let attackQueued = false;
+  let specialQueued = false;
+  let interactQueued = false;
+  let dashQueued = false;
+  let potionQueued = false;
 
-export function createKeyboard(): Keyboard {
-  const keys: Record<string, boolean> = {};
+  const matches = (code: string, action: keyof GameSettings['keys']) =>
+    settings.keys[action].code === code ||
+    (action === 'dash' && settings.keys.dash.code === 'ShiftLeft' && code === 'ShiftRight');
 
   const onKeyDown = (e: KeyboardEvent) => {
-    if (WATCHED_KEYS.includes(e.code)) keys[e.code] = true;
+    if (blocked) return;
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    const isRepeat = pressed.has(e.code);
+    pressed.add(e.code);
+    if (!isRepeat) {
+      if (matches(e.code, 'attack')) attackQueued = true;
+      if (matches(e.code, 'special')) specialQueued = true;
+      if (matches(e.code, 'interact')) interactQueued = true;
+      if (matches(e.code, 'dash')) dashQueued = true;
+      if (matches(e.code, 'potion')) potionQueued = true;
+    }
   };
+
   const onKeyUp = (e: KeyboardEvent) => {
-    if (WATCHED_KEYS.includes(e.code)) keys[e.code] = false;
+    pressed.delete(e.code);
   };
-  // si la fenetre perd le focus, on relache tout (sinon le perso avance tout seul)
+
   const releaseAll = () => {
-    for (const k in keys) keys[k] = false;
+    pressed.clear();
     touch.up = touch.down = touch.left = touch.right = touch.jump = false;
+    touch.attack = touch.special = touch.interact = false;
   };
+
   const onVisibility = () => {
     if (document.hidden) releaseAll();
   };
@@ -37,14 +74,57 @@ export function createKeyboard(): Keyboard {
   window.addEventListener('blur', releaseAll);
   document.addEventListener('visibilitychange', onVisibility);
 
-  // KeyW / KeyA = Z / Q sur un clavier AZERTY (on lit la position de la touche)
-  const isUp = () => !!(keys.ArrowUp || keys.KeyW || touch.up);
+  const isUp = () => !blocked && (pressed.has(settings.keys.up.code) || pressed.has('ArrowUp') || touch.up);
+  const isDown = () => !blocked && (pressed.has(settings.keys.down.code) || pressed.has('ArrowDown') || touch.down);
+  const isLeft = () => !blocked && (pressed.has(settings.keys.left.code) || pressed.has('ArrowLeft') || touch.left);
+  const isRight = () => !blocked && (pressed.has(settings.keys.right.code) || pressed.has('ArrowRight') || touch.right);
+
   return {
     isUp,
-    isDown: () => !!(keys.ArrowDown || keys.KeyS || touch.down),
-    isLeft: () => !!(keys.ArrowLeft || keys.KeyA || touch.left),
-    isRight: () => !!(keys.ArrowRight || keys.KeyD || touch.right),
-    isJump: () => !!keys.Space || touch.jump || isUp(),
+    isDown,
+    isLeft,
+    isRight,
+    isJump: () => !blocked && (pressed.has(settings.keys.jump.code) || touch.jump || isUp()),
+    consumeAttack: () => {
+      if (blocked) return false;
+      const v = attackQueued || touch.attack;
+      attackQueued = false;
+      touch.attack = false;
+      return v;
+    },
+    consumeSpecial: () => {
+      if (blocked) return false;
+      const v = specialQueued || touch.special;
+      specialQueued = false;
+      touch.special = false;
+      return v;
+    },
+    consumeInteract: () => {
+      if (blocked) return false;
+      const v = interactQueued || touch.interact;
+      interactQueued = false;
+      touch.interact = false;
+      return v;
+    },
+    consumeDash: () => {
+      if (blocked) return false;
+      const v = dashQueued;
+      dashQueued = false;
+      return v;
+    },
+    consumePotion: () => {
+      if (blocked) return false;
+      const v = potionQueued;
+      potionQueued = false;
+      return v;
+    },
+    updateSettings: (next) => {
+      settings = next;
+    },
+    setBlocked: (b) => {
+      blocked = b;
+      if (b) releaseAll();
+    },
     dispose: () => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);

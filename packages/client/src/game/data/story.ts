@@ -1,0 +1,583 @@
+export interface PrologueSlide {
+  chapter: string;
+  title: string;
+  body: string;
+  accent: 'storm' | 'fire' | 'ruins' | 'agora';
+}
+
+export const PROLOGUE_SLIDES: PrologueSlide[] = [
+  {
+    chapter: 'I',
+    title: 'La Fin de la Soumission',
+    body: "Pendant des siècles, les mortels ont prié par crainte de l'Olympe. Mais à force de forger, soigner et bâtir par eux-mêmes, les temples se sont peu à peu vidés.",
+    accent: 'ruins'
+  },
+  {
+    chapter: 'II',
+    title: 'Le Châtiment de Zeus',
+    body: "Pour punir cet affront, Zeus a déchaîné la foudre, les séismes et les flots sur la Grèce. Des bêtes mythologiques rôdent désormais sur toutes les routes.",
+    accent: 'storm'
+  },
+  {
+    chapter: 'III',
+    title: 'Le Murmure de Prométhée',
+    body: "Enchaîné au Caucase, Prométhée souffle une braise ancienne à ceux qui refusent de plier. Seuls les Vestiges Primordiaux permettront de tenir tête aux dieux.",
+    accent: 'fire'
+  },
+  {
+    chapter: 'IV',
+    title: "La Cité de l'Agora",
+    body: "Vous accostez à la cité-refuge de l'Agora, dernier port libre de la mer Égée. Sur la place centrale, un messager du Titan attend celui qui portera l'Étincelle.",
+    accent: 'agora'
+  }
+];
+
+export type QuestKind = 'main' | 'side';
+export type QuestObjectiveType = 'talk' | 'interact' | 'kill' | 'enter_zone';
+
+export interface QuestObjectiveDef {
+  id: string;
+  label: string;
+  type: QuestObjectiveType;
+  targetId: string;
+  required: number;
+}
+
+export interface QuestReward {
+  xp: number;
+  gold: number;
+  items?: { itemId: string; quantity: number }[];
+  unlocksCodex?: string;
+}
+
+export interface QuestDef {
+  id: string;
+  title: string;
+  kind: QuestKind;
+  level: number;
+  giverNpcId: string;
+  turnInNpcId: string;
+  prerequisiteQuestId?: string;
+  summary: string;
+  offerDialogue: string;
+  progressDialogue: string;
+  completeDialogue: string;
+  objectives: QuestObjectiveDef[];
+  reward: QuestReward;
+}
+
+export const QUESTS: Record<string, QuestDef> = {
+  mq_1_etincelle: {
+    id: 'mq_1_etincelle',
+    title: "L'Étincelle dans les Cendres",
+    kind: 'main',
+    level: 1,
+    giverNpcId: 'lycos',
+    turnInNpcId: 'lycos',
+    summary: "Ranimez le Brasero de Prométhée au centre de l'Agora.",
+    offerDialogue:
+      "Tu as entendu le murmure du Caucase, toi aussi ? Je suis Lycos. Les dieux brûlent nos cités, mais le feu de Prométhée n'est pas éteint. Touche le Brasero juste derrière moi pour éveiller ton Étincelle.",
+    progressDialogue:
+      "Le Brasero de Prométhée se trouve au centre de la mosaïque. Approche-toi pour ranimer la braise.",
+    completeDialogue:
+      "La flamme te reconnaît. Les portes de la cité s'ouvrent devant toi, mais passe d'abord au marché ou chez Cassandre si tu veux faire le plein avant de sortir.",
+    objectives: [
+      {
+        id: 'light_brasero',
+        label: 'Ranimer le Brasero de Prométhée',
+        type: 'interact',
+        targetId: 'brasero_promethee',
+        required: 1
+      }
+    ],
+    reward: {
+      xp: 90,
+      gold: 15,
+      items: [{ itemId: 'potion_ambroisie', quantity: 2 }],
+      unlocksCodex: 'codex_promethee'
+    }
+  },
+
+  mq_2_terres_foudroyees: {
+    id: 'mq_2_terres_foudroyees',
+    title: 'Les Terres Foudroyées',
+    kind: 'main',
+    level: 2,
+    giverNpcId: 'lycos',
+    turnInNpcId: 'lycos',
+    prerequisiteQuestId: 'mq_1_etincelle',
+    summary: 'Traversez la porte Est, repoussez les bêtes des Plaines et inspectez la Stèle du Châtiment.',
+    offerDialogue:
+      "Au-delà du rempart est, la route antique n'est plus que cratères et ruines. Des satyres et des harpies coupent tout passage. Nettoie le chemin et lis la Stèle du Châtiment au nord des plaines : elle mène à un vieux sanctuaire des Titans.",
+    progressDialogue:
+      "Sors par le rempart Est vers les Plaines Foudroyées. Repousse les bêtes et inspecte la Stèle du Châtiment.",
+    completeDialogue:
+      "Le Sanctuaire Brisé a donc résisté aux séismes. Prométhée y a laissé un écho de sa voix. Forge-toi une bonne arme chez Damon avant d'y entrer.",
+    objectives: [
+      { id: 'kill_satyres', label: 'Satyres vaincus', type: 'kill', targetId: 'satyre', required: 3 },
+      { id: 'kill_harpies', label: 'Harpies vaincues', type: 'kill', targetId: 'harpie', required: 2 },
+      { id: 'read_stele', label: 'Stèle du Châtiment', type: 'interact', targetId: 'stele_chatiment', required: 1 }
+    ],
+    reward: {
+      xp: 185,
+      gold: 30,
+      items: [{ itemId: 'potion_ambroisie', quantity: 2 }],
+      unlocksCodex: 'codex_fleaux'
+    }
+  },
+
+  mq_3_sanctuaire: {
+    id: 'mq_3_sanctuaire',
+    title: 'Le Seuil des Vestiges',
+    kind: 'main',
+    level: 4,
+    giverNpcId: 'lycos',
+    turnInNpcId: 'echo_promethee',
+    prerequisiteQuestId: 'mq_2_terres_foudroyees',
+    summary: "Entrez dans le Sanctuaire Brisé et prenez le Cœur de Braise au Gardien d'Airain.",
+    offerDialogue:
+      "À l'extrémité est des plaines s'ouvre le Sanctuaire Brisé. Héphaïstos y a posté ses automates d'airain pour garder un Cœur de Braise. Trouve l'Écho de Prométhée à l'entrée du temple et abats le Gardien d'Airain.",
+    progressDialogue:
+      "Le Sanctuaire Brisé se trouve à l'est des Plaines Foudroyées. Détruis les automates et le Gardien d'Airain.",
+    completeDialogue:
+      "Le Cœur de Braise répond enfin à une main mortelle. Je trempe ton arme dans sa flamme. Le rivage d'Égée t'attend désormais au bout du sanctuaire.",
+    objectives: [
+      { id: 'enter_sanctuaire', label: 'Entrer dans le Sanctuaire Brisé', type: 'enter_zone', targetId: 'sanctuaire', required: 1 },
+      { id: 'kill_automates', label: 'Automates détruits', type: 'kill', targetId: 'automate', required: 2 },
+      { id: 'kill_gardien', label: "Vaincre le Gardien d'Airain", type: 'kill', targetId: 'gardien_airain', required: 1 }
+    ],
+    reward: {
+      xp: 280,
+      gold: 48,
+      items: [
+        { itemId: 'coeur_braise', quantity: 1 },
+        { itemId: 'lame_promethee', quantity: 1 }
+      ],
+      unlocksCodex: 'codex_vestiges'
+    }
+  },
+
+  mq_4_rivage_epreuve: {
+    id: 'mq_4_rivage_epreuve',
+    title: "L'Épreuve du Rivage Brisé",
+    kind: 'main',
+    level: 6,
+    giverNpcId: 'echo_promethee',
+    turnInNpcId: 'lycos',
+    prerequisiteQuestId: 'mq_3_sanctuaire',
+    summary: "Activez les 3 Stèles de Prométhée sur le Rivage d'Égée et terrassez la Sentinelle de Poséidon.",
+    offerDialogue:
+      "Derrière la porte orientale gronde le Rivage d'Égée. La Sentinelle de Poséidon s'abrite sous un bouclier divin qu'aucune lame ordinaire ne perce. Gravis les plateformes de marbre pour allumer les trois Stèles de Prométhée, brise sa garde, puis rapporte le Vestige à Lycos.",
+    progressDialogue:
+      "Allume les 3 Stèles de Prométhée sur les plateformes du Rivage d'Égée pour faire tomber le bouclier de la Sentinelle.",
+    completeDialogue:
+      "Le Vestige d'Égée... Un dieu a reculé devant un mortel. La Voie des Reliques est ouverte : le Labyrinthe, l'Hydre et le Caucase tomberont à leur tour.",
+    objectives: [
+      { id: 'activate_steles', label: 'Stèles de Prométhée activées', type: 'interact', targetId: 'stele_rivage', required: 3 },
+      { id: 'kill_sentinel', label: 'Sentinelle de Poséidon vaincue', type: 'kill', targetId: 'sentinelle_poseidon', required: 1 }
+    ],
+    reward: {
+      xp: 450,
+      gold: 83,
+      items: [
+        { itemId: 'vestige_egee', quantity: 1 },
+        { itemId: 'nectar_divin', quantity: 2 }
+      ],
+      unlocksCodex: 'codex_egee'
+    }
+  },
+
+  mq_5_labyrinthe: {
+    id: 'mq_5_labyrinthe',
+    title: 'Le Labyrinthe des Brumes',
+    kind: 'main',
+    level: 7,
+    giverNpcId: 'lycos',
+    turnInNpcId: 'lycos',
+    prerequisiteQuestId: 'mq_4_rivage_epreuve',
+    summary: "Franchissez la porte Nord du Sanctuaire Brisé, trouvez le Fil d'Ariane et vainquez le Minotaure des Brumes.",
+    offerDialogue:
+      "Le Vestige d'Égée a réveillé une porte ancienne au nord du Sanctuaire Brisé : l'entrée du Labyrinthe des Brumes. Le Minotaure y garde le Cœur d'Airain, une relique capable de briser les portes du Caucase. Trouve le Fil d'Ariane dans les couloirs et abats la bête.",
+    progressDialogue:
+      "La porte Nord du Sanctuaire Brisé mène au Labyrinthe des Brumes. Trouve l'autel du Fil d'Ariane puis affronte le Minotaure dans la salle orientale.",
+    completeDialogue:
+      "Le Cœur d'Airain est à nous ! Grâce à ces deux reliques, la voie vers les Marécages de l'Hydre et le Mont Caucase pourra bientôt s'ouvrir. L'Olympe commence à trembler.",
+    objectives: [
+      { id: 'enter_laby', label: 'Entrer dans le Labyrinthe des Brumes', type: 'enter_zone', targetId: 'labyrinthe', required: 1 },
+      { id: 'find_ariane', label: "Allumer l'autel du Fil d'Ariane", type: 'interact', targetId: 'fil_ariane', required: 1 },
+      { id: 'kill_minotaure', label: 'Minotaure des Brumes vaincu', type: 'kill', targetId: 'minotaure', required: 1 }
+    ],
+    reward: {
+      xp: 620,
+      gold: 122,
+      items: [
+        { itemId: 'coeur_airain', quantity: 1 },
+        { itemId: 'nectar_divin', quantity: 2 }
+      ],
+      unlocksCodex: 'codex_labyrinthe'
+    }
+  },
+
+  mq_6_hydre: {
+    id: 'mq_6_hydre',
+    title: 'Les Marécages de Lerne',
+    kind: 'main',
+    level: 9,
+    giverNpcId: 'lycos',
+    turnInNpcId: 'lycos',
+    prerequisiteQuestId: 'mq_5_labyrinthe',
+    summary: "Traversez les Marécages de Lerne au sud du Sanctuaire et terrassez l'Hydre pour récupérer le Venin d'Orque.",
+    offerDialogue:
+      "Le Cœur d'Airain résonne déjà, mais un autre Vestige sommeille dans les Marécages de Lerne, au sud du Sanctuaire Brisé. L'Hydre y corrompt les eaux. Purge ses deux autels de soufre et terrasse la bête pour arracher le Venin d'Orque.",
+    progressDialogue:
+      "Le portail des Marécages s'ouvre tout au sud du Sanctuaire Brisé. Garde des potions à portée : son venin ronge le bronze.",
+    completeDialogue:
+      "L'Hydre de Lerne est tombée et le Venin d'Orque est entre tes mains ! Avec ces reliques, le mont Caucase ne pourra bientôt plus retenir Prométhée.",
+    objectives: [
+      { id: 'enter_marecages', label: 'Entrer dans les Marécages de Lerne', type: 'enter_zone', targetId: 'marecages', required: 1 },
+      { id: 'purge_soufre', label: 'Purger les Autels de Soufre', type: 'interact', targetId: 'autel_soufre', required: 2 },
+      { id: 'kill_hydre', label: 'Hydre de Lerne vaincue', type: 'kill', targetId: 'hydre_lerne', required: 1 }
+    ],
+    reward: {
+      xp: 760,
+      gold: 147,
+      items: [
+        { itemId: 'venin_orque', quantity: 1 },
+        { itemId: 'nectar_divin', quantity: 2 }
+      ],
+      unlocksCodex: 'codex_hydre'
+    }
+  },
+  sq_chasse_squelettes: {
+    id: 'sq_chasse_squelettes',
+    title: 'Les Légions du Labyrinthe',
+    kind: 'side',
+    level: 7,
+    giverNpcId: 'theron',
+    turnInNpcId: 'theron',
+    prerequisiteQuestId: 'mq_3_sanctuaire',
+    summary: 'Éliminez 5 Squelettes hoplites dans les couloirs du Labyrinthe des Brumes.',
+    offerDialogue:
+      "Mes éclaireurs ont entendu le cliquetis des boucliers sous le Sanctuaire. D'anciens hoplites relèvent les armes dans le Labyrinthe. Si tu descends là-bas, réduis-en cinq en poussière.",
+    progressDialogue:
+      "Les Squelettes hoplites patrouillent les couloirs du Labyrinthe, au nord du Sanctuaire Brisé.",
+    completeDialogue:
+      "Beau travail. Tant que ces légions restent contenues sous terre, l'Agora peut respirer.",
+    objectives: [
+      { id: 'kill_squelettes', label: 'Squelettes hoplites vaincus', type: 'kill', targetId: 'squelette', required: 5 }
+    ],
+    reward: {
+      xp: 260,
+      gold: 53,
+      items: [{ itemId: 'nectar_divin', quantity: 2 }]
+    }
+  },
+  sq_initiation_artisanat: {
+    id: 'sq_initiation_artisanat',
+    title: 'Les Ateliers de la Cité',
+    kind: 'side',
+    level: 1,
+    giverNpcId: 'damon',
+    turnInNpcId: 'damon',
+    summary: "Visitez l'Atelier de la Forge et l'Infirmerie de Cassandre dans la cité pour débloquer les recettes avancées.",
+    offerDialogue:
+      "Si tu veux survivre au-delà des remparts, tu devras forger ton équipement et brasser tes propres élixirs. Entre dans mon Atelier au sud-est et passe voir l'Infirmerie de Cassandre au sud-ouest.",
+    progressDialogue:
+      "L'entrée de la Forge se trouve devant ma maison au sud-est, et l'Infirmerie de Cassandre dans le jardin au sud-ouest.",
+    completeDialogue:
+      "Parfait ! Tu sais maintenant où forger les pièces rares et brasser du nectar avec le butin des monstres.",
+    objectives: [
+      { id: 'visit_forge', label: "Entrer dans l'Atelier de la Forge", type: 'enter_zone', targetId: 'forge_interieur', required: 1 },
+      { id: 'visit_apoth', label: "Entrer dans l'Infirmerie de Cassandre", type: 'enter_zone', targetId: 'apothicairerie_interieur', required: 1 }
+    ],
+    reward: {
+      xp: 120,
+      gold: 24,
+      items: [
+        { itemId: 'fragment_bronze', quantity: 2 },
+        { itemId: 'herbe_ambroisie', quantity: 2 }
+      ]
+    }
+  },
+  sq_bronze_ruines: {
+    id: 'sq_bronze_ruines',
+    title: 'Le Bronze des Ruines',
+    kind: 'side',
+    level: 1,
+    giverNpcId: 'damon',
+    turnInNpcId: 'damon',
+    summary: 'Ramassez 3 Fragments de bronze dans les Plaines Foudroyées pour Damon.',
+    offerDialogue:
+      "Mon stock de minerai a sombré avec le dernier navire. Si tu sors dans les Plaines Foudroyées, rapporte-moi 3 Fragments de bronze. Je te forgerai un bouclier solide en échange.",
+    progressDialogue:
+      "Tu trouveras des Fragments de bronze près des vieux murs écroulés dans les Plaines Foudroyées.",
+    completeDialogue:
+      "Bel alliage ! Tiens, prends ce Bouclier d'hoplite. J'ai aussi quelques pièces forgées à vendre si tu as des drachmes.",
+    objectives: [
+      { id: 'collect_bronze', label: 'Fragments de bronze', type: 'interact', targetId: 'fragment_bronze', required: 3 }
+    ],
+    reward: {
+      xp: 120,
+      gold: 26,
+      items: [{ itemId: 'bouclier_hoplite', quantity: 1 }]
+    }
+  },
+
+  sq_ambroisie_perdue: {
+    id: 'sq_ambroisie_perdue',
+    title: "L'Ambroisie Perdue",
+    kind: 'side',
+    level: 1,
+    giverNpcId: 'cassandre',
+    turnInNpcId: 'cassandre',
+    summary: "Cueillez 3 Herbes d'ambroisie dans les Plaines Foudroyées.",
+    offerDialogue:
+      "Nos réserves s'épuisent avec l'afflux des réfugiés. Des Herbes d'ambroisie ont poussé au pied des oliviers dans les Plaines Foudroyées. Rapporte-m'en trois et je te préparerai plusieurs fioles.",
+    progressDialogue:
+      "Les Herbes d'ambroisie poussent près des oliviers dans les Plaines Foudroyées.",
+    completeDialogue:
+      "Parfait, les blessés vont pouvoir tenir. Prends ces potions et ce nectar, tu en auras besoin dehors.",
+    objectives: [
+      { id: 'collect_herbs', label: "Herbes d'ambroisie", type: 'interact', targetId: 'herbe_ambroisie', required: 3 }
+    ],
+    reward: {
+      xp: 105,
+      gold: 19,
+      items: [
+        { itemId: 'potion_ambroisie', quantity: 3 },
+        { itemId: 'nectar_divin', quantity: 1 }
+      ]
+    }
+  },
+
+  sq_portes_chaos: {
+    id: 'sq_portes_chaos',
+    title: 'Aux Portes du Chaos',
+    kind: 'side',
+    level: 3,
+    giverNpcId: 'theron',
+    turnInNpcId: 'theron',
+    prerequisiteQuestId: 'mq_1_etincelle',
+    summary: "Abattez le Centaure corrompu qui tient la route à l'est des Plaines.",
+    offerDialogue:
+      "Un Centaure pris de folie barre la passe est des Plaines Foudroyées. Il charge tout ce qui bouge. Si tu parviens à le faire tomber, nos éclaireurs pourront enfin franchir le pont.",
+    progressDialogue:
+      "Méfie-toi de sa ruée en ligne droite : décale-toi dès qu'il baisse sa lance.",
+    completeDialogue:
+      "Beau travail ! La route est dégagée. Garde cet Éclat de foudre, il te servira sûrement plus qu'à moi.",
+    objectives: [
+      { id: 'kill_centaure', label: 'Centaure corrompu', type: 'kill', targetId: 'centaure', required: 1 }
+    ],
+    reward: {
+      xp: 175,
+      gold: 37,
+      items: [{ itemId: 'eclat_foudre', quantity: 1 }]
+    }
+  },
+
+  sq_ailes_tempete: {
+    id: 'sq_ailes_tempete',
+    title: 'Les Ailes de la Tempête',
+    kind: 'side',
+    level: 2,
+    giverNpcId: 'iris',
+    turnInNpcId: 'iris',
+    summary: 'Éliminez 4 Harpies des tempêtes qui harcèlent les convois des Plaines.',
+    offerDialogue:
+      "Depuis la terrasse nord, je vois les harpies plonger sur tous les voyageurs qui approchent de la cité. Chasse-en quatre dans les Plaines Foudroyées et je te paierai en drachmes.",
+    progressDialogue:
+      "Les harpies attaquent à distance avec leurs rafales de plumes. Reste mobile.",
+    completeDialogue:
+      "Le ciel respire enfin au-dessus de la route est. Voici ta paie, héros.",
+    objectives: [
+      { id: 'kill_harpies_side', label: 'Harpies des tempêtes', type: 'kill', targetId: 'harpie', required: 4 }
+    ],
+    reward: {
+      xp: 145,
+      gold: 42,
+      items: [{ itemId: 'potion_ambroisie', quantity: 2 }]
+    }
+  }
+};
+
+export const QUEST_ORDER = [
+  'mq_1_etincelle',
+  'mq_2_terres_foudroyees',
+  'mq_3_sanctuaire',
+  'mq_4_rivage_epreuve',
+  'mq_5_labyrinthe',
+  'mq_6_hydre',
+  'sq_initiation_artisanat',
+  'sq_bronze_ruines',
+  'sq_ambroisie_perdue',
+  'sq_ailes_tempete',
+  'sq_portes_chaos',
+  'sq_chasse_squelettes'
+];
+
+export interface NpcDef {
+  id: string;
+  name: string;
+  role: string;
+  look: 'messenger' | 'smith' | 'healer' | 'guard' | 'merchant' | 'citizen' | 'prometheus';
+  idleDialogue: string;
+  canHeal?: boolean;
+  shopItems?: string[];
+}
+
+export const NPCS: Record<string, NpcDef> = {
+  lycos: {
+    id: 'lycos',
+    name: 'Lycos',
+    role: 'Messager de Prométhée',
+    look: 'messenger',
+    idleDialogue:
+      "Tant que le brasero brûle sur cette place, l'Olympe sait que l'humanité n'a pas cédé."
+  },
+  damon: {
+    id: 'damon',
+    name: 'Damon',
+    role: "Forgeron d'Airain",
+    look: 'smith',
+    idleDialogue:
+      "Besoin d'une lame mieux trempée ou d'une cuirasse ? Mon enclume tourne jour et nuit.",
+    shopItems: ['arme_airain', 'cuirasse_hoplite']
+  },
+  elena: {
+    id: 'elena',
+    name: 'Éléna',
+    role: 'Marchande du Port',
+    look: 'merchant',
+    idleDialogue:
+      "Mes bateaux ne naviguent plus loin depuis la colère de Poséidon, mais j'ai encore des fioles et du nectar pour les aventuriers.",
+    shopItems: ['potion_ambroisie', 'nectar_divin', 'eclat_foudre']
+  },
+  cassandre: {
+    id: 'cassandre',
+    name: 'Cassandre',
+    role: 'Guérisseuse',
+    look: 'healer',
+    idleDialogue:
+      "Si tu reviens blessé des plaines, passe par le jardin. Mes soins sont gratuits pour ceux qui défendent la cité.",
+    canHeal: true,
+    shopItems: ['potion_ambroisie', 'nectar_divin']
+  },
+  theron: {
+    id: 'theron',
+    name: 'Théron',
+    role: 'Guetteur du Rempart',
+    look: 'guard',
+    idleDialogue:
+      "Au-delà de cette porte, les bêtes de Zeus tiennent la route. Reste sur tes gardes."
+  },
+  iris: {
+    id: 'iris',
+    name: 'Iris',
+    role: 'Éclaireuse',
+    look: 'guard',
+    idleDialogue:
+      "Je surveille l'horizon depuis le bastion nord. Les éclairs frappent encore loin à l'est."
+  },
+  philon: {
+    id: 'philon',
+    name: 'Philon',
+    role: 'Ancien de Corinthe',
+    look: 'citizen',
+    idleDialogue:
+      "Ma cité s'est effondrée en une nuit sous la foudre. Heureusement que les murailles de l'Agora ont tenu."
+  },
+  dionysios: {
+    id: 'dionysios',
+    name: 'Dionysios',
+    role: 'Maître de Taverne',
+    look: 'merchant',
+    idleDialogue:
+      "Assieds-toi donc ! Vin de Chios, posca d'hoplite ou kykèon d'Éleusis : rien de tel avant de repartir affronter les bêtes.",
+    shopItems: ['vin_chios', 'posca', 'hydromel_olympe', 'kykeon']
+  },
+  homere: {
+    id: 'homere',
+    name: 'Homère',
+    role: 'Aède de la Taverne',
+    look: 'citizen',
+    idleDialogue:
+      "Bienvenue à la Taverne des Héros ! Reprends ton souffle près du feu : on raconte que les coffres les plus précieux des plaines et des donjons sont scellés par d'anciennes runes de combat."
+  },
+  neree: {
+    id: 'neree',
+    name: 'Nérée',
+    role: 'Passeur du Quai',
+    look: 'citizen',
+    idleDialogue:
+      "Ce portail ouest mène droit au Rivage d'Égée. N'y mets pas les pieds sans l'Étincelle de Prométhée : les flots y sont déchaînés."
+  },
+  echo_promethee: {
+    id: 'echo_promethee',
+    name: 'Écho de Prométhée',
+    role: 'Voix du Titan',
+    look: 'prometheus',
+    idleDialogue:
+      "Mes chaînes sur le Caucase se fissurent déjà... Rassemble les Vestiges, mortel."
+  }
+};
+
+export interface CodexEntry {
+  id: string;
+  title: string;
+  chapter: string;
+  text: string;
+  unlockedByDefault?: boolean;
+}
+
+export const CODEX_ENTRIES: CodexEntry[] = [
+  {
+    id: 'codex_soumission',
+    title: 'La Fin de la Soumission',
+    chapter: 'Chronique I',
+    unlockedByDefault: true,
+    text: "Lorsque les cités mortelles apprirent à soigner, forger et bâtir sans supplier l'Olympe, Zeus y vit un acte d'Hybris. Le ciel se fendit, les mers montèrent et les monstres anciens furent relâchés."
+  },
+  {
+    id: 'codex_agora',
+    title: "La Cité de l'Agora",
+    chapter: 'Refuge',
+    unlockedByDefault: true,
+    text: "Érigée sur un promontoire de marbre bordé par la mer Égée, la cité de l'Agora accueille les survivants des cités détruites autour de son port, de son marché et du Brasero de Prométhée."
+  },
+  {
+    id: 'codex_promethee',
+    title: 'Le Murmure de Prométhée',
+    chapter: 'Chronique II',
+    text: "Enchaîné au Caucase, le Titan souffle à travers les braises. Le feu offert jadis n'était qu'une étincelle : la vraie force capable de briser l'armure divine dort dans les Vestiges Primordiaux."
+  },
+  {
+    id: 'codex_fleaux',
+    title: 'Les Fléaux des Plaines',
+    chapter: 'Bestiaire',
+    text: "Satyres, harpies des tempêtes et centaures pris de folie tiennent la route antique au-delà du rempart est. Chaque cratère porte encore l'odeur de la foudre olympienne."
+  },
+  {
+    id: 'codex_vestiges',
+    title: 'Le Sanctuaire Brisé',
+    chapter: 'Chronique III',
+    text: "Avant le règne de Zeus, les Titans avaient bâti des sanctuaires sur les failles telluriques. Héphaïstos y a posté ses automates d'airain pour verrouiller le feu primordial."
+  },
+  {
+    id: 'codex_egee',
+    title: "L'Épreuve du Rivage d'Égée",
+    chapter: 'Chronique IV',
+    text: "Les avatars divins s'abritent derrière une égide presque impénétrable. Seules les Stèles de Prométhée dressées dans leurs arènes permettent d'affaiblir leur bouclier."
+  },
+  {
+    id: 'codex_labyrinthe',
+    title: 'Le Labyrinthe des Brumes',
+    chapter: 'Donjon I — Mid Game',
+    text: "Bâti sous les ruines antiques par Dédale et scellé par les dieux, le Labyrinthe des Brumes abritait le Cœur d'Airain sous la garde du Minotaure. Sa chute marque le début de la Voie des Reliques."
+  },
+  {
+    id: 'codex_hydre',
+    title: "L'Hydre de Lerne",
+    chapter: 'Donjon II — Mid Game',
+    text: "Sous les eaux stagnantes de Lerne, le monstre aux têtes multiples veillait sur le Venin d'Orque. Sa défaite brise un second sceau olympien et rapproche les mortels du mont Caucase."
+  }
+];

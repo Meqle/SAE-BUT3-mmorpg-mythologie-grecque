@@ -10,9 +10,9 @@ Le projet est développé en architecture monorepo modulaire (`packages/shared`,
 
 | Pôle | Responsable(s) | Périmètre technique principal |
 | :--- | :--- | :--- |
-| **Pôle Développement (Client / Moteur 2D)** | 2 Développeurs (Dev A & Dev B) | Moteur PixiJS, vue top-down et profil, HUD React, décors, animations et intégration client WebSocket. |
+| **Pôle Développement (Client / Moteur 2D)** | 2 Développeurs (Dev A & Dev B) | Moteur PixiJS, vue top-down et profil, HUD React, décors, animations, gameplay RPG et intégration client WebSocket. |
 | **Pôle Réseau** | 1 Développeur Réseau | Serveur WebSocket Node.js, boucle autoritaire (20 Hz), gestion des instances/salles, synchronisation d'état et sécurité. |
-| **Pôle Base de Données** | 1 Développeur BDD | Schéma relationnel (3NF), persistance PostgreSQL, migrations, ORM, API REST d'authentification et transactions d'inventaire. |
+| **Pôle Base de Données** | 1 Développeur BDD | Schéma relationnel PostgreSQL (3NF), persistance NoSQL (MongoDB), API REST d'authentification et transactions d'inventaire. |
 | **Pôle DevOps & Qualité** | Rôle transverse (DevOps) | Conteneurisation Docker multi-stage, orchestration Compose, règles de protection Git Flow, pipelines CI GitHub Actions et packaging. |
 
 ---
@@ -25,26 +25,27 @@ Le projet est développé en architecture monorepo modulaire (`packages/shared`,
 #### Tâches terminées :
 - [x] Initialisation de l'application client en TypeScript avec Vite et React 18.
 - [x] Intégration du viewport et canvas PixiJS v8 dans le cycle de vie React.
-- [x] Écran d'accueil et Lobby mythologique complet en pixel art (sélection du serveur, allégeance aux 6 divinités, arbre des dons divins).
-- [x] Moteur de déplacement en vue du dessus (8 directions, normalisation diagonale, caméra fluide centrée sur le héros).
-- [x] Moteur de déplacement en vue de profil (gravité à 900 px/s², saut impulsionnel à -480 px/s, plateforme prototype au sol).
-- [x] Intégration du client réseau WebSocket (connexion au point d'entrée `/ws`, envoi des paquets `PLAYER_INPUT` à 20 Hz, prédiction locale, réconciliation sur snapshot `WORLD_TICK`, rendu graphique des joueurs distants).
+- [x] Écran d'accueil et Lobby mythologique complet (choix du nom, 4 classes jouables, 6 divinités protectrices alignées sur `seed.sql`, prologue narratif).
+- [x] Direction artistique antique cohérente (style Acropole en fin d'après-midi, ombres portées, façades grecques détaillées, sprites distincts par classe en vue du dessus et de profil).
+- [x] Moteur de déplacement double perspective : 8 directions en vue du dessus + gravité/saut en vue de profil, collisions AABB (murs, bâtiments, eau bloquée) et tri de profondeur.
+- [x] Intégration du client réseau WebSocket (connexion `/ws`, envoi `PLAYER_INPUT` à 20 Hz, prédiction locale, interpolation et rendu des joueurs distants).
+- [x] Monde jouable en **9 zones** :
+  - 6 zones extérieures : *Cité de l'Agora* (spawn), *Plaines Foudroyées*, *Sanctuaire Brisé*, *Rivage d'Égée* (vue de profil), *Labyrinthe des Brumes* (dédale 2480×1720) et *Marécages de Lerne*.
+  - 3 bâtiments visitables dans l'Agora : *Taverne des Héros* (animée avec Dionysios, Homère et clients), *Atelier de la Forge* (Damon) et *Infirmerie* (Cassandre).
+- [x] Système de combat complet : attaque principale (`Clic G`), pouvoir divin (`Clic D`), combos 3 coups et styles propres par classe, esquive (`Maj`), effets sonores Web Audio, secousse caméra et malus de mort (-15 % drachmes, -25 % XP du niveau).
+- [x] Bestiaire de 10 créatures dont **4 boss** (*Gardien d'Airain*, *Sentinelle de Poséidon* avec 3 stèles d'affaiblissement, *Minotaure des Brumes*, *Hydre de Lerne*) avec patterns aléatoires, télégraphes contextuels et phase d'enrage sous 50 % PV.
+- [x] Progression & quêtes : 6 quêtes principales (verrouillant l'accès progressif aux zones), 6 quêtes secondaires (dont initiation aux ateliers), codex évolutif, coffres dissimulés et coffres scellés à énigmes.
+- [x] Système de loot par rareté (probabilités faibles et décroissantes *Commun → Rare → Épique → Légendaire*, butin physique au sol), économie équilibrée, achat/revente chez les marchands et **craft séparé** (recettes simples en poche vs recettes avancées dans les ateliers PNJ).
+- [x] Interface complète : HUD épuré, minimap canvas temps réel, carte de zone & carte du monde avec voyage rapide (`M`), fiche personnage & sac en grille (8 emplacements d'équipement), double arbre de talents libre jusqu'au niveau 40 (2 voies par classe + 2 voies par dieu avec sorts actifs sur `1`–`4`), menu Pause (`Échap`) avec bestiaire et reconfiguration clavier/souris.
 
 #### Tâches en cours et à venir :
-- [ ] **Sous-tâche A (Interface & Expérience joueur)** :
-  - [ ] HUD en jeu : barre de vie (PV / MaxHP), barre d'endurance/énergie divine, badge du dieu protecteur.
-  - [ ] Boîte de dialogue et chat textuel multijoueur (overlay React avec onglets Général/Système, canal de discussion de salle).
-  - [ ] Mini-carte prototype ou boussole des points cardinaux de l'Olympe.
-  - [ ] Menu pause / options en jeu (gestion du son, raccourcis clavier ZQSD / WASD).
-- [ ] **Sous-tâche B (Monde, Sprites & Moteur physique local)** :
-  - [ ] Remplacement des formes géométriques temporaires par des spritesheets animés (héros, animations marche, course, saut, idle).
-  - [ ] Moteur de tuiles (Tileset) pour les décors antiques (temple d'Olympe, dalles de marbre, colonnes doriques, autels votifs).
-  - [ ] Système de collision 2D par boîtes AABB (blocage contre les murs de temple, falaises et obstacles du monde).
-  - [ ] Tri de profondeur 2D (`y-sorting`) pour que les personnages passent devant ou derrière les colonnes.
-- [ ] **Gameplay avancé (Boss & Lore en vue de côté)** :
-  - [ ] Transition automatique en vue de profil lors de l'entrée dans une arène de boss divin.
-  - [ ] Mécanique de combat non linéaire : énigmes de plateforme et collecte d'artefacts sacrés pour désactiver l'invulnérabilité du boss.
-  - [ ] Patterns d'attaques du boss (projectiles divins, ondes de choc au sol nécessitant un saut synchronisé).
+- [ ] **Interface & Multijoueur** :
+  - [ ] Chat textuel multijoueur (overlay React connecté aux paquets réseau).
+  - [ ] Synchronisation client-serveur sur toutes les nouvelles zones et combats PvE coopératifs (en lien avec le Pôle Réseau).
+- [ ] **Persistance distante** :
+  - [ ] Remplacement de la sauvegarde locale (`localStorage`) par les appels API REST vers la base SQL/NoSQL du Pôle BDD.
+- [ ] **Contenu Endgame (Acte III & Raids)** :
+  - [ ] Donjon *Enclume Souterraine d'Héphaïstos*, *Ascension du Caucase* (libération de Prométhée) et raids du *Mont Olympe*.
 - [ ] **Packaging final** :
   - [ ] Packaging Desktop en exécutable natif via Tauri ou Electron.
 
@@ -57,18 +58,17 @@ Le projet est développé en architecture monorepo modulaire (`packages/shared`,
 - [x] Serveur WebSocket opérationnel (`ws`, point d'entrée `/ws`).
 - [x] Boucle de simulation autoritaire côté serveur à 20 ticks par seconde (50 ms par tick).
 - [x] Gestion des salles d'instances en mémoire (`Map<roomId, Map<playerId, PlayerSession>>`).
-- [x] Validation stricte des entrées clavier (`PLAYER_INPUT`) côté serveur (directions boéliennes, vitesse bornée).
+- [x] Validation stricte des entrées clavier (`PLAYER_INPUT`) côté serveur et correction de la synchronisation de position (`fix/player-position-sync`).
 - [x] Diffusion périodique des snapshots du monde (`WORLD_TICK`) aux clients d'une salle.
 - [x] Gestion propre des déconnexions (nettoyage de la session joueur et suppression des salles vides).
 - [x] Protections de base (taille max de message 4 Ko, débit limité à 60 msg/s par socket, filtrage d'origine CORS/Origin).
 
 #### Tâches en cours et à venir :
+- [ ] Extension des cartes serveur dans `packages/shared` pour synchroniser les nouvelles zones et donjons.
 - [ ] Diffusion des messages de chat textuel (`CHAT_SEND` -> `CHAT_BROADCAST`).
 - [ ] Gestion des reconnexions et persistance transitoire de session.
-- [ ] Optimisation de la bande passante :
-  - [ ] Snapshots différentiels (envoi des deltas d'état plutôt que de l'état complet).
-  - [ ] Culling spatial (filtrage des joueurs selon la distance de visibilité).
-- [ ] Synchronisation des entités dynamiques supplémentaires (points de vie synchronisés, déclenchement d'artefacts, état des boss).
+- [ ] Optimisation de la bande passante (snapshots différentiels, culling spatial).
+- [ ] Synchronisation des entités dynamiques (PV, monstres, boss, butin partagé en coop donjon).
 
 ---
 
@@ -76,21 +76,14 @@ Le projet est développé en architecture monorepo modulaire (`packages/shared`,
 *Dossier : `packages/server/src/db/`*
 
 #### Tâches terminées :
-- [x] Modèle Conceptuel et Logique de Données (MCD / MLD complet en 3NF) :
-  - Tables d'identité : `COMPTE` (email, hash mot de passe, rôle, statut).
-  - Tables de jeu : `PERSONNAGE` (niveau, PV, coordonnées x/y, mode de vue, classe, zone), `CLASSE`, `ZONE`.
-  - Tables de lore & combats : `BOSS`, `VICTOIRE_BOSS`, `CLASSEMENT_SAISON`.
-  - Tables d'économie & inventaire : `OBJET`, `INSTANCE_OBJET`, `PROGRESSION_QUETE`.
-  - Tables de traçabilité multijoueur : `SESSION_JEU`, `INTERACTION`, `ECHANGE`, `LIGNE_ECHANGE`.
+- [x] Modèle Conceptuel et Logique de Données (MCD / MLD complet en 3NF, 15 tables).
+- [x] Initialisation de la base PostgreSQL sous Docker : scripts `schema.sql` (contraintes, triggers, fonction d'échange atomique `effectuer_echange`), `seed.sql` (référentiels classes/divinités/zones/boss/objets) et `demo.sql`.
 
 #### Tâches en cours et à venir :
-- [ ] Initialisation de la base PostgreSQL (scripts DDL SQL `schema.sql` et fixtures/seed).
-- [ ] Choix et configuration d'un ORM ou query-builder (Prisma / Drizzle).
-- [ ] API REST d'authentification (`POST /api/auth/register`, `POST /api/auth/login` avec hachage bcrypt et jetons JWT).
-- [ ] API REST de gestion de personnages (`GET /api/characters`, `POST /api/characters`).
-- [ ] Intégration de la persistance avec la session WebSocket :
-  - [ ] Chargement du personnage en base lors de l'entrée dans une salle.
-  - [ ] Sauvegarde périodique et lors de la déconnexion (coordonnées, PV, inventaire).
+- [ ] Volet NoSQL (MongoDB) pour les documents de quêtes, détails d'objets, patterns de boss et progression étendue.
+- [ ] API REST d'authentification (`POST /api/auth/register`, `POST /api/auth/login` avec bcrypt et JWT).
+- [ ] API REST de personnages et sauvegarde (`GET/POST /api/characters`, `PUT /api/characters/:id/save`).
+- [ ] Intégration de la persistance avec le client et la session WebSocket.
 
 ---
 
@@ -100,45 +93,38 @@ Le projet est développé en architecture monorepo modulaire (`packages/shared`,
 #### Tâches terminées :
 - [x] Monorepo npm workspaces configuré et build TypeScript unifié.
 - [x] Conteneurisation Docker multi-stage (Node.js 24 Alpine pour le build et le serveur, Nginx Alpine pour le client statique).
-- [x] Orchestration Docker Compose avec reverse-proxy Nginx (ports 8080 exposé, port 3001 interne, proxy `/ws` et `/api`).
+- [x] Orchestration Docker Compose avec reverse-proxy Nginx et service PostgreSQL.
 - [x] Healthcheck conteneur et reprise automatique de service.
-- [x] Configuration des règles de protection de branches GitHub (interdiction des pushs directs sur `main` et `dev`, obligation de Pull Request avec validation).
+- [x] Règles de protection de branches GitHub (Pull Request obligatoire vers `main` et `dev`).
 - [x] Normalisation des conventions de branches Git (`feat/...`, `fix/...`, `docs/...`).
 
 #### Tâches en cours et à venir :
-- [ ] Pipeline CI GitHub Actions (`.github/workflows/ci.yml`) :
-  - [ ] Linter et vérification des types (`tsc --noEmit`).
-  - [ ] Validation automatique du build monorepo (`npm run build`).
-  - [ ] Validation du build des images Docker en pré-merge.
-- [ ] Packaging Desktop multiplateforme (script de release automatique).
+- [ ] Pipeline CI GitHub Actions (`.github/workflows/ci.yml`) : vérification TypeScript, build monorepo et build Docker.
+- [ ] Nettoyage régulier des branches fusionnées (suppression automatique après merge de PR).
+- [ ] Packaging Desktop multiplateforme.
 
 ---
 
 ## 3. Planification par jalons (Roadmap des Sprints)
 
 ### Jalon 1 : Socle architectural & Prototype fonctionnel (Terminé)
-- Architecture monorepo, configuration TypeScript et Docker Compose.
-- Écran titre pixel art et lobby mythologique complet.
-- Moteur 2D PixiJS en double vue (top-down et profil).
-- Boucle réseau WebSocket avec déplacement synchronisé multijoueur.
-- Schéma relationnel BDD validé.
+- Architecture monorepo, TypeScript, Docker Compose et écran titre / lobby.
+- Moteur 2D PixiJS double vue, boucle WebSocket multijoueur et modélisation BDD.
 
-### Jalon 2 : Gameplay, Décors, HUD et Persistance (En cours)
-- **Développement A** : Intégration du HUD React, barres de statut et chat textuel.
-- **Développement B** : Intégration des décors pixel art, tileset d'Olympe et masques de collision AABB.
-- **Réseau** : Relais des paquets de chat et déconnexion sécurisée.
-- **Base de données** : Mise en place de PostgreSQL, migrations DDL, authentification JWT et sauvegarde de position.
+### Jalon 2 : Gameplay Early Game, Décors, HUD et Base SQL (Terminé côté client & SQL)
+- Refonte graphique antique, Cité de l'Agora agrandie avec 3 bâtiments visitables, HUD, minimap, carte interactive et menu pause.
+- Base PostgreSQL opérationnelle (`schema.sql`, `seed.sql`, `demo.sql`) et correction synchro réseau.
+- Reste sur ce jalon : chat multijoueur et branchement API d'authentification / sauvegarde.
 
-### Jalon 3 : Boss Mythologique, Système de Quêtes & Économie
-- Arène de boss en vue de côté avec énigmes et artefacts d'affaiblissement.
-- Gestion d'inventaire et échanges sécurisés entre joueurs.
-- Persistance complète des victoires de boss et classements de saison.
+### Jalon 3 : Donjons Mid Game, Boss, Quêtes, Craft & Arbres de talents (En cours — Client jouable)
+- 4 boss jouables (dont Rivage en vue de profil, Labyrinthe des Brumes et Marécages de Lerne).
+- 6 quêtes principales, 6 secondaires, drops par rareté, inventaire complet, craft en ateliers, économie et arbres de talents libres jusqu'au niveau 40.
+- Reste sur ce jalon : intégration API BDD (SQL + NoSQL), synchro coop multi-zones côté serveur et contenu Endgame (Caucase / Olympe).
 
-### Jalon 4 : Finitions, Packaging Desktop & Préparation Soutenance
-- Pipeline CI/CD GitHub Actions complète.
+### Jalon 4 : Finitions, CI/CD, Packaging & Soutenance (À venir)
+- Pipeline CI/CD GitHub Actions et nettoyage du dépôt.
 - Packaging exécutable desktop (Tauri / Electron).
-- Documentation technique d'architecture et rapport de projet SAE.
-- Vidéo de démonstration et répétition de la soutenance orale.
+- Rapport technique SAE, démonstration et soutenance orale.
 
 ---
 
@@ -148,8 +134,8 @@ Le projet est développé en architecture monorepo modulaire (`packages/shared`,
    - Tout nouveau paquet réseau ou structure de données partagée doit d'abord être déclaré dans `packages/shared/src/index.ts`.
    - Les types sont stricts, typés TypeScript et compilés en ESM.
 
-2. **Politique Git Flow** :
+2. **Politique Git Flow & propreté du dépôt** :
    - Aucune modification directe sur `main` ni sur `dev`.
-   - Création systématique d'une branche préfixée : `feat/<nom-fonctionnalite>`.
-   - Revue de code et validation obligatoire par Pull Request avant merge dans `dev`.
-   - Les fusions vers `main` correspondent aux versions taguées et présentables aux jurys.
+   - Création systématique d'une branche préfixée : `feat/<nom-fonctionnalite>`, `fix/<nom-correctif>`, `docs/<sujet>`.
+   - Revue de code et validation par Pull Request avant merge.
+   - **Suppression systématique des branches fusionnées** (en local et sur GitHub après merge de la PR) pour garder un historique clair et éviter les branches mortes.

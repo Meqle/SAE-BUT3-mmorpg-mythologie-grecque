@@ -1,16 +1,20 @@
-// une scene = tout le decor d'une vue, en couches (fond en parallaxe, decor, premier plan)
 import { Container } from 'pixi.js';
 import { ViewMode } from '@greek-myth/shared';
+import type { ZoneDefinition } from '../data/zones';
 import { View } from '../camera';
 import { createSideView } from './sideView';
 import { createTopDown } from './topDown';
+import { createZoneScene } from './zones/zoneScenes';
 
 export interface Scene {
-  back: Container; // derriere les joueurs : fond, decor, objets solides
-  front: Container; // devant les joueurs : premier plan
-  update: (view: View, time: number) => void; // place les couches et anime (time en secondes)
+  back: Container;
+  front: Container;
+  update: (view: View, time: number) => void;
 }
 
 export function createScene(mode: ViewMode): Scene {
   return mode === 'top-down' ? createTopDown() : createSideView();
 }
+
+export { createZoneScene };
+export type { ZoneDefinition };

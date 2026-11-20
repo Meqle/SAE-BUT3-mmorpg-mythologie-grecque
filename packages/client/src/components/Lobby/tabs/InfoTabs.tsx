@@ -1,4 +1,3 @@
-// onglets d'information du lobby : AMIS, OPTION, CREDITS
 import { HelpCircle, Settings, Swords } from 'lucide-react';
 import { box, Panel } from '../Panel';
 
@@ -19,14 +18,17 @@ export function FriendsTab() {
 
 export function OptionsTab() {
   return (
-    <Panel title="Configuration Client" icon={<Settings size={16} />}>
+    <Panel title="Configuration & Commandes" icon={<Settings size={16} />}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ ...box, padding: '12px 14px' }}>
-          <div style={{ fontSize: 11, color: '#fff', fontWeight: 'bold' }}>Contrôles du Héros :</div>
-          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, lineHeight: 1.5 }}>
-            • <b>Z, Q, S, D</b> ou <b>Flèches</b> : Déplacement 8 directions<br />
-            • En vue de profil : <b>Q, D</b> pour courir, <b>ESPACE</b> pour sauter<br />
-            • Les <b>portes</b> de la carte changent la vue
+          <div style={{ fontSize: 11, color: '#fff', fontWeight: 'bold' }}>Commandes en jeu :</div>
+          <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4, lineHeight: 1.6 }}>
+            • <b>Z, Q, S, D</b> ou <b>Flèches</b> : Déplacement<br />
+            • <b>Clic gauche</b> ou <b>J</b> : Attaque de classe<br />
+            • <b>K</b> : Pouvoir de l'Étincelle • <b>Shift</b> : Esquive<br />
+            • <b>E</b> : Parler aux PNJ / Interagir • <b>R</b> : Potion<br />
+            • <b>Espace</b> (en vue de profil) : Sauter sur les plateformes<br />
+            • <b>I</b> : Inventaire • <b>C</b> : Chroniques du monde
           </div>
         </div>
         <div style={{ ...box, display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
@@ -39,7 +41,7 @@ export function OptionsTab() {
 }
 
 const TEAM = [
-  { pole: 'Développement', color: '#facc15', detail: 'PixiJS 2D, Interface Pixel Art, Physique' },
+  { pole: 'Développement', color: '#facc15', detail: 'PixiJS 2D, Scénario, Quêtes, Combats, UI' },
   { pole: 'Réseau', color: '#38bdf8', detail: "Serveur WebSocket, Synchronisation d'état" },
   { pole: 'Base de Données', color: '#a855f7', detail: 'PostgreSQL, Authentification, Inventaires' }
 ];

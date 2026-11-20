@@ -1,7 +1,6 @@
-// personnages : un hoplite (casque corinthien, cape, cimier et bouclier a la couleur du dieu choisi)
-// le dessin de chaque vue est dans hero/side.ts (profil) et hero/above.ts (dessus)
 import { Container, Text, TextStyle } from 'pixi.js';
 import { ViewMode } from '@greek-myth/shared';
+import type { HeroClassId } from './data/classes';
 import { COLORS } from './scenes/palette';
 import { createAboveHero } from './hero/above';
 import { createSideHero } from './hero/side';
@@ -11,11 +10,13 @@ export interface HeroSprite {
   label: Text;
   labelY: number;
   setView: (mode: ViewMode) => void;
-  face: (dx: number) => void; // regarde a gauche (dx < 0) ou a droite (dx > 0)
-  animate: (moving: boolean, airborne: boolean, time: number) => void; // pas, saut (time en secondes)
+  face: (dx: number) => void;
+  aimAngle: (angle: number) => void;
+  animate: (moving: boolean, airborne: boolean, time: number) => void;
+  setHitFlash: (active: boolean) => void;
+  pulseAttack: () => void;
 }
 
-// nom au-dessus de la tete : lettres gravees claires avec contour bleu nuit et petite ombre
 function createLabel(name: string, isLocal: boolean): Text {
   const label = new Text({
     text: name,
@@ -34,13 +35,16 @@ function createLabel(name: string, isLocal: boolean): Text {
   return label;
 }
 
-export function createHero(name: string, color: number, isLocal: boolean): HeroSprite {
-  const above = createAboveHero(color, isLocal);
-  const side = createSideHero(color, isLocal);
+export function createHero(name: string, color: number, isLocal: boolean, heroClass: HeroClassId = 'GUERRIER'): HeroSprite {
+  const above = createAboveHero(color, isLocal, heroClass);
+  const side = createSideHero(color, isLocal, heroClass);
   const label = createLabel(name, isLocal);
+  const bodyWrap = new Container();
+  bodyWrap.addChild(above.view, side.view);
   const container = new Container();
-  container.addChild(above.view, side.view, label);
+  container.addChild(bodyWrap, label);
   let mode: ViewMode = 'top-down';
+  let attackPulse = 0;
 
   const hero: HeroSprite = {
     container,
@@ -58,16 +62,25 @@ export function createHero(name: string, color: number, isLocal: boolean): HeroS
       side.face(Math.sign(dx));
       above.face(Math.sign(dx));
     },
+    aimAngle: (angle) => {
+      above.setAngle(angle);
+    },
     animate: (moving, airborne, time) => {
-      if (mode === 'top-down') above.animate(moving, time);
-      else side.animate(moving, airborne, time);
+      if (attackPulse > 0) attackPulse = Math.max(0, attackPulse - 0.11);
+      if (mode === 'top-down') above.animate(moving, time, attackPulse);
+      else side.animate(moving, airborne, time, attackPulse);
+    },
+    setHitFlash: (active) => {
+      bodyWrap.tint = active ? 0xffb4b4 : 0xffffff;
+    },
+    pulseAttack: () => {
+      attackPulse = 1;
     }
   };
   hero.setView('top-down');
   return hero;
 }
 
-// decale les noms vers le haut quand des joueurs sont proches (sinon ils se chevauchent)
 export function stackLabels(heroes: HeroSprite[]): void {
   const sorted = [...heroes].sort((a, b) => a.container.y - b.container.y);
   sorted.forEach((hero, i) => {
@@ -81,5 +94,4 @@ export function stackLabels(heroes: HeroSprite[]): void {
   });
 }
 
-// "#facc15" -> 0xfacc15
 export const hexColor = (color: string) => parseInt(color.replace('#', ''), 16);

@@ -1,6 +1,7 @@
-// lobby : image de fond pixel art + menu a gauche + onglet actif a droite
 import { useState } from 'react';
 import { GodAffinity, GODS_LORE, ServerInfo } from '@greek-myth/shared';
+import type { HeroClassId } from '../../game/data/classes';
+import { loadGameState } from '../../game/state/gameState';
 import { PlayTab } from './tabs/PlayTab';
 import { ServerTab } from './tabs/ServerTab';
 import { HeroTab } from './tabs/HeroTab';
@@ -11,17 +12,17 @@ interface TitleScreenProps {
   servers: ServerInfo[];
   selectedServer: ServerInfo;
   onSelectServer: (server: ServerInfo) => void;
+  selectedClass: HeroClassId;
+  onSelectClass: (cls: HeroClassId) => void;
   selectedGod: GodAffinity;
   onSelectGod: (god: GodAffinity) => void;
   heroName: string;
   onChangeHeroName: (name: string) => void;
-  onEnterGame: () => void;
+  onEnterGame: (forceNew: boolean) => void;
 }
 
 type MenuTab = 'play' | 'serveur' | 'perso' | 'amis' | 'option' | 'credits';
 
-// les boutons sont dessines dans lobby-bg.png : on place des zones cliquables par-dessus
-// (positions en % de l'image)
 const MENU: { id: MenuTab; label: string; top: string }[] = [
   { id: 'play', label: 'PLAY', top: '11.80%' },
   { id: 'serveur', label: 'SERVEUR', top: '24.65%' },
@@ -34,15 +35,18 @@ const MENU: { id: MenuTab; label: string; top: string }[] = [
 export function TitleScreen(props: TitleScreenProps) {
   const [tab, setTab] = useState<MenuTab>('play');
   const { compact } = useScreen();
+  const saved = props.heroName.trim() ? loadGameState(props.heroName) : null;
 
-  // contenu de l'onglet actif (le meme sur ordinateur et sur telephone)
   const content = (
     <>
       {tab === 'play' && (
         <PlayTab
           heroName={props.heroName}
+          heroClass={props.selectedClass}
           god={GODS_LORE[props.selectedGod]}
           server={props.selectedServer}
+          hasSave={Boolean(saved)}
+          savedLevel={saved?.level}
           onEnterGame={props.onEnterGame}
         />
       )}
@@ -53,6 +57,8 @@ export function TitleScreen(props: TitleScreenProps) {
         <HeroTab
           heroName={props.heroName}
           onChangeHeroName={props.onChangeHeroName}
+          selectedClass={props.selectedClass}
+          onSelectClass={props.onSelectClass}
           selectedGod={props.selectedGod}
           onSelectGod={props.onSelectGod}
         />
@@ -63,7 +69,6 @@ export function TitleScreen(props: TitleScreenProps) {
     </>
   );
 
-  // telephone : onglets en barre horizontale en haut, contenu defilant en dessous
   if (compact) {
     return (
       <div style={{
@@ -86,16 +91,14 @@ export function TitleScreen(props: TitleScreenProps) {
                 key={btn.id}
                 onClick={() => setTab(btn.id)}
                 style={{
-                  flex: '1 1 0',
-                  minWidth: 0,
-                  minHeight: 44,
-                  padding: '0 2px',
-                  background: active ? '#facc15' : '#3a2a20',
-                  color: active ? '#1a1406' : '#e2e8f0',
-                  border: '2px solid #241812',
-                  borderRadius: 4,
+                  flexShrink: 0,
+                  padding: '8px 12px',
                   fontFamily: 'Silkscreen, monospace',
-                  fontSize: 10,
+                  fontSize: 11,
+                  color: active ? '#1a1406' : '#e2e8f0',
+                  backgroundColor: active ? '#d4af37' : '#263245',
+                  border: `2px solid ${active ? '#fef08a' : '#4a5568'}`,
+                  borderRadius: 4,
                   cursor: 'pointer'
                 }}
               >
@@ -104,8 +107,8 @@ export function TitleScreen(props: TitleScreenProps) {
             );
           })}
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: 10, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <div style={{ margin: 'auto 0', width: '100%', maxWidth: 560, alignSelf: 'center' }}>{content}</div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: 12, display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
+          <div style={{ width: '100%', maxWidth: 520 }}>{content}</div>
         </div>
       </div>
     );
@@ -114,70 +117,57 @@ export function TitleScreen(props: TitleScreenProps) {
   return (
     <div style={{
       width: '100vw',
-      height: '100vh',
+      height: '100dvh',
       backgroundColor: '#18202d',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      overflow: 'hidden'
+      overflow: 'hidden',
+      fontFamily: 'Silkscreen, monospace'
     }}>
-      {/* image de fond en 16:9, centree */}
       <div style={{
         position: 'relative',
-        width: '100%',
-        maxWidth: 'calc(100vh * (16 / 9))',
-        height: '100%',
-        maxHeight: 'calc(100vw * (9 / 16))',
-        aspectRatio: '16 / 9',
+        width: 'min(100vw, 177.78vh)',
+        height: 'min(100vh, 56.25vw)',
         backgroundImage: "url('/assets/lobby-bg.png')",
         backgroundSize: '100% 100%',
-        imageRendering: 'pixelated',
-        boxShadow: '0 0 50px rgba(0, 0, 0, 0.9)'
+        backgroundRepeat: 'no-repeat',
+        imageRendering: 'pixelated'
       }}>
         {MENU.map((btn) => {
           const active = tab === btn.id;
           return (
             <button
               key={btn.id}
-              title={btn.label}
               onClick={() => setTab(btn.id)}
+              title={btn.label}
               style={{
                 position: 'absolute',
-                left: '6.64%',
-                width: '21%',
+                left: '6.25%',
                 top: btn.top,
-                height: '10.07%',
-                background: active ? 'rgba(250, 204, 21, 0.16)' : 'transparent',
-                border: 'none',
+                width: '21.75%',
+                height: '10.95%',
+                background: active ? 'rgba(250, 204, 21, 0.22)' : 'transparent',
+                border: active ? '2px solid rgba(250, 204, 21, 0.8)' : 'none',
                 borderRadius: 4,
                 cursor: 'pointer',
-                outline: 'none',
-                boxShadow: active ? 'inset 0 0 0 3px #facc15, 0 0 8px rgba(250, 204, 21, 0.4)' : 'none',
-                transition: 'all 0.08s'
+                outline: 'none'
               }}
-            >
-              {active && (
-                <span style={{ position: 'absolute', right: -12, top: '50%', transform: 'translateY(-50%)', color: '#facc15', fontSize: 13 }}>
-                  ▶
-                </span>
-              )}
-            </button>
+            />
           );
         })}
 
-        {/* contenu de l'onglet actif */}
         <div style={{
           position: 'absolute',
-          left: '35.5%',
-          width: '58%',
-          top: '10%',
-          bottom: '23%',
+          left: '34%',
+          top: '8%',
+          width: '57%',
+          height: '82%',
           display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          zIndex: 10
+          alignItems: 'center',
+          justifyContent: 'center'
         }}>
-          {content}
+          <div style={{ width: '100%', maxHeight: '100%', overflowY: 'auto' }}>{content}</div>
         </div>
       </div>
     </div>
