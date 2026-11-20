@@ -1,6 +1,7 @@
 import type { GodAffinity } from '@greek-myth/shared';
 import { HERO_CLASSES, HeroClassId } from '../data/classes';
 import { ITEMS } from '../data/items';
+import { computeSkillBonuses, GOD_SKILL_TREES } from '../data/skillTrees';
 import { CODEX_ENTRIES, NPCS, QUEST_ORDER, QUESTS, QuestDef, QuestObjectiveType } from '../data/story';
 import type { ZoneId } from '../data/zones';
 
@@ -35,6 +36,9 @@ export interface GameProgressState {
   defeatedBosses: string[];
   bestiaryKills: Record<string, number>;
   discoveredZones: ZoneId[];
+  skillPoints: number;
+  unlockedSkills: Record<string, number>;
+  zoneKillCounts: Record<string, number>;
 }
 
 export interface ComputedHeroStats {
@@ -42,6 +46,13 @@ export interface ComputedHeroStats {
   attack: number;
   speedMultiplier: number;
   xpToNext: number;
+  critChance: number;
+  damageReduction: number;
+  lifeOnKill: number;
+  specialDamageMult: number;
+  specialCooldownMult: number;
+  dashCooldownMult: number;
+  potionHealMult: number;
 }
 
 const SAVE_PREFIX = 'mythologia_save_v1_';
@@ -66,19 +77,28 @@ export function getComputedStats(state: GameProgressState): ComputedHeroStats {
     if (item.bonusAttack) bonusAttack += item.bonusAttack;
   }
 
-  const godHp = state.god === 'POSEIDON' ? 25 : 0;
+  const godHp = state.god === 'POSEIDON' ? 16 : 0;
   const godAtk = state.god === 'ARES' ? 4 : state.god === 'HADES' ? 2 : 0;
-  const godSpeed = state.god === 'ZEUS' ? 0.12 : 0;
+  const godSpeed = state.god === 'ZEUS' ? 0.1 : 0;
+  const sk = computeSkillBonuses(state.god, state.unlockedSkills);
 
-  const maxHp = cls.baseHp + (state.level - 1) * 18 + bonusHp + godHp;
-  const attack = cls.baseAttack + (state.level - 1) * 3 + bonusAttack + godAtk;
-  const speedMultiplier = 1 + cls.speedBonus / 220 + godSpeed;
+  const maxHp = cls.baseHp + (state.level - 1) * 11 + bonusHp + godHp + sk.maxHp;
+  const attack = cls.baseAttack + (state.level - 1) * 3 + bonusAttack + godAtk + sk.attack;
+  const speedMultiplier = 1 + cls.speedBonus / 220 + godSpeed + sk.speedPct;
+  const baseCrit = state.heroClass === 'ASSASSIN' ? 0.16 : state.heroClass === 'ARCHER' ? 0.1 : 0.06;
 
   return {
     maxHp,
     attack,
     speedMultiplier,
-    xpToNext: xpRequiredForLevel(state.level)
+    xpToNext: xpRequiredForLevel(state.level),
+    critChance: Math.min(0.65, baseCrit + sk.critChance),
+    damageReduction: sk.damageReduction,
+    lifeOnKill: sk.lifeOnKill,
+    specialDamageMult: 1 + sk.specialDamagePct,
+    specialCooldownMult: Math.max(0.55, 1 - sk.specialCooldownPct),
+    dashCooldownMult: Math.max(0.55, 1 - sk.dashCooldownPct),
+    potionHealMult: 1 + sk.potionHealPct
   };
 }
 
@@ -122,7 +142,10 @@ export function createNewGameState(
     unlockedCodex: CODEX_ENTRIES.filter((c) => c.unlockedByDefault).map((c) => c.id),
     defeatedBosses: [],
     bestiaryKills: {},
-    discoveredZones: ['agora']
+    discoveredZones: ['agora'],
+    skillPoints: 1,
+    unlockedSkills: {},
+    zoneKillCounts: {}
   };
   state.hp = getComputedStats(state).maxHp;
   return state;
@@ -147,6 +170,12 @@ export function loadGameState(heroName: string): GameProgressState | null {
       if (!parsed.quests[id]) parsed.quests[id] = baseQuests[id];
     }
     if (!parsed.bestiaryKills) parsed.bestiaryKills = {};
+    if (!parsed.unlockedSkills) parsed.unlockedSkills = {};
+    if (!parsed.zoneKillCounts) parsed.zoneKillCounts = {};
+    if (typeof parsed.skillPoints !== 'number') {
+      const spent = Object.values(parsed.unlockedSkills).reduce((a, b) => a + b, 0);
+      parsed.skillPoints = Math.max(0, (parsed.level ?? 1) - spent);
+    }
     if (!Array.isArray(parsed.discoveredZones) || parsed.discoveredZones.length === 0) {
       parsed.discoveredZones = ['agora'];
       if (parsed.zoneId && !parsed.discoveredZones.includes(parsed.zoneId)) {
@@ -216,6 +245,7 @@ export function grantXp(state: GameProgressState, amount: number): { leveledUp: 
   while (state.xp >= xpRequiredForLevel(state.level)) {
     state.xp -= xpRequiredForLevel(state.level);
     state.level += 1;
+    state.skillPoints = (state.skillPoints ?? 0) + 1;
     leveledUp = true;
   }
   if (leveledUp) {
@@ -444,4 +474,39 @@ export function markZoneDiscovered(state: GameProgressState, zoneId: ZoneId): vo
   if (!state.discoveredZones.includes(zoneId)) {
     state.discoveredZones.push(zoneId);
   }
+}
+
+export function canUpgradeSkill(state: GameProgressState, skillId: string): boolean {
+  if ((state.skillPoints ?? 0) <= 0) return false;
+  const tree = GOD_SKILL_TREES[state.god] ?? [];
+  const node = tree.find((n) => n.id === skillId);
+  if (!node) return false;
+  const cur = state.unlockedSkills?.[skillId] ?? 0;
+  if (cur >= node.maxRank) return false;
+  if (node.requires && (state.unlockedSkills?.[node.requires] ?? 0) <= 0) return false;
+  return true;
+}
+
+export function upgradeSkill(state: GameProgressState, skillId: string): boolean {
+  if (!canUpgradeSkill(state, skillId)) return false;
+  if (!state.unlockedSkills) state.unlockedSkills = {};
+  state.unlockedSkills[skillId] = (state.unlockedSkills[skillId] ?? 0) + 1;
+  state.skillPoints -= 1;
+  const stats = getComputedStats(state);
+  state.hp = Math.min(stats.maxHp, state.hp + 10);
+  return true;
+}
+
+export function resetSkills(state: GameProgressState): void {
+  const spent = Object.values(state.unlockedSkills ?? {}).reduce((a, b) => a + b, 0);
+  state.unlockedSkills = {};
+  state.skillPoints = (state.skillPoints ?? 0) + spent;
+  const stats = getComputedStats(state);
+  if (state.hp > stats.maxHp) state.hp = stats.maxHp;
+}
+
+export function recordZoneKill(state: GameProgressState, zoneId: ZoneId): number {
+  if (!state.zoneKillCounts) state.zoneKillCounts = {};
+  state.zoneKillCounts[zoneId] = (state.zoneKillCounts[zoneId] ?? 0) + 1;
+  return state.zoneKillCounts[zoneId];
 }

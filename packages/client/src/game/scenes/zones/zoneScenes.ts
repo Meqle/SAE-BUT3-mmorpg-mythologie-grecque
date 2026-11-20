@@ -32,6 +32,76 @@ function makePortalLabel(portal: ZonePortal): Text {
   return label;
 }
 
+function drawAmphoraCluster(g: Graphics, x: number, y: number, seed: number): void {
+  const rand = random(seed);
+  const count = 2 + Math.floor(rand() * 3);
+  for (let i = 0; i < count; i++) {
+    const ax = x + (rand() - 0.5) * 24;
+    const ay = y + (rand() - 0.5) * 18;
+    const r = 4.5 + rand() * 2.2;
+    g.ellipse(ax + 2, ay + 3, r, r * 0.65).fill({ color: COLORS.ink, alpha: 0.2 });
+    g.circle(ax, ay, r).fill({ color: i % 2 === 0 ? 0xb5593b : 0xc97b4b }).stroke({ width: 1.2, color: COLORS.ink });
+    g.circle(ax - 1, ay - 1, r * 0.38).fill({ color: 0x3b2416 });
+  }
+}
+
+function drawMarketCrates(g: Graphics, x: number, y: number): void {
+  g.rect(x + 2, y + 3, 20, 16).fill({ color: COLORS.ink, alpha: 0.22 });
+  g.roundRect(x, y, 20, 16, 2).fill({ color: 0x9b6b43 }).stroke({ width: 1.3, color: COLORS.ink });
+  g.moveTo(x, y + 8).lineTo(x + 20, y + 8).stroke({ width: 0.9, color: COLORS.ink, alpha: 0.45 });
+  g.circle(x + 27, y + 9, 7.5).fill({ color: 0x7c4d2b }).stroke({ width: 1.3, color: COLORS.ink });
+  g.circle(x + 27, y + 9, 4).stroke({ width: 0.8, color: COLORS.bronze });
+}
+
+function drawMosaicMedallion(g: Graphics, cx: number, cy: number, r: number, accent: number): void {
+  g.circle(cx, cy, r).fill({ color: COLORS.marbleLit, alpha: 0.72 }).stroke({ width: 1.8, color: COLORS.ink, alpha: 0.55 });
+  g.circle(cx, cy, r * 0.74).stroke({ width: 2.2, color: accent, alpha: 0.65 });
+  g.circle(cx, cy, r * 0.42).fill({ color: accent, alpha: 0.22 }).stroke({ width: 1.2, color: COLORS.ink, alpha: 0.4 });
+  for (let i = 0; i < 8; i++) {
+    const a = (i * Math.PI) / 4;
+    g.moveTo(cx + Math.cos(a) * r * 0.44, cy + Math.sin(a) * r * 0.44)
+      .lineTo(cx + Math.cos(a) * r * 0.72, cy + Math.sin(a) * r * 0.72)
+      .stroke({ width: 1.2, color: COLORS.ink, alpha: 0.3 });
+  }
+}
+
+function drawFlowerBed(g: Graphics, x: number, y: number, w: number, h: number, seed: number): void {
+  const rand = random(seed);
+  g.roundRect(x, y, w, h, 8).fill({ color: COLORS.oliveDark, alpha: 0.45 }).stroke({ width: 1.2, color: COLORS.ink, alpha: 0.45 });
+  const colors = [0xfef08a, 0xf9a8d4, 0xf8fafc, 0xfdba74];
+  for (let i = 0; i < 12; i++) {
+    const fx = x + 6 + rand() * (w - 12);
+    const fy = y + 6 + rand() * (h - 12);
+    g.circle(fx, fy, 2.3).fill({ color: colors[i % colors.length] });
+  }
+}
+
+function drawBrokenColumn(g: Graphics, x: number, y: number, angle: number): void {
+  const dx = Math.cos(angle) * 26;
+  const dy = Math.sin(angle) * 26;
+  g.moveTo(x - dx + 3, y - dy + 4).lineTo(x + dx + 3, y + dy + 4).stroke({ width: 14, color: COLORS.ink, alpha: 0.22, cap: 'round' });
+  g.moveTo(x - dx, y - dy).lineTo(x + dx, y + dy).stroke({ width: 13, color: COLORS.marbleShade, cap: 'round' });
+  g.moveTo(x - dx, y - dy).lineTo(x + dx, y + dy).stroke({ width: 1.5, color: COLORS.ink, cap: 'round' });
+  g.circle(x + dx, y + dy, 6.5).fill({ color: COLORS.marbleLit }).stroke({ width: 1.2, color: COLORS.ink });
+}
+
+function drawStoneBench(g: Graphics, x: number, y: number, horizontal = true): void {
+  const w = horizontal ? 46 : 14;
+  const h = horizontal ? 14 : 46;
+  g.roundRect(x + 2, y + 3, w, h, 3).fill({ color: COLORS.ink, alpha: 0.22 });
+  g.roundRect(x, y, w, h, 3).fill({ color: COLORS.marbleLit }).stroke({ width: 1.3, color: COLORS.ink });
+}
+
+function drawFallenRelic(g: Graphics, x: number, y: number, seed: number): void {
+  const rand = random(seed);
+  g.circle(x + 2, y + 2, 9).fill({ color: COLORS.ink, alpha: 0.2 });
+  g.circle(x, y, 8.5).fill({ color: COLORS.bronze }).stroke({ width: 1.2, color: COLORS.ink });
+  g.circle(x, y, 4.5).stroke({ width: 1, color: COLORS.gold, alpha: 0.7 });
+  const a = rand() * Math.PI;
+  g.moveTo(x - Math.cos(a) * 16, y - Math.sin(a) * 16).lineTo(x + Math.cos(a) * 16, y + Math.sin(a) * 16)
+    .stroke({ width: 2, color: WOOD });
+}
+
 function drawSlab(g: Graphics, x: number, y: number, w: number, h: number, color: number): void {
   g.rect(x + 1, y + 1, w - 2, h - 2).fill({ color });
   g.rect(x + 1, y + 1, w - 2, 1.5).fill({ color: COLORS.marbleLit, alpha: 0.4 });
@@ -386,6 +456,47 @@ function createAgoraScene(zone: ZoneDefinition): Scene {
 
   // Cicatrice d'eclair sur la cour nord-ouest
   drawOrganicCrater(ground, 780, 390, 34, 88);
+  // Enrichissement des coins et ruelles de la cite (mosaiques, amphores, bancs, caisses, parterres)
+  drawMosaicMedallion(ground, 220, 365, 42, COLORS.bronze);
+  drawMosaicMedallion(ground, 1790, 365, 46, COLORS.sky);
+  drawMosaicMedallion(ground, 1545, 955, 38, COLORS.gold);
+  drawMosaicMedallion(ground, 540, 1045, 36, COLORS.seaLight);
+  drawMosaicMedallion(ground, 1745, 1320, 42, COLORS.bronze);
+  drawMosaicMedallion(ground, 830, 150, 36, COLORS.gold);
+
+  // Parterres fleuris et bancs en marbre dans les quartiers
+  drawFlowerBed(ground, 355, 865, 86, 36, 401);
+  drawFlowerBed(ground, 680, 1020, 74, 34, 402);
+  drawFlowerBed(ground, 490, 1275, 95, 34, 403);
+  drawFlowerBed(ground, 1250, 130, 96, 36, 404);
+  drawFlowerBed(ground, 1750, 495, 84, 34, 405);
+  drawStoneBench(ground, 855, 515, true);
+  drawStoneBench(ground, 1265, 515, true);
+  drawStoneBench(ground, 855, 805, true);
+  drawStoneBench(ground, 1265, 805, true);
+  drawStoneBench(ground, 610, 880, true);
+  drawStoneBench(ground, 150, 540, true);
+
+  // Amphores, caisses du port et du marche, et tapis d'etals
+  for (const [ax, ay, sd] of [
+    [290, 175, 11], [540, 295, 12], [775, 165, 13], [1345, 185, 14], [1840, 185, 15],
+    [1310, 1040, 16], [1765, 965, 17], [1865, 1245, 18], [415, 1230, 19], [280, 825, 20],
+    [275, 980, 21], [275, 1150, 22], [1840, 560, 23], [140, 595, 24]
+  ]) {
+    drawAmphoraCluster(ground, ax, ay, sd);
+  }
+  for (const [cx2, cy2] of [[265, 890], [265, 1075], [1465, 1105], [1615, 1105], [1820, 845], [185, 245]]) {
+    drawMarketCrates(ground, cx2, cy2);
+  }
+  // Bordure de quai nord du port (empeche visuellement de descendre dans l'eau)
+  ground.rect(0, 774, 254, 10).fill(COLORS.marbleShade).stroke({ width: 1.8, color: COLORS.ink });
+  // Fissures et dalles patinees dans les coins
+  for (let i = 0; i < 60; i++) {
+    const fx = 60 + rand() * (W - 120);
+    const fy = 60 + rand() * (H - 120);
+    if (fx < 260 && fy > 760) continue;
+    ground.ellipse(fx, fy, 4 + rand() * 5, 2.5 + rand() * 3).fill({ color: COLORS.marbleShadow, alpha: 0.28 });
+  }
 
   // Remparts exterieurs de la cite
   const shadows = new Graphics();
@@ -497,6 +608,36 @@ function createPlainesScene(zone: ZoneDefinition): Scene {
       .fill({ color: COLORS.marbleShadow, alpha: 0.5 });
   }
 
+  // Sentiers secondaires vers les coins et ruines antiques
+  for (let i = 0; i < 18; i++) {
+    drawSlab(terrain, 260 + i * 24, 460 - i * 18, 22, 20, mix(COLORS.stone, COLORS.sand, 0.5));
+    drawSlab(terrain, 1280 + i * 24, 520 - i * 22, 22, 20, mix(COLORS.stone, COLORS.sand, 0.5));
+    drawSlab(terrain, 560 - i * 22, 620 + i * 20, 22, 20, mix(COLORS.stone, COLORS.sand, 0.5));
+    drawSlab(terrain, 1340 + i * 22, 610 + i * 20, 22, 20, mix(COLORS.stone, COLORS.sand, 0.5));
+  }
+  // Colonnes brisees, boucliers abandonnes, amphores et buissons dans les coins
+  for (const [bx, by, ba] of [
+    [140, 160, 0.4], [1640, 185, -0.5], [170, 920, 0.7], [1630, 945, -0.3],
+    [980, 145, 0.2], [1120, 970, -0.6], [420, 190, 1.1], [1480, 860, 0.9]
+  ]) {
+    drawBrokenColumn(terrain, bx, by, ba);
+  }
+  for (const [rx, ry, sd] of [[240, 240, 51], [1560, 220, 52], [320, 880, 53], [1520, 920, 54], [940, 900, 55]]) {
+    drawFallenRelic(terrain, rx, ry, sd);
+  }
+  for (const [ax, ay, sd] of [[115, 310, 61], [1720, 310, 62], [220, 790, 63], [1690, 800, 64], [160, 510, 65]]) {
+    drawAmphoraCluster(terrain, ax, ay, sd);
+  }
+  for (let i = 0; i < 95; i++) {
+    const gx = 30 + rand() * (W - 60);
+    const gy = 30 + rand() * (H - 60);
+    drawGrassTuft(terrain, gx, gy, rand, i % 4 === 0);
+  }
+  drawFlowerBed(terrain, 105, 845, 76, 36, 601);
+  drawFlowerBed(terrain, 1610, 80, 84, 34, 602);
+  drawFlowerBed(terrain, 1590, 995, 90, 36, 603);
+  drawFlowerBed(terrain, 95, 95, 84, 36, 604);
+
   terrain.rect(0, 0, W, H).stroke({ width: 6, color: COLORS.ink, alpha: 0.7 });
 
   const shadows = new Graphics();
@@ -594,6 +735,20 @@ function createSanctuaireScene(zone: ZoneDefinition): Scene {
   // Mousses et fissures discretes
   for (let i = 0; i < 45; i++) {
     drawGrassTuft(floor, 40 + rand() * (W - 80), 40 + rand() * (H - 80), rand, false);
+  }
+  // Mosaiques d'angle, colonnes brisees et reliques de guerre dans le Sanctuaire
+  drawMosaicMedallion(floor, 155, 145, 42, COLORS.bronze);
+  drawMosaicMedallion(floor, 1445, 145, 42, COLORS.bronze);
+  drawMosaicMedallion(floor, 155, 875, 42, COLORS.gold);
+  drawMosaicMedallion(floor, 1445, 875, 42, COLORS.gold);
+  for (const [bx, by, ba] of [[240, 120, 0.3], [1360, 120, -0.4], [250, 910, 0.8], [1340, 910, -0.5], [620, 110, 0.1], [620, 910, -0.2]]) {
+    drawBrokenColumn(floor, bx, by, ba);
+  }
+  for (const [ax, ay, sd] of [[110, 260, 71], [1480, 260, 72], [110, 760, 73], [1480, 760, 74]]) {
+    drawAmphoraCluster(floor, ax, ay, sd);
+  }
+  for (const [rx, ry, sd] of [[390, 130, 81], [1140, 130, 82], [390, 880, 83], [1140, 880, 84]]) {
+    drawFallenRelic(floor, rx, ry, sd);
   }
   floor.rect(0, 0, W, H).stroke({ width: 6, color: COLORS.ink });
 
@@ -694,6 +849,19 @@ function createLabyrintheScene(zone: ZoneDefinition): Scene {
       .stroke({ width: 1.2, color: 0x111827, alpha: 0.45 });
   }
 
+  // Reliques cretoises, mosaiques d'angle et colonnes brisees dans le Labyrinthe
+  drawMosaicMedallion(floor, 165, 175, 38, COLORS.bronze);
+  drawMosaicMedallion(floor, 1500, 155, 42, COLORS.gold);
+  drawMosaicMedallion(floor, 1500, 985, 42, COLORS.gold);
+  for (const [bx, by, ba] of [[230, 145, 0.6], [1460, 210, -0.4], [1460, 920, 0.5], [760, 160, 0.2]]) {
+    drawBrokenColumn(floor, bx, by, ba);
+  }
+  for (const [rx, ry, sd] of [[310, 320, 91], [660, 620, 92], [1050, 220, 93], [1050, 930, 94]]) {
+    drawFallenRelic(floor, rx, ry, sd);
+  }
+  for (const [ax, ay, sd] of [[130, 860, 95], [460, 980, 96], [1540, 360, 97], [1540, 780, 98]]) {
+    drawAmphoraCluster(floor, ax, ay, sd);
+  }
   floor.rect(0, 0, W, H).stroke({ width: 8, color: COLORS.ink });
 
   const shadows = new Graphics();
@@ -806,6 +974,17 @@ function createMarecagesScene(zone: ZoneDefinition): Scene {
       .stroke({ width: 1.5, color: 0x65a30d, alpha: 0.65 });
   }
 
+  // Nenuphars, pierres moussues, colonnes englouties et reliques dans les coins du marais
+  for (const [bx, by, ba] of [[145, 290, 0.5], [1600, 290, -0.5], [175, 860, 0.8], [1585, 860, -0.7], [560, 150, 0.2], [1200, 150, -0.2]]) {
+    drawBrokenColumn(ground, bx, by, ba);
+  }
+  for (const [rx, ry, sd] of [[360, 155, 101], [1400, 155, 102], [430, 1010, 103], [1330, 1010, 104]]) {
+    drawFallenRelic(ground, rx, ry, sd);
+  }
+  for (const [px, py] of [[250, 425], [330, 455], [1425, 425], [1500, 455], [260, 755], [1445, 765], [820, 730], [945, 825]]) {
+    ground.circle(px, py, 11).fill({ color: 0x3f8f4d, alpha: 0.78 }).stroke({ width: 1.2, color: COLORS.ink });
+    ground.circle(px + 3, py - 2, 2.5).fill({ color: 0xfef08a });
+  }
   const shadows = new Graphics();
   shadows.filters = [new AlphaFilter({ alpha: 0.34 })];
   const solids = new Graphics();

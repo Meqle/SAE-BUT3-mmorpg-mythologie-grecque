@@ -32,9 +32,12 @@ import {
   NpcDialogueView,
   recordBestiaryKill,
   recordQuestEvent,
+  recordZoneKill,
+  resetSkills,
   resolveNpcDialogue,
   saveGameState,
-  sellItem
+  sellItem,
+  upgradeSkill
 } from '../../game/state/gameState';
 import { useScreen } from '../../game/useScreen';
 import { PrologueOverlay } from '../Story/PrologueOverlay';
@@ -151,6 +154,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
       if (e.code === keys.inventory.code) setModalTab((prev) => (prev === 'inventory' ? null : 'inventory'));
       if (e.code === keys.quests.code) setModalTab((prev) => (prev === 'quests' ? null : 'quests'));
       if (e.code === keys.codex.code) setModalTab((prev) => (prev === 'codex' ? null : 'codex'));
+      if (e.code === 'KeyT') setModalTab((prev) => (prev === 'talents' ? null : 'talents'));
       if (e.code === keys.map.code || (keys.map.code === 'KeyM' && e.key.toLowerCase() === 'm')) { setModalTab(null); setWorldMapOpen((prev) => !prev); }
     };
     window.addEventListener('keydown', onGlobalKey);
@@ -236,6 +240,8 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
       let comboCount = 0;
       let hasteTimer = 0;
       let cameraShake = 0;
+      let pendingRespawn = false;
+      let potionCooldown = 0;
       let regenTimer = 0;
 
       const refreshNpcBadges = () => {
@@ -343,6 +349,26 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           }
 
           recordBestiaryKill(stateRef.current, enemy.type);
+          const killsInZone = recordZoneKill(stateRef.current, stateRef.current.zoneId);
+          const curStats = getComputedStats(stateRef.current);
+          if (curStats.lifeOnKill > 0 && stateRef.current.hp > 0) {
+            stateRef.current.hp = Math.min(curStats.maxHp, stateRef.current.hp + curStats.lifeOnKill);
+            if (settingsRef.current.showDamageNumbers) {
+              fx.spawnText(player.x, player.y - 26, `+${curStats.lifeOnKill} PV`, 0x4ade80, 11);
+            }
+          }
+          // Verifier si un coffre scelle dans la zone vient de se deverrouiller
+          for (const inter of interactables) {
+            const seal = inter.def.seal;
+            if (!seal || stateRef.current.collectedInteractables.includes(inter.def.id)) continue;
+            const currentCount = seal.enemyType
+              ? (stateRef.current.bestiaryKills?.[seal.enemyType] ?? 0)
+              : killsInZone;
+            if (currentCount === seal.requiredKills && (!seal.enemyType || seal.enemyType === enemy.type)) {
+              sound.playQuest();
+              showToast(`Un sceau antique s'est brisé : ${inter.def.label} déverrouillé !`);
+            }
+          }
           const readyQuests = recordQuestEvent(stateRef.current, 'kill', enemy.type);
           const lootDrops = rollMonsterLoot(enemy.type);
           if (lootDrops.length > 0) {
@@ -381,22 +407,21 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           return;
         }
 
-        stateRef.current.hp = Math.max(0, stateRef.current.hp - amount);
-        iFrames = 0.55;
+        const statsNow = getComputedStats(stateRef.current);
+        const mitigated = Math.max(1, Math.round(amount * (1 - statsNow.damageReduction)));
+        stateRef.current.hp = Math.max(0, stateRef.current.hp - mitigated);
+        iFrames = 0.48;
         sound.playPlayerHurt();
-        cameraShake = Math.max(cameraShake, 6);
+        cameraShake = Math.max(cameraShake, 6.5);
         hero.setHitFlash(true);
         if (settingsRef.current.showDamageNumbers) {
-          fx.spawnText(player.x, player.y - 24, `-${amount}`, 0xf87171, 13);
+          fx.spawnText(player.x, player.y - 24, `-${mitigated}`, 0xf87171, 13);
         }
         const knockDir = player.x >= sourceX ? 1 : -1;
-        player.vx += knockDir * 160;
+        player.vx += knockDir * 165;
 
         if (stateRef.current.hp <= 0) {
-          const stats = getComputedStats(stateRef.current);
-          stateRef.current.hp = stats.maxHp;
-          showToast("Cassandre vous ramène à la cité de l'Agora.");
-          loadZone('agora', ZONES.agora.defaultSpawn.x, ZONES.agora.defaultSpawn.y);
+          pendingRespawn = true;
           return;
         }
         syncUi(false);
@@ -468,11 +493,11 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
       const performSpecial = () => {
         if (specialCooldown > 0) return;
         const stats = getComputedStats(stateRef.current);
-        specialCooldown = skill.cooldown;
+        specialCooldown = skill.cooldown * stats.specialCooldownMult;
         hero.pulseAttack();
         sound.playSpecial();
         cameraShake = Math.max(cameraShake, 5.5);
-        const dmg = Math.round(stats.attack * skill.damageMultiplier);
+        const dmg = Math.round(stats.attack * skill.damageMultiplier * stats.specialDamageMult);
         const color = hexColor(godLore.color);
         fx.spawnSlash(player.x, player.y, 0, skill.radius, color, stateRef.current.god === 'ZEUS' ? 'bolt' : 'ring');
 
@@ -497,7 +522,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
 
       const performDash = () => {
         if (dashCooldown > 0) return;
-        dashCooldown = 2.2;
+        dashCooldown = 2.2 * getComputedStats(stateRef.current).dashCooldownMult;
         dashTimer = 0.22;
         sound.playDash();
         iFrames = Math.max(iFrames, 0.35);
@@ -594,6 +619,15 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           return;
         }
 
+        if (def.seal && !stateRef.current.collectedInteractables.includes(def.id)) {
+          const curKills = def.seal.enemyType
+            ? (stateRef.current.bestiaryKills?.[def.seal.enemyType] ?? 0)
+            : (stateRef.current.zoneKillCounts?.[def.seal.zoneId] ?? 0);
+          if (curKills < def.seal.requiredKills) {
+            showToast(`${def.seal.hint} (${curKills}/${def.seal.requiredKills})`);
+            return;
+          }
+        }
         if (!stateRef.current.collectedInteractables.includes(def.id)) {
           stateRef.current.collectedInteractables.push(def.id);
           if (def.kind === 'chest') {
@@ -635,11 +669,13 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
 
       const onPointerDown = (e: PointerEvent) => {
         if (pausedRef.current || e.target !== app?.canvas) return;
-        if (e.button === 2) {
+        const mouseCode = `Mouse${e.button}`;
+        const keys = settingsRef.current.keys;
+        if (mouseCode === keys.special.code || (keys.special.code !== 'Mouse0' && e.button === 2)) {
           performSpecial();
           return;
         }
-        if (e.button === 0 && lastView) {
+        if ((mouseCode === keys.attack.code || (keys.attack.code !== 'Mouse2' && e.button === 0)) && lastView) {
           const rect = app.canvas.getBoundingClientRect();
           const worldX = (e.clientX - rect.left) / lastView.zoom + lastView.x;
           const worldY = (e.clientY - rect.top) / lastView.zoom + lastView.y;
@@ -696,8 +732,22 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         const mode = zone.viewMode;
         const stats = getComputedStats(stateRef.current);
 
+        if (pendingRespawn) {
+          pendingRespawn = false;
+          const respawnStats = getComputedStats(stateRef.current);
+          stateRef.current.hp = respawnStats.maxHp;
+          iFrames = 1.2;
+          player.vx = 0;
+          player.vy = 0;
+          showToast("Vaincu ! Cassandre vous ramène à la cité de l'Agora.");
+          loadZone('agora', ZONES.agora.defaultSpawn.x, ZONES.agora.defaultSpawn.y);
+          syncUi(true);
+          return;
+        }
+
         attackCooldown = Math.max(0, attackCooldown - dt);
         specialCooldown = Math.max(0, specialCooldown - dt);
+        potionCooldown = Math.max(0, potionCooldown - dt);
         dashCooldown = Math.max(0, dashCooldown - dt);
         dashTimer = Math.max(0, dashTimer - dt);
         hasteTimer = Math.max(0, hasteTimer - dt);
@@ -742,7 +792,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           jumpStarted
         }, zone, dt, speedMult);
 
-        if (mode === 'top-down' && jumpStarted) performAttack();
+        // Attaque geree par Clic gauche ou touche configuree
         if (mode === 'side-view' && ((jumpStarted && wasGrounded) || (!wasGrounded && player.isGrounded))) {
           dust.burst(player.x, player.y + 16);
         }
@@ -835,10 +885,11 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
             if (!enemy.dashHitDone && Math.hypot(player.x - enemy.x, player.y - enemy.y) <= arch.radius + 18) {
               enemy.dashHitDone = true;
               damagePlayer(arch.attack, enemy.x);
+              if (pendingRespawn) break;
             }
             if (enemy.stateTimer <= 0) {
               enemy.state = 'cooldown';
-              enemy.stateTimer = arch.attackCooldown;
+              enemy.stateTimer = arch.isBoss && enemy.hp < enemy.maxHp * 0.5 ? arch.attackCooldown * 0.72 : arch.attackCooldown;
             }
           } else if (enemy.state === 'windup') {
             enemy.vx = 0;
@@ -849,15 +900,16 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
               if (arch.attackStyle === 'lunge') {
                 enemy.state = 'dashing';
                 enemy.stateTimer = 0.28;
-                enemy.dashVx = Math.cos(a) * 320;
-                enemy.dashVy = Math.sin(a) * 320;
+                enemy.dashVx = Math.cos(a) * 385;
+                enemy.dashVy = Math.sin(a) * 385;
                 enemy.dashHitDone = false;
                 dust.burst(enemy.x, enemy.y + 8);
               } else if (arch.attackStyle === 'charge') {
                 enemy.state = 'dashing';
                 enemy.stateTimer = 0.46;
-                enemy.dashVx = Math.cos(a) * 410;
-                enemy.dashVy = Math.sin(a) * 410;
+                const leadA = Math.atan2(player.y + player.vy * 0.22 - enemy.y, player.x + player.vx * 0.22 - enemy.x);
+                enemy.dashVx = Math.cos(leadA) * 475;
+                enemy.dashVy = Math.sin(leadA) * 475;
                 enemy.dashHitDone = false;
                 dust.burst(enemy.x, enemy.y + 10);
               } else if (arch.attackStyle === 'ranged_fan') {
@@ -1045,6 +1097,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
 
         // 6. Zones de danger telegraphees (foudre/eau du boss)
         for (let i = fx.hazards.length - 1; i >= 0; i--) {
+          if (pendingRespawn) break;
           const h = fx.hazards[i];
           h.delay -= dt;
           if (h.delay <= 0) {
@@ -1058,6 +1111,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
 
         // 7. Projectiles
         for (let i = fx.projectiles.length - 1; i >= 0; i--) {
+          if (pendingRespawn) break;
           const p = fx.projectiles[i];
           p.life -= dt;
           p.x += p.vx * dt;
@@ -1107,7 +1161,27 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
             ? stateRef.current.activatedTrialSteles.includes(inter.def.id)
             : stateRef.current.collectedInteractables.includes(inter.def.id);
           const near = Math.hypot(inter.def.x - player.x, inter.def.y - player.y) <= inter.def.radius + 16;
-          inter.update(time, done, near);
+          const sealed = Boolean(
+            inter.def.seal &&
+            !done &&
+            ((inter.def.seal.enemyType
+              ? (stateRef.current.bestiaryKills?.[inter.def.seal.enemyType] ?? 0)
+              : (stateRef.current.zoneKillCounts?.[inter.def.seal.zoneId] ?? 0)) < inter.def.seal.requiredKills)
+          );
+          inter.update(time, done, near, sealed);
+        }
+
+        if (pendingRespawn) {
+          pendingRespawn = false;
+          const respawnStats = getComputedStats(stateRef.current);
+          stateRef.current.hp = respawnStats.maxHp;
+          iFrames = 1.2;
+          player.vx = 0;
+          player.vy = 0;
+          showToast("Vaincu ! Cassandre vous ramène à la cité de l'Agora.");
+          loadZone('agora', ZONES.agora.defaultSpawn.x, ZONES.agora.defaultSpawn.y);
+          syncUi(true);
+          return;
         }
 
         // 9. Rendu heros, poussiere et effets
@@ -1204,7 +1278,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
               return { x: n.x, y: n.y, kind: b && b !== 'active' ? 'npc_quest' : 'npc' };
             }),
             ...interactables
-              .filter((inter) => !(inter.def.kind === 'trial_stele'
+              .filter((inter) => inter.def.kind !== 'chest' && !(inter.def.kind === 'trial_stele'
                 ? stateRef.current.activatedTrialSteles.includes(inter.def.id)
                 : stateRef.current.collectedInteractables.includes(inter.def.id)))
               .map((inter): MinimapMarker => ({ x: inter.def.x, y: inter.def.y, kind: 'interact' })),
@@ -1298,6 +1372,21 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
     }
   };
 
+  const handleUpgradeSkill = (skillId: string) => {
+    if (upgradeSkill(stateRef.current, skillId)) {
+      sound.playQuest();
+      syncUi(true);
+      showToast('Talent divin amélioré !');
+    }
+  };
+
+  const handleResetSkills = () => {
+    resetSkills(stateRef.current);
+    sound.playCoin();
+    syncUi(true);
+    showToast('Points de compétences réinitialisés.');
+  };
+
   const handleEquipItem = (itemId: string) => {
     if (equipItem(stateRef.current, itemId)) {
       sound.playQuest();
@@ -1389,6 +1478,8 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           initialTab={modalTab}
           onUseConsumable={(itemId) => actionsRef.current?.potion(itemId)}
           onEquipItem={handleEquipItem}
+          onUpgradeSkill={handleUpgradeSkill}
+          onResetSkills={handleResetSkills}
           onClose={() => setModalTab(null)}
         />
       )}

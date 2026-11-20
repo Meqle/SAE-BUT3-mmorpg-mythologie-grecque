@@ -317,7 +317,7 @@ export function createCombatFxLayer() {
 export interface InteractableSprite {
   def: ZoneInteractable;
   container: Container;
-  update: (time: number, done: boolean, nearPlayer: boolean) => void;
+  update: (time: number, done: boolean, nearPlayer: boolean, sealed?: boolean) => void;
 }
 
 export function createInteractableSprite(def: ZoneInteractable): InteractableSprite {
@@ -354,7 +354,7 @@ export function createInteractableSprite(def: ZoneInteractable): InteractableSpr
     }
     base.circle(0, -6, 3.5).fill({ color: COLORS.gold });
   } else if (def.kind === 'chest') {
-    base.roundRect(-13, -9, 26, 18, 3).fill(shaded(0xa66a3c, WOOD)).stroke({ ...LINE, width: 1.6 });
+    base.roundRect(-12, -8, 24, 16, 3).fill(shaded(0x7c5032, 0x4f321e)).stroke({ ...LINE, width: 1.5 });
     base.rect(-13, -2, 26, 3.5).fill(BRONZE_SHADE);
     base.rect(-3, -4, 6, 7).fill(COLORS.gold).stroke({ ...LINE, width: 0.7 });
     label.y = -18;
@@ -371,7 +371,7 @@ export function createInteractableSprite(def: ZoneInteractable): InteractableSpr
   return {
     def,
     container,
-    update: (time, done, nearPlayer) => {
+    update: (time, done, nearPlayer, sealed = false) => {
       if (def.kind === 'chest' && done) {
         container.alpha = 0.45;
         glow.clear();
@@ -397,9 +397,26 @@ export function createInteractableSprite(def: ZoneInteractable): InteractableSpr
         glow.circle(0, -24, done ? 18 + Math.sin(time * 7) * 3 : 11 + Math.sin(time * 3) * 2)
           .fill({ color: activeColor, alpha: done ? 0.42 : 0.2 });
         glow.circle(0, -24, done ? 7 : 4).fill({ color: done ? 0xfef08a : COLORS.sun });
+      } else if (def.kind === 'chest') {
+        if (sealed) {
+          container.alpha = 0.8;
+          glow.circle(0, 0, 14).stroke({ width: 1.5, color: 0x64748b, alpha: 0.6 });
+          glow.moveTo(-6, -6).lineTo(6, 6).moveTo(6, -6).lineTo(-6, 6).stroke({ width: 1.5, color: 0x94a3b8, alpha: 0.7 });
+        } else {
+          container.alpha = 1;
+          // Coffre discret : un leger reflet uniquement lorsqu'on est tout proche
+          if (nearPlayer) {
+            glow.circle(0, -2, 11).fill({ color: COLORS.gold, alpha: 0.14 });
+          }
+        }
+      } else if (def.kind === 'bronze' || def.kind === 'herb') {
+        // Objets discrets au sol : reflet tres subtil seulement de pres
+        if (nearPlayer) {
+          glow.circle(0, -3, 9).fill({ color: COLORS.gold, alpha: 0.12 });
+        }
       } else {
         const pulse = 0.5 + 0.5 * Math.sin(time * 4.5 + def.x);
-        glow.circle(0, -4, 12 + pulse * 4).fill({ color: COLORS.gold, alpha: 0.14 + pulse * 0.14 });
+        glow.circle(0, -4, 10 + pulse * 3).fill({ color: COLORS.gold, alpha: 0.1 + pulse * 0.1 });
       }
 
       if (nearPlayer && !done) {

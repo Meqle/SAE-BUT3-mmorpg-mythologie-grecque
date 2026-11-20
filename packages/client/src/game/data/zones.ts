@@ -19,7 +19,8 @@ export type ZoneSolidLook =
   | 'platform'
   | 'block'
   | 'drum'
-  | 'frieze';
+  | 'frieze'
+  | 'water';
 
 export interface ZoneSolid extends Rect {
   look: ZoneSolidLook;
@@ -44,6 +45,13 @@ export interface ZoneNpcPlacement {
 
 export type InteractableKind = 'brasero' | 'bronze' | 'herb' | 'stele' | 'trial_stele' | 'chest';
 
+export interface ChestSealRequirement {
+  zoneId: ZoneId;
+  requiredKills: number;
+  enemyType?: EnemyType;
+  hint: string;
+}
+
 export interface ZoneInteractable {
   id: string;
   targetId: string;
@@ -53,6 +61,7 @@ export interface ZoneInteractable {
   y: number;
   radius: number;
   questId?: string;
+  seal?: ChestSealRequirement;
 }
 
 export type EnemyType =
@@ -156,7 +165,19 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
 
       // Bosquets decoratifs autour de l'avenue sud
       olive(930, 1150), olive(1230, 1150),
-      cypress(960, 290), cypress(1200, 290)
+      cypress(960, 290), cypress(1200, 290),
+
+      // Interdiction de marcher sur l'eau du port Sud-Ouest
+      { x: 0, y: 778, w: 248, h: 662, look: 'water' },
+
+      // Enrichissement des coins de la cite (maisons, bosquets, colonnes)
+      house(95, 110, 175, 110, 2),
+      olive(120, 290), cypress(220, 460), cypress(95, 480),
+      house(1895, 105, 175, 110, 1),
+      cypress(1985, 295), olive(1990, 445),
+      house(1910, 1225, 175, 110, 0),
+      cypress(1995, 1005), olive(1480, 1295),
+      cypress(330, 1295), olive(670, 1295)
     ],
     portals: [
       {
@@ -276,8 +297,29 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
       { id: 'herb_2', targetId: 'herbe_ambroisie', label: "Herbe d'ambroisie", kind: 'herb', x: 495, y: 865, radius: 42, questId: 'sq_ambroisie_perdue' },
       { id: 'herb_3', targetId: 'herbe_ambroisie', label: "Herbe d'ambroisie", kind: 'herb', x: 1355, y: 925, radius: 42, questId: 'sq_ambroisie_perdue' },
       { id: 'stele_chatiment_obj', targetId: 'stele_chatiment', label: 'Stèle du Châtiment', kind: 'stele', x: 950, y: 185, radius: 52, questId: 'mq_2_terres_foudroyees' },
-      { id: 'coffre_plaines_1', targetId: 'chest_loot', label: 'Coffre antique', kind: 'chest', x: 1126, y: 205, radius: 42 },
-      { id: 'coffre_plaines_2', targetId: 'chest_loot', label: 'Coffre antique', kind: 'chest', x: 640, y: 940, radius: 42 }
+      {
+        id: 'coffre_plaines_1',
+        targetId: 'chest_loot',
+        label: 'Coffre dissimulé',
+        kind: 'chest',
+        x: 1695,
+        y: 125,
+        radius: 40
+      },
+      {
+        id: 'coffre_plaines_2',
+        targetId: 'chest_loot',
+        label: 'Coffre scellé des Plaines',
+        kind: 'chest',
+        x: 155,
+        y: 985,
+        radius: 44,
+        seal: {
+          zoneId: 'plaines',
+          requiredKills: 4,
+          hint: 'Sceau antique : terrassez 4 créatures dans les Plaines pour briser ce sceau.'
+        }
+      }
     ],
     spawns: [
       { id: 'pl_sat_1', type: 'satyre', x: 570, y: 545, level: 1, patrolRadius: 75, respawnSeconds: 18 },
@@ -372,7 +414,21 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
       { npcId: 'echo_promethee', x: 295, y: 332 }
     ],
     interactables: [
-      { id: 'coffre_sanctuaire_1', targetId: 'chest_loot', label: 'Coffre des Titans', kind: 'chest', x: 1410, y: 880, radius: 44 }
+      {
+        id: 'coffre_sanctuaire_1',
+        targetId: 'chest_loot',
+        label: "Coffre scellé d'Héphaïstos",
+        kind: 'chest',
+        x: 1475,
+        y: 910,
+        radius: 44,
+        seal: {
+          zoneId: 'sanctuaire',
+          requiredKills: 2,
+          enemyType: 'automate',
+          hint: "Sceau d'Héphaïstos : détruisez 2 Automates pour ouvrir ce coffre."
+        }
+      }
     ],
     spawns: [
       { id: 'sn_aut_1', type: 'automate', x: 690, y: 410, level: 5, patrolRadius: 65, respawnSeconds: 26 },
@@ -488,8 +544,30 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
     npcs: [],
     interactables: [
       { id: 'fil_ariane_obj', targetId: 'fil_ariane', label: "Autel du Fil d'Ariane", kind: 'stele', x: 185, y: 190, radius: 50 },
-      { id: 'coffre_laby_1', targetId: 'chest_loot', label: 'Coffre crétois', kind: 'chest', x: 510, y: 295, radius: 44 },
-      { id: 'coffre_laby_2', targetId: 'chest_loot', label: 'Coffre crétois', kind: 'chest', x: 820, y: 940, radius: 44 }
+      {
+        id: 'coffre_laby_1',
+        targetId: 'chest_loot',
+        label: 'Coffre scellé de Dédale',
+        kind: 'chest',
+        x: 510,
+        y: 295,
+        radius: 44,
+        seal: {
+          zoneId: 'labyrinthe',
+          requiredKills: 3,
+          enemyType: 'squelette',
+          hint: 'Sceau de Dédale : abattez 3 Squelettes hoplites pour lever le sceau.'
+        }
+      },
+      {
+        id: 'coffre_laby_2',
+        targetId: 'chest_loot',
+        label: 'Coffre oublié',
+        kind: 'chest',
+        x: 820,
+        y: 1055,
+        radius: 40
+      }
     ],
     spawns: [
       { id: 'lb_sq_1', type: 'squelette', x: 190, y: 690, level: 7, patrolRadius: 65, respawnSeconds: 24 },
@@ -554,8 +632,30 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
     interactables: [
       { id: 'autel_soufre_1', targetId: 'autel_soufre', label: 'Autel de Soufre (Ouest)', kind: 'stele', x: 295, y: 315, radius: 52 },
       { id: 'autel_soufre_2', targetId: 'autel_soufre', label: 'Autel de Soufre (Est)', kind: 'stele', x: 1455, y: 315, radius: 52 },
-      { id: 'coffre_marecages_1', targetId: 'chest_loot', label: 'Coffre englouti', kind: 'chest', x: 280, y: 920, radius: 42 },
-      { id: 'coffre_marecages_2', targetId: 'chest_loot', label: 'Coffre de Lerne', kind: 'chest', x: 1470, y: 920, radius: 42 }
+      {
+        id: 'coffre_marecages_1',
+        targetId: 'chest_loot',
+        label: 'Coffre scellé de Lerne',
+        kind: 'chest',
+        x: 240,
+        y: 1020,
+        radius: 44,
+        seal: {
+          zoneId: 'marecages',
+          requiredKills: 3,
+          enemyType: 'serpent_lerne',
+          hint: 'Sceau de Lerne : éliminez 3 Vipères de Lerne pour briser ce sceau.'
+        }
+      },
+      {
+        id: 'coffre_marecages_2',
+        targetId: 'chest_loot',
+        label: 'Coffre des roseaux',
+        kind: 'chest',
+        x: 1580,
+        y: 1030,
+        radius: 40
+      }
     ],
     spawns: [
       { id: 'mar_vip_1', type: 'serpent_lerne', x: 520, y: 250, level: 7, patrolRadius: 105, respawnSeconds: 18 },

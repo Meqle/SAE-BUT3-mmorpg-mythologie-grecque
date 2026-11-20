@@ -156,6 +156,7 @@ export function WorldMapModal({
 
     // 2. Decors & obstacles
     for (const s of zone.solids) {
+      if (s.look === 'water') continue;
       const rx = s.x * sx;
       const ry = s.y * sy;
       const rw = Math.max(4, s.w * sx);

@@ -9,14 +9,17 @@ import type { EnemyType } from '../../game/data/zones';
 import { CODEX_ENTRIES, QUEST_ORDER, QUESTS } from '../../game/data/story';
 import { GameProgressState, getComputedStats } from '../../game/state/gameState';
 import { COLORS, css } from '../../game/scenes/palette';
+import { SkillTreePanel } from './SkillTreePanel';
 
-export type ModalTab = 'inventory' | 'quests' | 'codex' | 'bestiary';
+export type ModalTab = 'inventory' | 'talents' | 'quests' | 'codex' | 'bestiary';
 
 interface InventoryModalProps {
   state: GameProgressState;
   initialTab: ModalTab;
   onUseConsumable: (itemId: string) => void;
   onEquipItem: (itemId: string) => void;
+  onUpgradeSkill?: (skillId: string) => void;
+  onResetSkills?: () => void;
   onClose: () => void;
 }
 
@@ -24,7 +27,7 @@ const MARBLE = css(COLORS.marble);
 const GOLD = css(COLORS.gold);
 const SKY = css(COLORS.sky);
 
-export function InventoryModal({ state, initialTab, onUseConsumable, onEquipItem, onClose }: InventoryModalProps) {
+export function InventoryModal({ state, initialTab, onUseConsumable, onEquipItem, onUpgradeSkill, onResetSkills, onClose }: InventoryModalProps) {
   const [tab, setTab] = useState<ModalTab>(initialTab);
   const stats = getComputedStats(state);
   const cls = HERO_CLASSES[state.heroClass];
@@ -85,6 +88,7 @@ export function InventoryModal({ state, initialTab, onUseConsumable, onEquipItem
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {tabBtn('inventory', 'Sac & Héros', <Backpack size={15} />)}
+            {tabBtn('talents', (state.skillPoints ?? 0) > 0 ? `Talents (${state.skillPoints})` : 'Talents', <Sparkles size={15} />)}
             {tabBtn('quests', 'Quêtes', <ScrollText size={15} />)}
             {tabBtn('codex', 'Chroniques', <BookOpen size={15} />)}
             {tabBtn('bestiary', 'Bestiaire', <Skull size={15} />)}
@@ -213,6 +217,14 @@ export function InventoryModal({ state, initialTab, onUseConsumable, onEquipItem
                 })}
               </div>
             </div>
+          )}
+
+          {tab === 'talents' && (
+            <SkillTreePanel
+              state={state}
+              onUpgradeSkill={(id) => onUpgradeSkill?.(id)}
+              onResetSkills={() => onResetSkills?.()}
+            />
           )}
 
           {tab === 'quests' && (

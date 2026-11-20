@@ -6,6 +6,7 @@ import {
   ActionKey,
   DEFAULT_SETTINGS,
   formatKeyEvent,
+  formatMouseButton,
   GameSettings
 } from '../../game/settings';
 import { COLORS, css } from '../../game/scenes/palette';
@@ -51,8 +52,28 @@ export function PauseMenuModal({
       });
       setListening(null);
     };
+    const onMouse = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const binding = formatMouseButton(e.button);
+      onChangeSettings({
+        ...settings,
+        keys: { ...settings.keys, [listening]: binding }
+      });
+      setListening(null);
+    };
+    const onCtx = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
     window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
+    window.addEventListener('mousedown', onMouse, true);
+    window.addEventListener('contextmenu', onCtx, true);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('mousedown', onMouse, true);
+      window.removeEventListener('contextmenu', onCtx, true);
+    };
   }, [listening, settings, onChangeSettings]);
 
   const menuBtnStyle: React.CSSProperties = {

@@ -137,6 +137,7 @@ export function Minimap({ zone, markers, onOpenWorldMap }: MinimapProps) {
 
     // 2. Obstacles, maisons, etals, colonnes et plateformes a l'echelle
     for (const s of zone.solids) {
+      if (s.look === 'water') continue;
       const rx = s.x * sx;
       const ry = s.y * sy;
       const rw = Math.max(2, s.w * sx);

@@ -68,8 +68,8 @@ export const DEFAULT_SETTINGS: GameSettings = {
     left: { code: 'KeyA', label: 'Q' },
     right: { code: 'KeyD', label: 'D' },
     jump: { code: 'Space', label: 'Espace' },
-    attack: { code: 'KeyJ', label: 'J' },
-    special: { code: 'KeyK', label: 'K' },
+    attack: { code: 'Mouse0', label: 'Clic G' },
+    special: { code: 'Mouse2', label: 'Clic D' },
     dash: { code: 'ShiftLeft', label: 'Maj' },
     interact: { code: 'KeyE', label: 'E' },
     potion: { code: 'KeyR', label: 'R' },
@@ -84,7 +84,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   soundEnabled: true
 };
 
-const STORAGE_KEY = 'mythologia_settings_v1';
+const STORAGE_KEY = 'mythologia_settings_v2';
 
 export function formatKeyEvent(e: KeyboardEvent): KeyBinding {
   if (e.code === 'Space') return { code: 'Space', label: 'Espace' };
@@ -97,6 +97,13 @@ export function formatKeyEvent(e: KeyboardEvent): KeyBinding {
   if (e.code === 'Tab') return { code: 'Tab', label: 'Tab' };
   const label = e.key.length === 1 ? e.key.toUpperCase() : e.code.replace(/^Key/, '');
   return { code: e.code, label };
+}
+
+export function formatMouseButton(button: number): KeyBinding {
+  if (button === 0) return { code: 'Mouse0', label: 'Clic G' };
+  if (button === 2) return { code: 'Mouse2', label: 'Clic D' };
+  if (button === 1) return { code: 'Mouse1', label: 'Clic M' };
+  return { code: `Mouse${button}`, label: `Souris ${button}` };
 }
 
 export function loadSettings(): GameSettings {
