@@ -37,7 +37,7 @@ export const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     windupDuration: 0.44,
     attackStyle: 'lunge',
     xpReward: 36,
-    goldReward: 16,
+    goldReward: 5,
     radius: 15
   },
   harpie: {
@@ -52,7 +52,7 @@ export const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     windupDuration: 0.46,
     attackStyle: 'ranged_fan',
     xpReward: 44,
-    goldReward: 20,
+    goldReward: 6,
     radius: 15,
     flying: true
   },
@@ -68,7 +68,7 @@ export const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     windupDuration: 0.65,
     attackStyle: 'charge',
     xpReward: 120,
-    goldReward: 65,
+    goldReward: 20,
     radius: 22
   },
   automate: {
@@ -83,7 +83,7 @@ export const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     windupDuration: 0.6,
     attackStyle: 'fire_slam',
     xpReward: 95,
-    goldReward: 48,
+    goldReward: 14,
     radius: 20
   },
   gardien_airain: {
@@ -98,7 +98,7 @@ export const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     windupDuration: 0.48,
     attackStyle: 'boss_burst',
     xpReward: 220,
-    goldReward: 120,
+    goldReward: 36,
     radius: 26,
     isBoss: true
   },
@@ -114,7 +114,7 @@ export const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     windupDuration: 0.65,
     attackStyle: 'poseidon',
     xpReward: 350,
-    goldReward: 200,
+    goldReward: 60,
     radius: 28,
     isBoss: true
   },
@@ -130,7 +130,7 @@ export const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     windupDuration: 0.42,
     attackStyle: 'lunge',
     xpReward: 88,
-    goldReward: 38,
+    goldReward: 11,
     radius: 16
   },
   minotaure: {
@@ -145,7 +145,7 @@ export const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     windupDuration: 0.45,
     attackStyle: 'minotaur',
     xpReward: 480,
-    goldReward: 260,
+    goldReward: 78,
     radius: 30,
     isBoss: true
   },
@@ -161,7 +161,7 @@ export const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     windupDuration: 0.5,
     attackStyle: 'venom_spit',
     xpReward: 135,
-    goldReward: 68,
+    goldReward: 20,
     radius: 17
   },
   hydre_lerne: {
@@ -176,7 +176,7 @@ export const ENEMY_ARCHETYPES: Record<EnemyType, EnemyArchetype> = {
     windupDuration: 0.46,
     attackStyle: 'hydra',
     xpReward: 560,
-    goldReward: 320,
+    goldReward: 96,
     radius: 34,
     isBoss: true
   }

@@ -862,7 +862,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         if (!stateRef.current.collectedInteractables.includes(def.id)) {
           stateRef.current.collectedInteractables.push(def.id);
           if (def.kind === 'chest') {
-            const goldLoot = stateRef.current.zoneId === 'marecages' ? 90 : stateRef.current.zoneId === 'labyrinthe' ? 75 : stateRef.current.zoneId === 'sanctuaire' ? 60 : 40;
+            const goldLoot = stateRef.current.zoneId === 'marecages' ? 38 : stateRef.current.zoneId === 'labyrinthe' ? 32 : stateRef.current.zoneId === 'sanctuaire' ? 24 : 16;
             const bonusItem = stateRef.current.zoneId === 'labyrinthe' || stateRef.current.zoneId === 'marecages' ? 'nectar_divin' : 'potion_ambroisie';
             stateRef.current.gold += goldLoot;
             addItemToState(stateRef.current, bonusItem, 1);

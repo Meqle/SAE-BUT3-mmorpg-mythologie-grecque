@@ -222,7 +222,7 @@ export function DialogueModal({
                   sellable.map((slot) => {
                     const item = ITEMS[slot.itemId];
                     if (!item) return null;
-                    const payout = Math.max(1, Math.floor(item.price * 0.5));
+                    const payout = Math.max(1, Math.floor(item.price * 0.3));
                     return (
                       <div
                         key={slot.itemId}

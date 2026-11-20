@@ -38,7 +38,7 @@ export const ITEMS: Record<string, ItemDef> = {
     slot: 'arme',
     rarity: 'commun',
     stackable: false,
-    price: 50,
+    price: 93,
     bonusAttack: 4
   },
   arc_olivier: {
@@ -50,7 +50,7 @@ export const ITEMS: Record<string, ItemDef> = {
     slot: 'arme',
     rarity: 'commun',
     stackable: false,
-    price: 50,
+    price: 93,
     bonusAttack: 4
   },
   baton_oracle: {
@@ -62,7 +62,7 @@ export const ITEMS: Record<string, ItemDef> = {
     slot: 'arme',
     rarity: 'commun',
     stackable: false,
-    price: 50,
+    price: 93,
     bonusAttack: 5
   },
   dagues_jumelles: {
@@ -74,7 +74,7 @@ export const ITEMS: Record<string, ItemDef> = {
     slot: 'arme',
     rarity: 'commun',
     stackable: false,
-    price: 50,
+    price: 93,
     bonusAttack: 5
   },
   sandales_cuir: {
@@ -86,7 +86,7 @@ export const ITEMS: Record<string, ItemDef> = {
     slot: 'pieds',
     rarity: 'commun',
     stackable: false,
-    price: 48,
+    price: 89,
     bonusHp: 22,
     bonusArmor: 3
   },
@@ -99,7 +99,7 @@ export const ITEMS: Record<string, ItemDef> = {
     slot: 'arme',
     rarity: 'rare',
     stackable: false,
-    price: 130,
+    price: 241,
     bonusAttack: 10
   },
   lance_centaure: {
@@ -111,7 +111,7 @@ export const ITEMS: Record<string, ItemDef> = {
     slot: 'arme',
     rarity: 'rare',
     stackable: false,
-    price: 175,
+    price: 324,
     bonusAttack: 12
   },
   cuirasse_hoplite: {
@@ -123,7 +123,7 @@ export const ITEMS: Record<string, ItemDef> = {
     slot: 'torse',
     rarity: 'rare',
     stackable: false,
-    price: 160,
+    price: 296,
     bonusHp: 32,
     bonusAttack: 2,
     bonusArmor: 5
@@ -137,7 +137,7 @@ export const ITEMS: Record<string, ItemDef> = {
     slot: 'bouclier',
     rarity: 'rare',
     stackable: false,
-    price: 120,
+    price: 222,
     bonusHp: 20,
     bonusAttack: 2,
     bonusArmor: 5
@@ -151,7 +151,7 @@ export const ITEMS: Record<string, ItemDef> = {
     slot: 'tete',
     rarity: 'rare',
     stackable: false,
-    price: 150,
+    price: 278,
     bonusHp: 24,
     bonusAttack: 3,
     bonusArmor: 4
@@ -165,7 +165,7 @@ export const ITEMS: Record<string, ItemDef> = {
     slot: 'arme',
     rarity: 'epique',
     stackable: false,
-    price: 300,
+    price: 555,
     bonusAttack: 11
   },
   arc_artemis: {
@@ -177,7 +177,7 @@ export const ITEMS: Record<string, ItemDef> = {
     slot: 'arme',
     rarity: 'epique',
     stackable: false,
-    price: 360,
+    price: 666,
     bonusAttack: 13
   },
   tunique_brumes: {
@@ -189,7 +189,7 @@ export const ITEMS: Record<string, ItemDef> = {
     slot: 'torse',
     rarity: 'epique',
     stackable: false,
-    price: 340,
+    price: 629,
     bonusHp: 48,
     bonusAttack: 4,
     bonusArmor: 8
@@ -203,7 +203,7 @@ export const ITEMS: Record<string, ItemDef> = {
     slot: 'anneau',
     rarity: 'epique',
     stackable: false,
-    price: 290,
+    price: 537,
     bonusHp: 22,
     bonusAttack: 5,
     bonusArmor: 3
@@ -217,7 +217,7 @@ export const ITEMS: Record<string, ItemDef> = {
     slot: 'arme',
     rarity: 'legendaire',
     stackable: false,
-    price: 750,
+    price: 1388,
     bonusHp: 18,
     bonusAttack: 19
   },
@@ -230,7 +230,7 @@ export const ITEMS: Record<string, ItemDef> = {
     slot: 'torse',
     rarity: 'legendaire',
     stackable: false,
-    price: 720,
+    price: 1332,
     bonusHp: 75,
     bonusAttack: 6,
     bonusArmor: 12
@@ -244,7 +244,7 @@ export const ITEMS: Record<string, ItemDef> = {
     slot: 'relique',
     rarity: 'legendaire',
     stackable: false,
-    price: 800,
+    price: 1480,
     bonusHp: 48,
     bonusAttack: 10,
     bonusArmor: 5
@@ -257,7 +257,7 @@ export const ITEMS: Record<string, ItemDef> = {
     category: 'consommable',
     rarity: 'commun',
     stackable: true,
-    price: 15,
+    price: 28,
     healAmount: 0.38
   },
   vin_chios: {
@@ -268,7 +268,7 @@ export const ITEMS: Record<string, ItemDef> = {
     category: 'consommable',
     rarity: 'commun',
     stackable: true,
-    price: 18,
+    price: 33,
     healAmount: 0.35
   },
   posca: {
@@ -279,7 +279,7 @@ export const ITEMS: Record<string, ItemDef> = {
     category: 'consommable',
     rarity: 'commun',
     stackable: true,
-    price: 24,
+    price: 44,
     healAmount: 0.45
   },
   hydromel_olympe: {
@@ -290,7 +290,7 @@ export const ITEMS: Record<string, ItemDef> = {
     category: 'consommable',
     rarity: 'rare',
     stackable: true,
-    price: 36,
+    price: 67,
     healAmount: 0.6
   },
   kykeon: {
@@ -301,7 +301,7 @@ export const ITEMS: Record<string, ItemDef> = {
     category: 'consommable',
     rarity: 'rare',
     stackable: true,
-    price: 48,
+    price: 89,
     healAmount: 0.8
   },
   nectar_divin: {
@@ -312,7 +312,7 @@ export const ITEMS: Record<string, ItemDef> = {
     category: 'consommable',
     rarity: 'rare',
     stackable: true,
-    price: 55,
+    price: 102,
     healAmount: 1
   },
   fragment_bronze: {
@@ -323,7 +323,7 @@ export const ITEMS: Record<string, ItemDef> = {
     category: 'ressource',
     rarity: 'commun',
     stackable: true,
-    price: 12
+    price: 22
   },
   herbe_ambroisie: {
     id: 'herbe_ambroisie',
@@ -333,7 +333,7 @@ export const ITEMS: Record<string, ItemDef> = {
     category: 'ressource',
     rarity: 'commun',
     stackable: true,
-    price: 10
+    price: 19
   },
   corne_satyre: {
     id: 'corne_satyre',
@@ -343,7 +343,7 @@ export const ITEMS: Record<string, ItemDef> = {
     category: 'ressource',
     rarity: 'commun',
     stackable: true,
-    price: 18
+    price: 33
   },
   plume_harpie: {
     id: 'plume_harpie',
@@ -353,7 +353,7 @@ export const ITEMS: Record<string, ItemDef> = {
     category: 'ressource',
     rarity: 'commun',
     stackable: true,
-    price: 22
+    price: 41
   },
   ossement_ancien: {
     id: 'ossement_ancien',
@@ -363,7 +363,7 @@ export const ITEMS: Record<string, ItemDef> = {
     category: 'ressource',
     rarity: 'commun',
     stackable: true,
-    price: 26
+    price: 48
   },
   ecaille_vipere: {
     id: 'ecaille_vipere',
@@ -373,7 +373,7 @@ export const ITEMS: Record<string, ItemDef> = {
     category: 'ressource',
     rarity: 'commun',
     stackable: true,
-    price: 28
+    price: 52
   },
   rouage_hephaistos: {
     id: 'rouage_hephaistos',
@@ -383,7 +383,7 @@ export const ITEMS: Record<string, ItemDef> = {
     category: 'ressource',
     rarity: 'rare',
     stackable: true,
-    price: 75
+    price: 139
   },
   croc_hydre: {
     id: 'croc_hydre',
@@ -393,7 +393,7 @@ export const ITEMS: Record<string, ItemDef> = {
     category: 'ressource',
     rarity: 'rare',
     stackable: true,
-    price: 95
+    price: 176
   },
   eclat_foudre: {
     id: 'eclat_foudre',
@@ -403,7 +403,7 @@ export const ITEMS: Record<string, ItemDef> = {
     category: 'ressource',
     rarity: 'epique',
     stackable: true,
-    price: 180
+    price: 333
   },
   coeur_braise: {
     id: 'coeur_braise',

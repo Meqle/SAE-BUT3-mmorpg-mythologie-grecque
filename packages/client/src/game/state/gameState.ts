@@ -469,7 +469,7 @@ export function sellItem(state: GameProgressState, itemId: string): number {
   const slot = state.inventory[idx];
   const def = ITEMS[itemId];
   if (!def || def.price <= 0 || slot.equipped) return 0;
-  const payout = Math.max(1, Math.floor(def.price * 0.5));
+  const payout = Math.max(1, Math.floor(def.price * 0.3));
   slot.quantity -= 1;
   if (slot.quantity <= 0) state.inventory.splice(idx, 1);
   state.gold += payout;

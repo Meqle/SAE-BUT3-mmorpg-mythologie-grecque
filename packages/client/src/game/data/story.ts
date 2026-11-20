@@ -92,7 +92,7 @@ export const QUESTS: Record<string, QuestDef> = {
     ],
     reward: {
       xp: 90,
-      gold: 45,
+      gold: 15,
       items: [{ itemId: 'potion_ambroisie', quantity: 2 }],
       unlocksCodex: 'codex_promethee'
     }
@@ -120,7 +120,7 @@ export const QUESTS: Record<string, QuestDef> = {
     ],
     reward: {
       xp: 185,
-      gold: 95,
+      gold: 30,
       items: [{ itemId: 'potion_ambroisie', quantity: 2 }],
       unlocksCodex: 'codex_fleaux'
     }
@@ -148,7 +148,7 @@ export const QUESTS: Record<string, QuestDef> = {
     ],
     reward: {
       xp: 280,
-      gold: 150,
+      gold: 48,
       items: [
         { itemId: 'coeur_braise', quantity: 1 },
         { itemId: 'lame_promethee', quantity: 1 }
@@ -178,7 +178,7 @@ export const QUESTS: Record<string, QuestDef> = {
     ],
     reward: {
       xp: 450,
-      gold: 260,
+      gold: 83,
       items: [
         { itemId: 'vestige_egee', quantity: 1 },
         { itemId: 'nectar_divin', quantity: 2 }
@@ -209,7 +209,7 @@ export const QUESTS: Record<string, QuestDef> = {
     ],
     reward: {
       xp: 620,
-      gold: 380,
+      gold: 122,
       items: [
         { itemId: 'coeur_airain', quantity: 1 },
         { itemId: 'nectar_divin', quantity: 2 }
@@ -240,7 +240,7 @@ export const QUESTS: Record<string, QuestDef> = {
     ],
     reward: {
       xp: 760,
-      gold: 460,
+      gold: 147,
       items: [
         { itemId: 'venin_orque', quantity: 1 },
         { itemId: 'nectar_divin', quantity: 2 }
@@ -268,7 +268,7 @@ export const QUESTS: Record<string, QuestDef> = {
     ],
     reward: {
       xp: 260,
-      gold: 165,
+      gold: 53,
       items: [{ itemId: 'nectar_divin', quantity: 2 }]
     }
   },
@@ -292,7 +292,7 @@ export const QUESTS: Record<string, QuestDef> = {
     ],
     reward: {
       xp: 120,
-      gold: 75,
+      gold: 24,
       items: [
         { itemId: 'fragment_bronze', quantity: 2 },
         { itemId: 'herbe_ambroisie', quantity: 2 }
@@ -318,7 +318,7 @@ export const QUESTS: Record<string, QuestDef> = {
     ],
     reward: {
       xp: 120,
-      gold: 80,
+      gold: 26,
       items: [{ itemId: 'bouclier_hoplite', quantity: 1 }]
     }
   },
@@ -342,7 +342,7 @@ export const QUESTS: Record<string, QuestDef> = {
     ],
     reward: {
       xp: 105,
-      gold: 60,
+      gold: 19,
       items: [
         { itemId: 'potion_ambroisie', quantity: 3 },
         { itemId: 'nectar_divin', quantity: 1 }
@@ -370,7 +370,7 @@ export const QUESTS: Record<string, QuestDef> = {
     ],
     reward: {
       xp: 175,
-      gold: 115,
+      gold: 37,
       items: [{ itemId: 'eclat_foudre', quantity: 1 }]
     }
   },
@@ -394,7 +394,7 @@ export const QUESTS: Record<string, QuestDef> = {
     ],
     reward: {
       xp: 145,
-      gold: 130,
+      gold: 42,
       items: [{ itemId: 'potion_ambroisie', quantity: 2 }]
     }
   }

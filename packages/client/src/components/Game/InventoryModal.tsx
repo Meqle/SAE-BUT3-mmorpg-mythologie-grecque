@@ -386,7 +386,7 @@ export function InventoryModal({
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(143,195,230,0.16)', paddingTop: 6 }}>
                         <span style={{ fontSize: 10.5, color: '#94a3b8' }}>
-                          {selectedItem.price > 0 ? `Revente : ${Math.floor(selectedItem.price * 0.5)}g` : 'Objet de quête'}
+                          {selectedItem.price > 0 ? `Revente : ${Math.floor(selectedItem.price * 0.3)}g` : 'Objet de quête'}
                         </span>
                         <div style={{ display: 'flex', gap: 6 }}>
                           {selectedItem.category === 'consommable' && (
