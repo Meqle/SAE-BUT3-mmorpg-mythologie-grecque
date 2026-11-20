@@ -124,9 +124,9 @@ export const ITEMS: Record<string, ItemDef> = {
     rarity: 'rare',
     stackable: false,
     price: 160,
-    bonusHp: 55,
+    bonusHp: 32,
     bonusAttack: 2,
-    bonusArmor: 8
+    bonusArmor: 5
   },
   bouclier_hoplite: {
     id: 'bouclier_hoplite',
@@ -138,9 +138,9 @@ export const ITEMS: Record<string, ItemDef> = {
     rarity: 'rare',
     stackable: false,
     price: 120,
-    bonusHp: 35,
-    bonusAttack: 3,
-    bonusArmor: 7
+    bonusHp: 20,
+    bonusAttack: 2,
+    bonusArmor: 5
   },
   casque_corinthien: {
     id: 'casque_corinthien',
@@ -152,9 +152,9 @@ export const ITEMS: Record<string, ItemDef> = {
     rarity: 'rare',
     stackable: false,
     price: 150,
-    bonusHp: 42,
-    bonusAttack: 4,
-    bonusArmor: 6
+    bonusHp: 24,
+    bonusAttack: 3,
+    bonusArmor: 4
   },
   lame_promethee: {
     id: 'lame_promethee',
@@ -166,7 +166,7 @@ export const ITEMS: Record<string, ItemDef> = {
     rarity: 'epique',
     stackable: false,
     price: 300,
-    bonusAttack: 15
+    bonusAttack: 11
   },
   arc_artemis: {
     id: 'arc_artemis',
@@ -178,7 +178,7 @@ export const ITEMS: Record<string, ItemDef> = {
     rarity: 'epique',
     stackable: false,
     price: 360,
-    bonusAttack: 17
+    bonusAttack: 13
   },
   tunique_brumes: {
     id: 'tunique_brumes',
@@ -190,9 +190,9 @@ export const ITEMS: Record<string, ItemDef> = {
     rarity: 'epique',
     stackable: false,
     price: 340,
-    bonusHp: 85,
-    bonusAttack: 6,
-    bonusArmor: 12
+    bonusHp: 48,
+    bonusAttack: 4,
+    bonusArmor: 8
   },
   anneau_olympe: {
     id: 'anneau_olympe',
@@ -204,9 +204,9 @@ export const ITEMS: Record<string, ItemDef> = {
     rarity: 'epique',
     stackable: false,
     price: 290,
-    bonusHp: 40,
-    bonusAttack: 7,
-    bonusArmor: 4
+    bonusHp: 22,
+    bonusAttack: 5,
+    bonusArmor: 3
   },
   labrys_minotaure: {
     id: 'labrys_minotaure',
@@ -218,8 +218,8 @@ export const ITEMS: Record<string, ItemDef> = {
     rarity: 'legendaire',
     stackable: false,
     price: 750,
-    bonusHp: 30,
-    bonusAttack: 24
+    bonusHp: 18,
+    bonusAttack: 19
   },
   egide_egee: {
     id: 'egide_egee',
@@ -231,9 +231,9 @@ export const ITEMS: Record<string, ItemDef> = {
     rarity: 'legendaire',
     stackable: false,
     price: 720,
-    bonusHp: 135,
-    bonusAttack: 10,
-    bonusArmor: 18
+    bonusHp: 75,
+    bonusAttack: 6,
+    bonusArmor: 12
   },
   talisman_titans: {
     id: 'talisman_titans',
@@ -245,9 +245,9 @@ export const ITEMS: Record<string, ItemDef> = {
     rarity: 'legendaire',
     stackable: false,
     price: 800,
-    bonusHp: 90,
-    bonusAttack: 14,
-    bonusArmor: 8
+    bonusHp: 48,
+    bonusAttack: 10,
+    bonusArmor: 5
   },
   potion_ambroisie: {
     id: 'potion_ambroisie',
@@ -409,55 +409,55 @@ export const ITEMS: Record<string, ItemDef> = {
     id: 'coeur_braise',
     name: 'Cœur de Braise',
     description: "Fragment incandescent arraché au Gardien d'Airain.",
-    usageHint: 'Relique de quête : forgeable en arme ou équipable en Relique.',
+    usageHint: 'Relique de quête (Rare) : équipable en emplacement Relique.',
     category: 'artefact',
     slot: 'relique',
-    rarity: 'epique',
+    rarity: 'rare',
     stackable: false,
     price: 0,
-    bonusAttack: 5,
-    bonusHp: 25
+    bonusAttack: 4,
+    bonusHp: 18
   },
   coeur_airain: {
     id: 'coeur_airain',
     name: "Cœur d'Airain",
     description: 'Relique forgée des Titans arrachée au Minotaure des Brumes.',
-    usageHint: 'Équipement (Relique légendaire) : puissant bonus PV et Attaque.',
+    usageHint: 'Relique de quête (Épique) : bonus PV, Attaque et Armure.',
     category: 'artefact',
     slot: 'relique',
-    rarity: 'legendaire',
+    rarity: 'epique',
     stackable: false,
     price: 0,
-    bonusHp: 75,
-    bonusAttack: 12,
-    bonusArmor: 6
+    bonusHp: 34,
+    bonusAttack: 6,
+    bonusArmor: 4
   },
   vestige_egee: {
     id: 'vestige_egee',
     name: "Vestige d'Égée",
     description: 'Premier Vestige Primordial, pris à la Sentinelle de Poséidon.',
-    usageHint: 'Équipement (Relique légendaire) : bonus PV, Attaque et Armure.',
+    usageHint: 'Relique de quête (Épique) : bonus PV, Attaque et Armure.',
     category: 'artefact',
     slot: 'relique',
-    rarity: 'legendaire',
+    rarity: 'epique',
     stackable: false,
     price: 0,
-    bonusHp: 55,
-    bonusAttack: 8,
-    bonusArmor: 6
+    bonusHp: 28,
+    bonusAttack: 5,
+    bonusArmor: 4
   },
   venin_orque: {
     id: 'venin_orque',
     name: "Venin d'Orque",
     description: "Essence primordiale scellée par l'Hydre de Lerne.",
-    usageHint: 'Équipement (Relique légendaire) : énorme bonus d’Attaque.',
+    usageHint: 'Relique de quête (Épique) : fort bonus d’Attaque.',
     category: 'artefact',
     slot: 'relique',
-    rarity: 'legendaire',
+    rarity: 'epique',
     stackable: false,
     price: 0,
-    bonusHp: 60,
-    bonusAttack: 15
+    bonusHp: 32,
+    bonusAttack: 8
   }
 };
 

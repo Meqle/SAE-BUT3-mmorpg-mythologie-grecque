@@ -1225,62 +1225,74 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
                 enemy.state = 'cooldown';
                 enemy.stateTimer = arch.attackCooldown;
               } else if (arch.attackStyle === 'boss_burst') {
+                const enraged = enemy.hp < enemy.maxHp * 0.5;
                 const step = enemy.patternStep;
                 if (step === 0) {
-                  for (let k = 0; k < 6; k++) {
-                    const ra = a + (k / 6) * Math.PI * 2;
+                  const count = enraged ? 10 : 8;
+                  for (let k = 0; k < count; k++) {
+                    const ra = a + (k / count) * Math.PI * 2;
                     fx.spawnProjectile({
                       x: enemy.x, y: enemy.y,
-                      vx: Math.cos(ra) * 235, vy: Math.sin(ra) * 235,
-                      damage: 18, radius: 9, fromPlayer: false, life: 1.6, color: 0xf97316, style: 'fireball'
+                      vx: Math.cos(ra) * 315, vy: Math.sin(ra) * 315,
+                      damage: Math.round(arch.attack * 0.78), radius: 9.5, fromPlayer: false, life: 1.7, color: 0xf97316, style: 'fireball'
                     });
                   }
                 } else if (step === 1) {
-                  fx.spawnSlash(enemy.x, enemy.y, 0, 126, 0xef4444, 'ring');
-                  cameraShake = Math.max(cameraShake, 5);
-                  if (dist <= 128) damagePlayer(arch.attack, enemy.x);
+                  fx.spawnSlash(enemy.x, enemy.y, 0, 142, 0xef4444, 'ring');
+                  cameraShake = Math.max(cameraShake, 6);
+                  if (dist <= 146) damagePlayer(Math.round(arch.attack * 1.15), enemy.x);
                 } else {
-                  for (const [ox, oy] of [[0, 0], [74, 0], [-74, 0]]) {
-                    fx.spawnHazard(player.x + ox, player.y + oy, 40, 1.05, 20, 0xfacc15);
+                  const pts = enraged
+                    ? [[0, 0], [72, 0], [-72, 0], [0, 72], [0, -72]]
+                    : [[0, 0], [74, 0], [-74, 0], [0, 68]];
+                  for (const [ox, oy] of pts) {
+                    fx.spawnHazard(player.x + player.vx * 0.25 + ox, player.y + player.vy * 0.25 + oy, 44, 0.82, Math.round(arch.attack * 0.9), 0xfacc15);
                   }
                 }
                 enemy.state = 'cooldown';
-                enemy.stateTimer = arch.attackCooldown;
+                enemy.stateTimer = enraged ? arch.attackCooldown * 0.74 : arch.attackCooldown;
               } else if (arch.attackStyle === 'minotaur') {
+                const enraged = enemy.hp < enemy.maxHp * 0.5;
                 const step = enemy.patternStep;
                 if (step === 0) {
-                  // 1. Charge furieuse du Minotaure
+                  // 1. Charge furieuse avec visee anticipee + onde a l'impact
+                  const leadA = Math.atan2(player.y + player.vy * 0.26 - enemy.y, player.x + player.vx * 0.26 - enemy.x);
                   enemy.state = 'dashing';
-                  enemy.stateTimer = 0.5;
-                  enemy.dashVx = Math.cos(a) * 430;
-                  enemy.dashVy = Math.sin(a) * 430;
+                  enemy.stateTimer = 0.52;
+                  enemy.dashVx = Math.cos(leadA) * (enraged ? 550 : 500);
+                  enemy.dashVy = Math.sin(leadA) * (enraged ? 550 : 500);
                   enemy.dashHitDone = false;
                   dust.burst(enemy.x, enemy.y + 10);
                 } else if (step === 1) {
-                  // 2. Tourbillon de Labrys (anneau + 4 arcs)
-                  fx.spawnSlash(enemy.x, enemy.y, 0, 136, 0xdc2626, 'ring');
+                  // 2. Tourbillon de Labrys (large zone + 4 arcs rapides)
+                  const r = enraged ? 162 : 148;
+                  fx.spawnSlash(enemy.x, enemy.y, 0, r, 0xdc2626, 'ring');
                   for (let k = 0; k < 4; k++) {
-                    fx.spawnSlash(enemy.x, enemy.y, a + (k * Math.PI) / 2, 115, COLORS.gold, 'arc');
+                    fx.spawnSlash(enemy.x, enemy.y, a + (k * Math.PI) / 2, r - 12, COLORS.gold, 'arc');
                   }
-                  cameraShake = Math.max(cameraShake, 6.5);
-                  if (dist <= 140) damagePlayer(Math.round(arch.attack * 1.15), enemy.x);
+                  cameraShake = Math.max(cameraShake, 7.5);
+                  if (dist <= r + 4) damagePlayer(Math.round(arch.attack * 1.25), enemy.x);
                   enemy.state = 'cooldown';
-                  enemy.stateTimer = arch.attackCooldown;
+                  enemy.stateTimer = enraged ? arch.attackCooldown * 0.75 : arch.attackCooldown;
                 } else {
-                  // 3. Seisme du Labyrinthe (4 zones sismiques + 6 eclats radiaux)
-                  for (const [ox, oy] of [[0, 0], [82, -38], [-82, -38], [0, 74]]) {
-                    fx.spawnHazard(player.x + ox, player.y + oy, 44, 1.05, 22, 0xf97316);
+                  // 3. Seisme du Labyrinthe (secousses anticipees rapides + 8 eclats radiaux)
+                  const pts = enraged
+                    ? [[0, 0], [82, -38], [-82, -38], [82, 46], [-82, 46]]
+                    : [[0, 0], [80, -38], [-80, -38], [0, 74]];
+                  for (const [ox, oy] of pts) {
+                    fx.spawnHazard(player.x + player.vx * 0.22 + ox, player.y + player.vy * 0.22 + oy, 46, 0.8, Math.round(arch.attack * 0.92), 0xf97316);
                   }
-                  for (let k = 0; k < 6; k++) {
-                    const ra = a + (k / 6) * Math.PI * 2;
+                  const shards = enraged ? 10 : 8;
+                  for (let k = 0; k < shards; k++) {
+                    const ra = a + (k / shards) * Math.PI * 2;
                     fx.spawnProjectile({
                       x: enemy.x, y: enemy.y,
-                      vx: Math.cos(ra) * 245, vy: Math.sin(ra) * 245,
-                      damage: 18, radius: 8, fromPlayer: false, life: 1.5, color: COLORS.gold, style: 'fireball'
+                      vx: Math.cos(ra) * 320, vy: Math.sin(ra) * 320,
+                      damage: Math.round(arch.attack * 0.75), radius: 8.5, fromPlayer: false, life: 1.6, color: COLORS.gold, style: 'fireball'
                     });
                   }
                   enemy.state = 'cooldown';
-                  enemy.stateTimer = arch.attackCooldown;
+                  enemy.stateTimer = enraged ? arch.attackCooldown * 0.75 : arch.attackCooldown;
                 }
               } else if (arch.attackStyle === 'venom_spit') {
                 const step = enemy.patternStep;
@@ -1288,41 +1300,47 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
                   for (const off of [-0.14, 0.14]) {
                     fx.spawnProjectile({
                       x: enemy.x, y: enemy.y - 6,
-                      vx: Math.cos(a + off) * 275, vy: Math.sin(a + off) * 275,
-                      damage: Math.round(arch.attack * 0.85), radius: 6, fromPlayer: false, life: 1.4, color: 0x4ade80, style: 'venom'
+                      vx: Math.cos(a + off) * 315, vy: Math.sin(a + off) * 315,
+                      damage: Math.round(arch.attack * 0.9), radius: 6.5, fromPlayer: false, life: 1.4, color: 0x4ade80, style: 'venom'
                     });
                   }
                 } else {
-                  fx.spawnSlash(enemy.x, enemy.y, 0, 95, 0x22c55e, 'ring');
-                  fx.spawnHazard(player.x, player.y, 38, 1.0, Math.round(arch.attack * 0.8), 0x4ade80);
-                  if (dist <= 95) damagePlayer(arch.attack, enemy.x);
+                  fx.spawnSlash(enemy.x, enemy.y, 0, 98, 0x22c55e, 'ring');
+                  fx.spawnHazard(player.x + player.vx * 0.2, player.y + player.vy * 0.2, 40, 0.85, Math.round(arch.attack * 0.85), 0x4ade80);
+                  if (dist <= 98) damagePlayer(arch.attack, enemy.x);
                 }
                 enemy.state = 'cooldown';
                 enemy.stateTimer = arch.attackCooldown;
               } else if (arch.attackStyle === 'hydra') {
+                const enraged = enemy.hp < enemy.maxHp * 0.5;
                 const step = enemy.patternStep;
                 if (step === 0) {
-                  for (const offset of [-0.42, -0.21, 0, 0.21, 0.42]) {
+                  const offsets = enraged ? [-0.54, -0.36, -0.18, 0, 0.18, 0.36, 0.54] : [-0.42, -0.21, 0, 0.21, 0.42];
+                  for (const offset of offsets) {
                     const ang = a + offset;
                     fx.spawnProjectile({
                       x: enemy.x, y: enemy.y - 10,
-                      vx: Math.cos(ang) * 280, vy: Math.sin(ang) * 280,
-                      damage: Math.round(arch.attack * 0.8), radius: 6.5, fromPlayer: false, life: 1.5, color: 0x4ade80, style: 'venom'
+                      vx: Math.cos(ang) * 355, vy: Math.sin(ang) * 355,
+                      damage: Math.round(arch.attack * 0.82), radius: 7, fromPlayer: false, life: 1.6, color: 0x4ade80, style: 'venom'
                     });
                   }
                 } else if (step === 1) {
-                  for (const offset of [-0.35, 0, 0.35]) {
-                    fx.spawnSlash(enemy.x, enemy.y - 4, a + offset, 122, 0x4ade80, 'arc');
+                  const r = enraged ? 150 : 136;
+                  for (const offset of [-0.38, 0, 0.38]) {
+                    fx.spawnSlash(enemy.x, enemy.y - 4, a + offset, r, 0x4ade80, 'arc');
                   }
-                  cameraShake = Math.max(cameraShake, 6);
-                  if (dist <= 125) damagePlayer(arch.attack, enemy.x);
+                  cameraShake = Math.max(cameraShake, 7);
+                  if (dist <= r + 4) damagePlayer(Math.round(arch.attack * 1.2), enemy.x);
                 } else {
-                  for (const [ox, oy] of [[0, 0], [82, -40], [-82, -40], [0, 78]]) {
-                    fx.spawnHazard(player.x + ox, player.y + oy, 44, 1.05, 22, 0x4ade80);
+                  const pts = enraged
+                    ? [[0, 0], [85, -42], [-85, -42], [85, 48], [-85, 48]]
+                    : [[0, 0], [82, -40], [-82, -40], [0, 78]];
+                  for (const [ox, oy] of pts) {
+                    fx.spawnHazard(player.x + player.vx * 0.24 + ox, player.y + player.vy * 0.24 + oy, 46, 0.8, Math.round(arch.attack * 0.9), 0x4ade80);
                   }
                 }
                 enemy.state = 'cooldown';
-                enemy.stateTimer = arch.attackCooldown;
+                enemy.stateTimer = enraged ? arch.attackCooldown * 0.74 : arch.attackCooldown;
               } else {
                 // poseidon coup de trident rapproche
                 fx.spawnSlash(enemy.x, enemy.y - 10, a, 76, COLORS.seaLight, 'arc');

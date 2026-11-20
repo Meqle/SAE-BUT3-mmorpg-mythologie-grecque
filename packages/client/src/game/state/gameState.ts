@@ -87,11 +87,11 @@ export function getComputedStats(state: GameProgressState): ComputedHeroStats {
   const godSpeed = state.god === 'ZEUS' ? 0.1 : 0;
   const sk = computeSkillBonuses(state.heroClass, state.god, state.unlockedSkills);
 
-  const maxHp = cls.baseHp + (state.level - 1) * 14 + bonusHp + godHp + sk.maxHp;
+  const maxHp = cls.baseHp + (state.level - 1) * 10 + bonusHp + godHp + sk.maxHp;
   const attack = cls.baseAttack + (state.level - 1) * 3 + bonusAttack + godAtk + sk.attack;
   const armor = (state.heroClass === 'GUERRIER' ? 8 : 2) + bonusArmor + sk.armor;
   const armorMitigation = armor / (armor + 100);
-  const damageReduction = Math.min(0.65, sk.damageReduction + armorMitigation * 0.65);
+  const damageReduction = Math.min(0.45, sk.damageReduction * 0.7 + armorMitigation * 0.45);
   const speedMultiplier = 1 + cls.speedBonus / 220 + godSpeed + sk.speedPct;
   const baseCrit = state.heroClass === 'ASSASSIN' ? 0.16 : state.heroClass === 'ARCHER' ? 0.1 : 0.06;
 
@@ -223,14 +223,12 @@ export function addItemToState(state: GameProgressState, itemId: string, quantit
   const alreadyHas = state.inventory.some((s) => s.itemId === itemId);
   if (alreadyHas) return;
 
-  const autoEquip = def.category === 'arme' || def.category === 'armure' || (def.category === 'artefact' && (def.bonusAttack || def.bonusHp));
-  if (autoEquip && (def.category === 'arme' || def.category === 'armure')) {
-    for (const slot of state.inventory) {
-      const slotDef = ITEMS[slot.itemId];
-      if (slotDef && slotDef.category === def.category) slot.equipped = false;
-    }
+  let shouldEquip = false;
+  if (def.slot) {
+    const curInSlot = state.inventory.filter((s) => s.equipped && ITEMS[s.itemId]?.slot === def.slot);
+    shouldEquip = def.slot === 'relique' ? curInSlot.length < 2 : curInSlot.length === 0;
   }
-  state.inventory.push({ itemId, quantity: 1, equipped: Boolean(autoEquip) });
+  state.inventory.push({ itemId, quantity: 1, equipped: shouldEquip });
 }
 
 export function countItem(state: GameProgressState, itemId: string): number {
