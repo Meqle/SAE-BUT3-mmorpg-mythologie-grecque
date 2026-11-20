@@ -1,7 +1,7 @@
 import { MAPS, GRAVITY, JUMP_VELOCITY, MAX_FALL_SPEED, PLAYER_HALF, PLAYER_SPEED } from '@greek-myth/shared';
 import type { MoveInput, MovingBody, Rect, ViewMode } from '@greek-myth/shared';
 
-export type ZoneId = 'agora' | 'plaines' | 'sanctuaire' | 'rivage' | 'labyrinthe' | 'marecages';
+export type ZoneId = 'agora' | 'plaines' | 'sanctuaire' | 'rivage' | 'labyrinthe' | 'marecages' | 'taverne_interieur' | 'forge_interieur' | 'apothicairerie_interieur';
 
 export type ZoneSolidLook =
   | 'column'
@@ -43,7 +43,7 @@ export interface ZoneNpcPlacement {
   y: number;
 }
 
-export type InteractableKind = 'brasero' | 'bronze' | 'herb' | 'stele' | 'trial_stele' | 'chest';
+export type InteractableKind = 'brasero' | 'bronze' | 'herb' | 'stele' | 'trial_stele' | 'chest' | 'workbench';
 
 export interface ChestSealRequirement {
   zoneId: ZoneId;
@@ -203,6 +203,39 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
         label: "Rivage d'Égée",
         requiredQuestCompleted: 'mq_1_etincelle',
         lockedHint: "Ranimez d'abord le Brasero de Prométhée sur la place centrale."
+      },
+      {
+        id: 'agora_to_taverne',
+        x: 412,
+        y: 332,
+        w: 46,
+        h: 26,
+        toZone: 'taverne_interieur',
+        spawnX: 480,
+        spawnY: 575,
+        label: 'Entrer : Taverne'
+      },
+      {
+        id: 'agora_to_forge',
+        x: 1744,
+        y: 1262,
+        w: 46,
+        h: 26,
+        toZone: 'forge_interieur',
+        spawnX: 460,
+        spawnY: 555,
+        label: 'Entrer : Forge'
+      },
+      {
+        id: 'agora_to_apothicairerie',
+        x: 517,
+        y: 1257,
+        w: 46,
+        h: 26,
+        toZone: 'apothicairerie_interieur',
+        spawnX: 460,
+        spawnY: 555,
+        label: 'Entrer : Infirmerie'
       }
     ],
     npcs: [
@@ -322,14 +355,14 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
       }
     ],
     spawns: [
-      { id: 'pl_sat_1', type: 'satyre', x: 570, y: 545, level: 1, patrolRadius: 75, respawnSeconds: 18 },
-      { id: 'pl_sat_2', type: 'satyre', x: 760, y: 780, level: 2, patrolRadius: 80, respawnSeconds: 18 },
-      { id: 'pl_sat_3', type: 'satyre', x: 990, y: 490, level: 2, patrolRadius: 80, respawnSeconds: 18 },
-      { id: 'pl_sat_4', type: 'satyre', x: 1180, y: 880, level: 2, patrolRadius: 75, respawnSeconds: 20 },
-      { id: 'pl_har_1', type: 'harpie', x: 740, y: 370, level: 2, patrolRadius: 95, respawnSeconds: 22 },
-      { id: 'pl_har_2', type: 'harpie', x: 1120, y: 380, level: 3, patrolRadius: 95, respawnSeconds: 22 },
-      { id: 'pl_har_3', type: 'harpie', x: 1350, y: 810, level: 3, patrolRadius: 90, respawnSeconds: 22 },
-      { id: 'pl_cent_1', type: 'centaure', x: 1560, y: 560, level: 4, patrolRadius: 75, respawnSeconds: 32 }
+      { id: 'pl_sat_1', type: 'satyre', x: 570, y: 545, level: 1, patrolRadius: 75, respawnSeconds: 120 },
+      { id: 'pl_sat_2', type: 'satyre', x: 760, y: 780, level: 2, patrolRadius: 80, respawnSeconds: 120 },
+      { id: 'pl_sat_3', type: 'satyre', x: 990, y: 490, level: 2, patrolRadius: 80, respawnSeconds: 120 },
+      { id: 'pl_sat_4', type: 'satyre', x: 1180, y: 880, level: 2, patrolRadius: 75, respawnSeconds: 120 },
+      { id: 'pl_har_1', type: 'harpie', x: 740, y: 370, level: 2, patrolRadius: 95, respawnSeconds: 120 },
+      { id: 'pl_har_2', type: 'harpie', x: 1120, y: 380, level: 3, patrolRadius: 95, respawnSeconds: 120 },
+      { id: 'pl_har_3', type: 'harpie', x: 1350, y: 810, level: 3, patrolRadius: 90, respawnSeconds: 120 },
+      { id: 'pl_cent_1', type: 'centaure', x: 1560, y: 560, level: 4, patrolRadius: 75, respawnSeconds: 150 }
     ]
   },
 
@@ -431,11 +464,11 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
       }
     ],
     spawns: [
-      { id: 'sn_aut_1', type: 'automate', x: 690, y: 410, level: 5, patrolRadius: 65, respawnSeconds: 26 },
-      { id: 'sn_aut_2', type: 'automate', x: 700, y: 635, level: 5, patrolRadius: 65, respawnSeconds: 26 },
-      { id: 'sn_har_1', type: 'harpie', x: 960, y: 290, level: 5, patrolRadius: 85, respawnSeconds: 24 },
-      { id: 'sn_har_2', type: 'harpie', x: 960, y: 735, level: 5, patrolRadius: 85, respawnSeconds: 24 },
-      { id: 'sn_boss_1', type: 'gardien_airain', x: 1210, y: 510, level: 6, patrolRadius: 65, respawnSeconds: 45 }
+      { id: 'sn_aut_1', type: 'automate', x: 690, y: 410, level: 5, patrolRadius: 65, respawnSeconds: 150 },
+      { id: 'sn_aut_2', type: 'automate', x: 700, y: 635, level: 5, patrolRadius: 65, respawnSeconds: 150 },
+      { id: 'sn_har_1', type: 'harpie', x: 960, y: 290, level: 5, patrolRadius: 85, respawnSeconds: 150 },
+      { id: 'sn_har_2', type: 'harpie', x: 960, y: 735, level: 5, patrolRadius: 85, respawnSeconds: 150 },
+      { id: 'sn_boss_1', type: 'gardien_airain', x: 1210, y: 510, level: 6, patrolRadius: 65, respawnSeconds: 180 }
     ]
   },
 
@@ -486,9 +519,9 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
       { id: 'rivage_stele_3', targetId: 'stele_rivage', label: 'Stèle de Prométhée', kind: 'trial_stele', x: 1440, y: 336, radius: 44 }
     ],
     spawns: [
-      { id: 'rv_har_1', type: 'harpie', x: 470, y: 245, level: 5, patrolRadius: 90, respawnSeconds: 26 },
-      { id: 'rv_har_2', type: 'harpie', x: 1090, y: 230, level: 6, patrolRadius: 90, respawnSeconds: 26 },
-      { id: 'rv_boss', type: 'sentinelle_poseidon', x: 1060, y: 452, level: 8, patrolRadius: 190, respawnSeconds: 90 }
+      { id: 'rv_har_1', type: 'harpie', x: 470, y: 245, level: 5, patrolRadius: 90, respawnSeconds: 150 },
+      { id: 'rv_har_2', type: 'harpie', x: 1090, y: 230, level: 6, patrolRadius: 90, respawnSeconds: 150 },
+      { id: 'rv_boss', type: 'sentinelle_poseidon', x: 1060, y: 452, level: 8, patrolRadius: 190, respawnSeconds: 180 }
     ]
   },
 
@@ -570,12 +603,12 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
       }
     ],
     spawns: [
-      { id: 'lb_sq_1', type: 'squelette', x: 190, y: 690, level: 7, patrolRadius: 65, respawnSeconds: 24 },
-      { id: 'lb_sq_2', type: 'squelette', x: 200, y: 340, level: 7, patrolRadius: 60, respawnSeconds: 24 },
-      { id: 'lb_sq_3', type: 'squelette', x: 810, y: 580, level: 8, patrolRadius: 75, respawnSeconds: 26 },
-      { id: 'lb_aut_1', type: 'automate', x: 810, y: 315, level: 8, patrolRadius: 60, respawnSeconds: 28 },
-      { id: 'lb_sq_4', type: 'squelette', x: 580, y: 930, level: 8, patrolRadius: 70, respawnSeconds: 26 },
-      { id: 'lb_boss', type: 'minotaure', x: 1340, y: 560, level: 9, patrolRadius: 85, respawnSeconds: 75 }
+      { id: 'lb_sq_1', type: 'squelette', x: 190, y: 690, level: 7, patrolRadius: 65, respawnSeconds: 150 },
+      { id: 'lb_sq_2', type: 'squelette', x: 200, y: 340, level: 7, patrolRadius: 60, respawnSeconds: 150 },
+      { id: 'lb_sq_3', type: 'squelette', x: 810, y: 580, level: 8, patrolRadius: 75, respawnSeconds: 150 },
+      { id: 'lb_aut_1', type: 'automate', x: 810, y: 315, level: 8, patrolRadius: 60, respawnSeconds: 150 },
+      { id: 'lb_sq_4', type: 'squelette', x: 580, y: 930, level: 8, patrolRadius: 70, respawnSeconds: 150 },
+      { id: 'lb_boss', type: 'minotaure', x: 1340, y: 560, level: 9, patrolRadius: 85, respawnSeconds: 180 }
     ]
   }
 ,
@@ -658,16 +691,153 @@ export const ZONES: Record<ZoneId, ZoneDefinition> = {
       }
     ],
     spawns: [
-      { id: 'mar_vip_1', type: 'serpent_lerne', x: 520, y: 250, level: 7, patrolRadius: 105, respawnSeconds: 18 },
-      { id: 'mar_vip_2', type: 'serpent_lerne', x: 1240, y: 250, level: 7, patrolRadius: 105, respawnSeconds: 18 },
-      { id: 'mar_vip_3', type: 'serpent_lerne', x: 340, y: 560, level: 8, patrolRadius: 105, respawnSeconds: 19 },
-      { id: 'mar_vip_4', type: 'serpent_lerne', x: 1410, y: 560, level: 8, patrolRadius: 105, respawnSeconds: 19 },
-      { id: 'mar_vip_5', type: 'serpent_lerne', x: 520, y: 890, level: 8, patrolRadius: 105, respawnSeconds: 19 },
-      { id: 'mar_vip_6', type: 'serpent_lerne', x: 1230, y: 890, level: 8, patrolRadius: 105, respawnSeconds: 19 },
-      { id: 'mar_har_1', type: 'harpie', x: 740, y: 440, level: 7, patrolRadius: 105, respawnSeconds: 20 },
-      { id: 'mar_har_2', type: 'harpie', x: 1020, y: 440, level: 7, patrolRadius: 105, respawnSeconds: 20 },
-      { id: 'mar_boss_hydre', type: 'hydre_lerne', x: 880, y: 780, level: 9, patrolRadius: 85, respawnSeconds: 45 }
+      { id: 'mar_vip_1', type: 'serpent_lerne', x: 520, y: 250, level: 7, patrolRadius: 105, respawnSeconds: 120 },
+      { id: 'mar_vip_2', type: 'serpent_lerne', x: 1240, y: 250, level: 7, patrolRadius: 105, respawnSeconds: 120 },
+      { id: 'mar_vip_3', type: 'serpent_lerne', x: 340, y: 560, level: 8, patrolRadius: 105, respawnSeconds: 120 },
+      { id: 'mar_vip_4', type: 'serpent_lerne', x: 1410, y: 560, level: 8, patrolRadius: 105, respawnSeconds: 120 },
+      { id: 'mar_vip_5', type: 'serpent_lerne', x: 520, y: 890, level: 8, patrolRadius: 105, respawnSeconds: 120 },
+      { id: 'mar_vip_6', type: 'serpent_lerne', x: 1230, y: 890, level: 8, patrolRadius: 105, respawnSeconds: 120 },
+      { id: 'mar_har_1', type: 'harpie', x: 740, y: 440, level: 7, patrolRadius: 105, respawnSeconds: 120 },
+      { id: 'mar_har_2', type: 'harpie', x: 1020, y: 440, level: 7, patrolRadius: 105, respawnSeconds: 120 },
+      { id: 'mar_boss_hydre', type: 'hydre_lerne', x: 880, y: 780, level: 9, patrolRadius: 85, respawnSeconds: 180 }
     ]
+  }
+,
+  taverne_interieur: {
+    id: 'taverne_interieur',
+    name: 'Taverne des Héros',
+    subtitle: 'Intérieur — Cité de l’Agora',
+    realm: 'olympus',
+    viewMode: 'top-down',
+    recommendedLevel: 'Zone sûre',
+    safeZone: true,
+    width: 960,
+    height: 680,
+    cameraMargin: 24,
+    defaultSpawn: { x: 480, y: 565 },
+    solids: [
+      { x: 0, y: 0, w: 960, h: 48, look: 'wall' },
+      { x: 0, y: 0, w: 36, h: 680, look: 'wall' },
+      { x: 924, y: 0, w: 36, h: 680, look: 'wall' },
+      { x: 0, y: 644, w: 420, h: 36, look: 'wall' },
+      { x: 540, y: 644, w: 420, h: 36, look: 'wall' },
+      // Comptoir nord & tables de banquet
+      stall(360, 110, 240, 44, 0),
+      stall(130, 270, 145, 52, 1),
+      stall(685, 270, 145, 52, 1),
+      stall(130, 440, 145, 52, 2),
+      stall(685, 440, 145, 52, 2)
+    ],
+    portals: [
+      {
+        id: 'taverne_to_agora',
+        x: 428,
+        y: 630,
+        w: 104,
+        h: 48,
+        toZone: 'agora',
+        spawnX: 435,
+        spawnY: 382,
+        label: "Sortir : Cité de l'Agora"
+      }
+    ],
+    npcs: [
+      { npcId: 'homere', x: 480, y: 196 }
+    ],
+    interactables: [],
+    spawns: []
+  },
+  forge_interieur: {
+    id: 'forge_interieur',
+    name: 'Atelier de la Forge',
+    subtitle: 'Intérieur — Forge de Damon',
+    realm: 'olympus',
+    viewMode: 'top-down',
+    recommendedLevel: 'Zone sûre',
+    safeZone: true,
+    width: 920,
+    height: 660,
+    cameraMargin: 24,
+    defaultSpawn: { x: 460, y: 550 },
+    solids: [
+      { x: 0, y: 0, w: 920, h: 48, look: 'wall' },
+      { x: 0, y: 0, w: 36, h: 660, look: 'wall' },
+      { x: 884, y: 0, w: 36, h: 660, look: 'wall' },
+      { x: 0, y: 624, w: 400, h: 36, look: 'wall' },
+      { x: 520, y: 624, w: 400, h: 36, look: 'wall' },
+      // Fourneau nord, enclumes et rateliers d'armes
+      { x: 375, y: 78, w: 170, h: 58, look: 'altar' },
+      { x: 428, y: 245, w: 64, h: 38, look: 'anvil' },
+      stall(110, 180, 110, 44, 0),
+      stall(700, 180, 110, 44, 0),
+      stall(110, 390, 110, 44, 2),
+      stall(700, 390, 110, 44, 2)
+    ],
+    portals: [
+      {
+        id: 'forge_to_agora',
+        x: 408,
+        y: 610,
+        w: 104,
+        h: 48,
+        toZone: 'agora',
+        spawnX: 1767,
+        spawnY: 1315,
+        label: "Sortir : Cité de l'Agora"
+      }
+    ],
+    npcs: [
+      { npcId: 'damon', x: 325, y: 265 }
+    ],
+    interactables: [
+      { id: 'etabli_forge', targetId: 'craft_forge', label: 'Forger des équipements', kind: 'workbench', x: 460, y: 318, radius: 56 }
+    ],
+    spawns: []
+  },
+  apothicairerie_interieur: {
+    id: 'apothicairerie_interieur',
+    name: 'Infirmerie de Cassandre',
+    subtitle: 'Intérieur — Alchimie & Soins',
+    realm: 'olympus',
+    viewMode: 'top-down',
+    recommendedLevel: 'Zone sûre',
+    safeZone: true,
+    width: 920,
+    height: 660,
+    cameraMargin: 24,
+    defaultSpawn: { x: 460, y: 550 },
+    solids: [
+      { x: 0, y: 0, w: 920, h: 48, look: 'wall' },
+      { x: 0, y: 0, w: 36, h: 660, look: 'wall' },
+      { x: 884, y: 0, w: 36, h: 660, look: 'wall' },
+      { x: 0, y: 624, w: 400, h: 36, look: 'wall' },
+      { x: 520, y: 624, w: 400, h: 36, look: 'wall' },
+      { x: 430, y: 225, w: 60, h: 60, look: 'fountain' },
+      stall(115, 165, 120, 44, 1),
+      stall(685, 165, 120, 44, 1),
+      stall(115, 385, 120, 44, 1),
+      stall(685, 385, 120, 44, 1)
+    ],
+    portals: [
+      {
+        id: 'apoth_to_agora',
+        x: 408,
+        y: 610,
+        w: 104,
+        h: 48,
+        toZone: 'agora',
+        spawnX: 540,
+        spawnY: 1308,
+        label: "Sortir : Cité de l'Agora"
+      }
+    ],
+    npcs: [
+      { npcId: 'cassandre', x: 340, y: 265 }
+    ],
+    interactables: [
+      { id: 'etabli_alchimie', targetId: 'craft_alchimie', label: 'Brasser des potions (Alchimie)', kind: 'workbench', x: 460, y: 325, radius: 56 }
+    ],
+    spawns: []
   }
 };
 

@@ -106,6 +106,9 @@ export function Minimap({ zone, markers, onOpenWorldMap }: MinimapProps) {
       ctx.strokeStyle = '#c08a3e';
       ctx.lineWidth = 1;
       ctx.stroke();
+    } else if (zone.id === 'taverne_interieur' || zone.id === 'forge_interieur' || zone.id === 'apothicairerie_interieur') {
+      ctx.fillStyle = zone.id === 'forge_interieur' ? '#403c38' : zone.id === 'apothicairerie_interieur' ? '#e4d9c3' : '#7c5433';
+      ctx.fillRect(0, 0, mapW, mapH);
     } else if (zone.id === 'marecages') {
       ctx.fillStyle = '#354737';
       ctx.fillRect(0, 0, mapW, mapH);

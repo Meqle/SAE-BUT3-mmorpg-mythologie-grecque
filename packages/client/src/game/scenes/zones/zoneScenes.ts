@@ -144,36 +144,61 @@ function drawCypress(g: Graphics, shadows: Graphics, s: ZoneSolid, seed: number)
 }
 
 function drawHouse(g: Graphics, shadows: Graphics, s: ZoneSolid): void {
-  castShadow(shadows, s.x, s.y, s.w, s.h, 34);
+  castShadow(shadows, s.x, s.y, s.w, s.h, 36);
   const v = s.variant ?? 0;
-  const roofLit = v === 1 ? mix(COLORS.tile, COLORS.bronze, 0.35) : v === 2 ? mix(COLORS.tile, COLORS.sand, 0.2) : COLORS.tile;
-  const roofDark = mix(roofLit, COLORS.ink, 0.32);
+  const roofLit = v === 1 ? 0xc26d3a : v === 2 ? 0xa95338 : 0xb85239;
+  const roofDark = mix(roofLit, COLORS.ink, 0.34);
+  const stucco = v === 1 ? 0xf6efe1 : 0xefe7d6;
+  const facadeH = 26;
+  const roofH = s.h - facadeH;
+  const midY = s.y + roofH * 0.5;
 
-  // socle en marbre visible au sud
-  g.rect(s.x, s.y + s.h - 14, s.w, 14).fill(COLORS.marbleShade);
-  g.rect(s.x, s.y + s.h - 14, s.w, 4).fill(COLORS.marbleShadow);
+  // Socle en pierre de taille + petites marches devant l'entree
+  g.rect(s.x - 3, s.y + s.h - 4, s.w + 6, 7).fill(COLORS.marbleShadow).stroke({ width: 1.2, color: COLORS.ink });
+  g.rect(s.x + s.w / 2 - 18, s.y + s.h + 1, 36, 7).fill(COLORS.marbleLit).stroke({ width: 1.2, color: COLORS.ink });
 
-  // toit a deux pans en terre cuite
-  const midY = s.y + (s.h - 12) / 2;
-  g.rect(s.x, s.y, s.w, midY - s.y).fill(roofLit);
-  g.rect(s.x, midY, s.w, s.y + s.h - 12 - midY).fill(roofDark);
+  // Facade sud en chaux blanche grecque (stucco)
+  g.rect(s.x, s.y + roofH, s.w, facadeH).fill(stucco).stroke({ width: 1.5, color: COLORS.ink });
+  g.rect(s.x, s.y + roofH, s.w, 5).fill({ color: COLORS.ink, alpha: 0.16 }); // ombre de l'avant-toit
 
-  // rangees de tuiles
-  for (let x = s.x + 12; x < s.x + s.w - 4; x += 12) {
-    g.moveTo(x, s.y + 2).lineTo(x, s.y + s.h - 13).stroke({ width: 0.9, color: COLORS.ink, alpha: 0.22 });
+  // Deux fenetres a volets bleu egeen + lueur chaude interieure
+  const winOffsets = [s.x + 24, s.x + s.w - 44];
+  for (const wx of winOffsets) {
+    g.rect(wx - 4, s.y + roofH + 7, 4, 12).fill(COLORS.seaLight).stroke({ width: 0.9, color: COLORS.ink });
+    g.rect(wx + 14, s.y + roofH + 7, 4, 12).fill(COLORS.seaLight).stroke({ width: 0.9, color: COLORS.ink });
+    g.rect(wx, s.y + roofH + 7, 14, 12).fill(0xfbbf24).stroke({ width: 1.1, color: COLORS.ink });
+    g.rect(wx + 2, s.y + roofH + 9, 10, 8).fill({ color: 0xfef08a, alpha: 0.7 });
   }
-  for (let y = s.y + 14; y < s.y + s.h - 14; y += 14) {
-    g.moveTo(s.x + 2, y).lineTo(s.x + s.w - 2, y).stroke({ width: 0.8, color: COLORS.marbleLit, alpha: 0.18 });
+
+  // Porche central avec porte en bois cintree + 2 mini-colonnes doriques + lanterne
+  const doorX = s.x + s.w / 2 - 11;
+  g.roundRect(doorX, s.y + roofH + 5, 22, facadeH - 5, 4).fill(0x5c361e).stroke({ width: 1.4, color: COLORS.ink });
+  g.circle(doorX + 16, s.y + roofH + 16, 1.8).fill(COLORS.gold);
+  // 2 petites colonnes encadrant la porte
+  g.rect(doorX - 7, s.y + roofH + 3, 5, facadeH - 3).fill(COLORS.marbleLit).stroke({ width: 1, color: COLORS.ink });
+  g.rect(doorX + 24, s.y + roofH + 3, 5, facadeH - 3).fill(COLORS.marbleLit).stroke({ width: 1, color: COLORS.ink });
+
+  // Toit en croupe en tuiles canal mediterraneennes
+  g.poly([s.x - 4, s.y + roofH + 2, s.x + 14, midY, s.x + s.w - 14, midY, s.x + s.w + 4, s.y + roofH + 2])
+    .fill(roofDark).stroke({ width: 1.5, color: COLORS.ink });
+  g.poly([s.x - 4, s.y, s.x + s.w + 4, s.y, s.x + s.w - 14, midY, s.x + 14, midY])
+    .fill(roofLit).stroke({ width: 1.5, color: COLORS.ink });
+  // Pignons laterales
+  g.poly([s.x - 4, s.y, s.x + 14, midY, s.x - 4, s.y + roofH + 2]).fill(mix(roofLit, roofDark, 0.45)).stroke({ width: 1.3, color: COLORS.ink });
+  g.poly([s.x + s.w + 4, s.y, s.x + s.w - 14, midY, s.x + s.w + 4, s.y + roofH + 2]).fill(mix(roofDark, COLORS.ink, 0.15)).stroke({ width: 1.3, color: COLORS.ink });
+
+  // Rangees de tuiles canal
+  for (let x = s.x + 12; x < s.x + s.w - 10; x += 11) {
+    g.moveTo(x, s.y + 3).lineTo(x, s.y + roofH).stroke({ width: 0.9, color: COLORS.ink, alpha: 0.22 });
+  }
+  for (let y = s.y + 12; y < s.y + roofH - 4; y += 13) {
+    g.moveTo(s.x + 6, y).lineTo(s.x + s.w - 6, y).stroke({ width: 0.85, color: COLORS.marbleLit, alpha: 0.2 });
   }
 
-  // faitage en marbre/terre cuite claire
-  g.rect(s.x + 4, midY - 3, s.w - 8, 6).fill(COLORS.marbleLit);
-  g.rect(s.x + 4, midY + 1, s.w - 8, 2).fill(COLORS.marbleShadow);
-  g.rect(s.x, s.y, s.w, s.h).stroke({ width: 2, color: COLORS.ink });
-
-  // petite porte d'entree au sud
-  const dx = s.x + s.w / 2 - 10;
-  g.rect(dx, s.y + s.h - 11, 20, 11).fill(WOOD).stroke({ width: 1.2, color: COLORS.ink });
+  // Faitage en marbre + ornements dores aux extremites
+  g.rect(s.x + 12, midY - 3, s.w - 24, 6).fill(COLORS.marbleLit).stroke({ width: 1.2, color: COLORS.ink });
+  g.circle(s.x + 12, midY, 3.5).fill(COLORS.gold).stroke({ width: 1, color: COLORS.ink });
+  g.circle(s.x + s.w - 12, midY, 3.5).fill(COLORS.gold).stroke({ width: 1, color: COLORS.ink });
 }
 
 function drawStall(g: Graphics, shadows: Graphics, s: ZoneSolid): void {
@@ -1037,11 +1062,101 @@ function createMarecagesScene(zone: ZoneDefinition): Scene {
   };
 }
 
+function createInteriorScene(zone: ZoneDefinition): Scene {
+  const back = new Container();
+  const front = new Container();
+  const W = zone.width;
+  const H = zone.height;
+  const isForge = zone.id === 'forge_interieur';
+  const isApoth = zone.id === 'apothicairerie_interieur';
+
+  const floor = new Graphics();
+  floor.rect(-320, -320, W + 640, H + 640).fill({ color: 0x111827 });
+
+  // Sol chaleureux selon le batiment (parquet taverne / basalte forge / marbre infirmerie)
+  if (isForge) {
+    floor.rect(0, 0, W, H).fill({ color: 0x3b3835 });
+    for (let x = 36; x < W - 36; x += 52) {
+      for (let y = 48; y < H - 36; y += 52) {
+        drawSlab(floor, x, y, 52, 52, (Math.floor(x / 52) + Math.floor(y / 52)) % 2 === 0 ? 0x4b4642 : 0x403c38);
+      }
+    }
+    // Tapis d'etincelles devant le fourneau
+    floor.circle(W / 2, 165, 115).fill({ color: 0xf97316, alpha: 0.14 });
+    drawMosaicMedallion(floor, W / 2, 345, 76, COLORS.bronze);
+  } else if (isApoth) {
+    floor.rect(0, 0, W, H).fill({ color: 0xe9e1cf });
+    for (let x = 36; x < W - 36; x += 52) {
+      for (let y = 48; y < H - 36; y += 52) {
+        drawSlab(floor, x, y, 52, 52, (Math.floor(x / 52) + Math.floor(y / 52)) % 2 === 0 ? 0xf2ead9 : 0xe4d9c3);
+      }
+    }
+    drawMosaicMedallion(floor, W / 2, 255, 110, COLORS.seaLight);
+    drawFlowerBed(floor, 80, 500, 120, 44, 701);
+    drawFlowerBed(floor, W - 200, 500, 120, 44, 702);
+  } else {
+    // Taverne : plancher en bois chaleureux + grand tapis rouge-or
+    floor.rect(0, 0, W, H).fill({ color: 0x7c5433 });
+    for (let y = 48; y < H - 36; y += 26) {
+      floor.rect(36, y, W - 72, 24).fill({ color: y % 52 === 0 ? 0x8a5e3a : 0x724c2e });
+      floor.moveTo(36, y).lineTo(W - 36, y).stroke({ width: 1, color: 0x3b2416, alpha: 0.45 });
+    }
+    floor.roundRect(W / 2 - 140, 210, 280, 340, 10).fill({ color: 0x8b2635, alpha: 0.82 }).stroke({ width: 3, color: COLORS.gold });
+    floor.roundRect(W / 2 - 126, 224, 252, 312, 6).stroke({ width: 1.5, color: COLORS.marbleLit, alpha: 0.65 });
+  }
+
+  // Amphores et caisses decoratives aux coins de l'interieur
+  drawAmphoraCluster(floor, 82, 92, 811);
+  drawAmphoraCluster(floor, W - 82, 92, 812);
+  drawMarketCrates(floor, 70, H - 96);
+  drawMarketCrates(floor, W - 115, H - 96);
+
+  // Tapis d'entree / sortie au sud
+  floor.roundRect(W / 2 - 58, H - 62, 116, 44, 6).fill({ color: COLORS.gold, alpha: 0.28 }).stroke({ width: 2, color: COLORS.gold });
+
+  const shadows = new Graphics();
+  shadows.filters = [new AlphaFilter({ alpha: 0.3 })];
+  const solids = new Graphics();
+  for (const s of zone.solids) {
+    if (s.look === 'wall') drawLowWall(solids, shadows, { x: s.x, y: s.y, w: s.w, h: s.h }, 1);
+    else if (s.look === 'stall') drawStall(solids, shadows, s);
+    else if (s.look === 'anvil') drawAnvilProp(solids, shadows, s);
+    else if (s.look === 'fountain') drawFountain(solids, shadows, s);
+    else if (s.look === 'altar') drawAltar(solids, shadows, s);
+  }
+
+  const portals = zone.portals.map(createPortalMarker);
+  const hearthGlow = new Graphics();
+  back.addChild(floor, ...portals.map((p) => p.floor), shadows, solids, hearthGlow);
+  front.addChild(...portals.map((p) => p.glow), ...zone.portals.map(makePortalLabel));
+
+  return {
+    back,
+    front,
+    update: (view: View, time: number) => {
+      placeLayer(back, view);
+      placeLayer(front, view);
+      portals.forEach((p) => p.update(time));
+      hearthGlow.clear();
+      const pulse = 0.8 + Math.sin(time * 7) * 0.2;
+      if (isForge) {
+        hearthGlow.circle(W / 2, 112, 34 * pulse).fill({ color: 0xf97316, alpha: 0.35 });
+        hearthGlow.circle(W / 2, 112, 16 * pulse).fill({ color: 0xfef08a, alpha: 0.75 });
+      } else if (isApoth) {
+        hearthGlow.circle(W / 2, 255, 22 * pulse).fill({ color: 0x38bdf8, alpha: 0.22 });
+      } else {
+        hearthGlow.circle(W / 2, 74, 24 * pulse).fill({ color: 0xf97316, alpha: 0.28 });
+      }
+    }
+  };
+}
+
 export function createZoneScene(zone: ZoneDefinition): Scene {
   if (zone.id === 'agora') return createAgoraScene(zone);
   if (zone.id === 'plaines') return createPlainesScene(zone);
   if (zone.id === 'sanctuaire') return createSanctuaireScene(zone);
   if (zone.id === 'labyrinthe') return createLabyrintheScene(zone);
   if (zone.id === 'marecages') return createMarecagesScene(zone);
+  if (zone.id === 'taverne_interieur' || zone.id === 'forge_interieur' || zone.id === 'apothicairerie_interieur') return createInteriorScene(zone);
   return createRivageScene(zone);
 }

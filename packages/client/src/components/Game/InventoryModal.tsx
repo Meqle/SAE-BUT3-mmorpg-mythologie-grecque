@@ -1,23 +1,44 @@
 import { useState } from 'react';
-import { Backpack, BookOpen, Coins, ScrollText, Shield, Skull, Sparkles, Swords, X } from 'lucide-react';
+import {
+  Backpack,
+  BookOpen,
+  Coins,
+  Crown,
+  FlaskConical,
+  Footprints,
+  Gem,
+  Hammer,
+  ScrollText,
+  Shield,
+  Skull,
+  Sparkles,
+  Swords,
+  X
+} from 'lucide-react';
 import { GODS_LORE } from '@greek-myth/shared';
 import { HERO_CLASSES } from '../../game/data/classes';
-import { ITEMS, RARITY_COLOR, RARITY_LABEL } from '../../game/data/items';
-import { formatDropChance, MONSTER_LOOT_TABLES } from '../../game/data/loot';
-import { ENEMY_ARCHETYPES } from '../../game/entities/enemies';
-import type { EnemyType } from '../../game/data/zones';
+import { CRAFT_RECIPES } from '../../game/data/crafting';
+import { EQUIP_SLOT_LABELS, EquipSlot, ItemDef, ITEMS, RARITY_COLOR, RARITY_LABEL } from '../../game/data/items';
+import { CLASS_ROLE_LABEL } from '../../game/data/skillTrees';
 import { CODEX_ENTRIES, QUEST_ORDER, QUESTS } from '../../game/data/story';
-import { GameProgressState, getComputedStats } from '../../game/state/gameState';
+import {
+  canCraftRecipe,
+  countItem,
+  GameProgressState,
+  getComputedStats
+} from '../../game/state/gameState';
 import { COLORS, css } from '../../game/scenes/palette';
+import { BestiaryPanel } from './BestiaryPanel';
 import { SkillTreePanel } from './SkillTreePanel';
 
-export type ModalTab = 'inventory' | 'talents' | 'quests' | 'codex' | 'bestiary';
+export type ModalTab = 'inventory' | 'craft' | 'talents' | 'quests' | 'codex' | 'bestiary';
 
 interface InventoryModalProps {
   state: GameProgressState;
   initialTab: ModalTab;
   onUseConsumable: (itemId: string) => void;
   onEquipItem: (itemId: string) => void;
+  onCraftRecipe?: (recipeId: string) => void;
   onUpgradeSkill?: (skillId: string) => void;
   onResetSkills?: () => void;
   onClose: () => void;
@@ -27,33 +48,101 @@ const MARBLE = css(COLORS.marble);
 const GOLD = css(COLORS.gold);
 const SKY = css(COLORS.sky);
 
-export function InventoryModal({ state, initialTab, onUseConsumable, onEquipItem, onUpgradeSkill, onResetSkills, onClose }: InventoryModalProps) {
+function renderItemIcon(item: ItemDef, size = 20) {
+  const color = RARITY_COLOR[item.rarity];
+  if (item.slot === 'tete') return <Crown size={size} color={color} />;
+  if (item.slot === 'torse' || item.slot === 'bouclier') return <Shield size={size} color={color} />;
+  if (item.slot === 'pieds') return <Footprints size={size} color={color} />;
+  if (item.slot === 'anneau' || item.slot === 'relique') return <Gem size={size} color={color} />;
+  if (item.category === 'arme') return <Swords size={size} color={color} />;
+  if (item.category === 'consommable') return <FlaskConical size={size} color="#4ade80" />;
+  return <Sparkles size={size} color={color} />;
+}
+
+export function InventoryModal({
+  state,
+  initialTab,
+  onUseConsumable,
+  onEquipItem,
+  onCraftRecipe,
+  onUpgradeSkill,
+  onResetSkills,
+  onClose
+}: InventoryModalProps) {
   const [tab, setTab] = useState<ModalTab>(initialTab);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(state.inventory[0]?.itemId ?? null);
+  const [craftFilter, setCraftFilter] = useState<'all' | 'forge' | 'alchimie'>('all');
+
   const stats = getComputedStats(state);
   const cls = HERO_CLASSES[state.heroClass];
   const god = GODS_LORE[state.god];
+  const roleInfo = CLASS_ROLE_LABEL[state.heroClass];
+
+  // Resoudre les 8 emplacements d'equipement façon WoW
+  const equippedBySlot = (slot: EquipSlot, index = 0): ItemDef | null => {
+    const matches = state.inventory
+      .filter((s) => s.equipped && ITEMS[s.itemId]?.slot === slot)
+      .map((s) => ITEMS[s.itemId]);
+    return matches[index] ?? null;
+  };
+
+  const selectedSlot = state.inventory.find((s) => s.itemId === selectedItemId) ?? null;
+  const selectedItem = selectedSlot ? ITEMS[selectedSlot.itemId] : null;
 
   const tabBtn = (id: ModalTab, label: string, icon: React.ReactNode) => (
     <button
       onClick={() => setTab(id)}
       style={{
-        background: tab === id ? GOLD : 'rgba(15, 25, 42, 0.7)',
+        background: tab === id ? GOLD : 'rgba(15, 25, 42, 0.72)',
         color: tab === id ? '#1f3550' : MARBLE,
         border: `1px solid ${tab === id ? GOLD : SKY}`,
         borderRadius: 4,
-        padding: '7px 14px',
-        fontSize: 12.5,
+        padding: '6px 11px',
+        fontSize: 12,
         fontWeight: 700,
         fontFamily: 'Cinzel, serif',
         cursor: 'pointer',
         display: 'flex',
         alignItems: 'center',
-        gap: 6
+        gap: 5
       }}
     >
       {icon} {label}
     </button>
   );
+
+  const renderEquipTile = (label: string, slot: EquipSlot, relicIdx = 0) => {
+    const item = equippedBySlot(slot, relicIdx);
+    const borderCol = item ? RARITY_COLOR[item.rarity] : 'rgba(143, 195, 230, 0.28)';
+    return (
+      <button
+        key={`${slot}_${relicIdx}`}
+        onClick={() => item && setSelectedItemId(item.id)}
+        onDoubleClick={() => item && onEquipItem(item.id)}
+        title={item ? `${item.name} (double-clic pour retirer)` : `Emplacement vide : ${label}`}
+        style={{
+          width: 48,
+          height: 48,
+          borderRadius: 5,
+          background: item ? 'rgba(15, 28, 48, 0.94)' : 'rgba(10, 18, 32, 0.72)',
+          border: `2px solid ${borderCol}`,
+          boxShadow: item ? `inset 0 0 10px ${borderCol}33` : 'inset 0 0 6px rgba(0,0,0,0.55)',
+          cursor: item ? 'pointer' : 'default',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: 2,
+          position: 'relative'
+        }}
+      >
+        {item ? renderItemIcon(item, 21) : <span style={{ fontSize: 8.5, color: '#64748b', textAlign: 'center', lineHeight: 1.1 }}>{label}</span>}
+      </button>
+    );
+  };
+
+  // Remplir une grille de 20 emplacements de sac (4x5) façon WoW
+  const bagGrid = Array.from({ length: Math.max(20, state.inventory.length) }, (_, idx) => state.inventory[idx] ?? null);
 
   return (
     <div
@@ -62,36 +151,37 @@ export function InventoryModal({ state, initialTab, onUseConsumable, onEquipItem
         position: 'fixed',
         inset: 0,
         zIndex: 90,
-        background: 'rgba(10, 16, 28, 0.65)',
+        background: 'rgba(10, 16, 28, 0.7)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: 16,
+        padding: 14,
         fontFamily: 'Outfit, sans-serif'
       }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 'min(760px, 95vw)',
-          maxHeight: '86vh',
+          width: 'min(880px, 96vw)',
+          maxHeight: '89vh',
           display: 'flex',
           flexDirection: 'column',
-          background: 'rgba(24, 42, 66, 0.97)',
+          background: 'rgba(22, 38, 60, 0.98)',
           border: `2px solid ${MARBLE}`,
-          boxShadow: `inset 0 0 0 3px rgba(24, 42, 66, 0.97), inset 0 0 0 4px ${GOLD}, 0 20px 50px rgba(0,0,0,0.6)`,
+          boxShadow: `inset 0 0 0 3px rgba(22, 38, 60, 0.98), inset 0 0 0 4px ${GOLD}, 0 20px 55px rgba(0,0,0,0.65)`,
           borderRadius: 6,
-          padding: '20px 24px',
+          padding: '18px 22px',
           color: MARBLE
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {tabBtn('inventory', 'Sac & Héros', <Backpack size={15} />)}
-            {tabBtn('talents', (state.skillPoints ?? 0) > 0 ? `Talents (${state.skillPoints})` : 'Talents', <Sparkles size={15} />)}
-            {tabBtn('quests', 'Quêtes', <ScrollText size={15} />)}
-            {tabBtn('codex', 'Chroniques', <BookOpen size={15} />)}
-            {tabBtn('bestiary', 'Bestiaire', <Skull size={15} />)}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+            {tabBtn('inventory', 'Héros & Sac', <Backpack size={14} />)}
+            {tabBtn('craft', 'Forge & Alchimie', <Hammer size={14} />)}
+            {tabBtn('talents', (state.skillPoints ?? 0) > 0 ? `Talents (${state.skillPoints})` : 'Talents', <Sparkles size={14} />)}
+            {tabBtn('quests', 'Quêtes', <ScrollText size={14} />)}
+            {tabBtn('codex', 'Chroniques', <BookOpen size={14} />)}
+            {tabBtn('bestiary', 'Bestiaire', <Skull size={14} />)}
           </div>
           <button
             onClick={onClose}
@@ -112,106 +202,406 @@ export function InventoryModal({ state, initialTab, onUseConsumable, onEquipItem
 
         <div style={{ overflowY: 'auto', paddingRight: 4, flex: 1 }}>
           {tab === 'inventory' && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-              <div style={{ background: 'rgba(12, 22, 38, 0.72)', border: `1px solid ${SKY}`, borderRadius: 4, padding: 14 }}>
-                <div style={{ fontFamily: 'Cinzel, serif', fontSize: 16, color: GOLD, fontWeight: 700 }}>
-                  {state.heroName}
-                </div>
-                <div style={{ fontSize: 12, color: SKY, marginBottom: 12 }}>
-                  {cls.name} — Niveau {state.level} • Affinité {god.name}
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 12.5 }}>
-                  <div style={{ background: 'rgba(31,53,80,0.6)', padding: 8, borderRadius: 4 }}>
-                    <div style={{ color: '#94a3b8', fontSize: 10 }}>POINTS DE VIE</div>
-                    <div style={{ color: '#4ade80', fontWeight: 700 }}>{Math.ceil(state.hp)} / {stats.maxHp}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 16 }}>
+              {/* COLONNE GAUCHE : Fiche Personnage style WoW Classic */}
+              <div style={{
+                background: 'rgba(11, 20, 35, 0.88)',
+                border: `1.5px solid ${GOLD}`,
+                borderRadius: 6,
+                padding: 14
+              }}>
+                <div style={{ textAlign: 'center', marginBottom: 10 }}>
+                  <div style={{ fontFamily: 'Cinzel, serif', fontSize: 16.5, color: GOLD, fontWeight: 700 }}>
+                    {state.heroName}
                   </div>
-                  <div style={{ background: 'rgba(31,53,80,0.6)', padding: 8, borderRadius: 4 }}>
-                    <div style={{ color: '#94a3b8', fontSize: 10 }}>ATTAQUE</div>
-                    <div style={{ color: GOLD, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Swords size={13} /> {stats.attack}
+                  <div style={{ fontSize: 11.5, color: SKY }}>
+                    {cls.name} ({roleInfo.role}) — Niv. {state.level} • {god.name}
+                  </div>
+                </div>
+
+                {/* Paperdoll : 4 slots gauche | Silhouette Heros | 4 slots droite */}
+                <div style={{ display: 'grid', gridTemplateColumns: '52px 1fr 52px', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+                    {renderEquipTile('Tête', 'tete')}
+                    {renderEquipTile('Torse', 'torse')}
+                    {renderEquipTile('Bouclier', 'bouclier')}
+                    {renderEquipTile('Pieds', 'pieds')}
+                  </div>
+
+                  {/* Portrait stylise du heros grec */}
+                  <div style={{
+                    height: 214,
+                    borderRadius: 6,
+                    background: `radial-gradient(circle at 50% 42%, ${god.color}28 0%, rgba(15, 25, 42, 0.92) 72%)`,
+                    border: '1px solid rgba(143, 195, 230, 0.25)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    position: 'relative'
+                  }}>
+                    <svg viewBox="0 0 120 155" width="118" height="150">
+                      {/* Aura divine */}
+                      <circle cx="60" cy="68" r="48" fill={god.color} fillOpacity="0.12" stroke={god.color} strokeOpacity="0.4" strokeWidth="1.2" />
+                      {/* Cape */}
+                      <path d="M 38 56 L 26 122 L 94 122 L 82 56 Z" fill="#8b2635" stroke="#1f3550" strokeWidth="2" />
+                      {/* Corps / Cuirasse */}
+                      <rect x="40" y="54" width="40" height="46" rx="8" fill={equippedBySlot('torse') ? '#c89b52' : '#d8ccb4'} stroke="#1f3550" strokeWidth="2" />
+                      {/* Jambes / Sandales */}
+                      <rect x="44" y="100" width="12" height="32" rx="4" fill="#d2a47a" stroke="#1f3550" strokeWidth="1.8" />
+                      <rect x="64" y="100" width="12" height="32" rx="4" fill="#d2a47a" stroke="#1f3550" strokeWidth="1.8" />
+                      <rect x="42" y="124" width="16" height="10" rx="3" fill={equippedBySlot('pieds') ? '#8b5a2b' : '#64748b'} stroke="#1f3550" strokeWidth="1.5" />
+                      <rect x="62" y="124" width="16" height="10" rx="3" fill={equippedBySlot('pieds') ? '#8b5a2b' : '#64748b'} stroke="#1f3550" strokeWidth="1.5" />
+                      {/* Tete & Casque */}
+                      <circle cx="60" cy="36" r="15" fill="#e5b892" stroke="#1f3550" strokeWidth="2" />
+                      {equippedBySlot('tete') || state.heroClass === 'GUERRIER' ? (
+                        <>
+                          <path d="M 45 35 Q 60 14 75 35 Z" fill="#d4a759" stroke="#1f3550" strokeWidth="1.8" />
+                          <path d="M 55 17 Q 60 4 70 18" fill="none" stroke="#dc2626" strokeWidth="4" strokeLinecap="round" />
+                        </>
+                      ) : (
+                        <path d="M 46 31 Q 60 18 74 31" fill="#3b2416" stroke="#1f3550" strokeWidth="1.5" />
+                      )}
+                      {/* Arme selon classe */}
+                      {state.heroClass === 'ARCHER' ? (
+                        <path d="M 88 32 Q 106 66 88 102" fill="none" stroke="#a66a3c" strokeWidth="3.5" strokeLinecap="round" />
+                      ) : state.heroClass === 'MAGE' ? (
+                        <>
+                          <line x1="92" y1="26" x2="88" y2="128" stroke="#8b5a2b" strokeWidth="3.5" />
+                          <circle cx="92" cy="24" r="7" fill={god.color} stroke="#1f3550" strokeWidth="1.5" />
+                        </>
+                      ) : state.heroClass === 'ASSASSIN' ? (
+                        <>
+                          <line x1="28" y1="68" x2="18" y2="96" stroke="#cbd5e1" strokeWidth="3" />
+                          <line x1="92" y1="68" x2="102" y2="96" stroke="#cbd5e1" strokeWidth="3" />
+                        </>
+                      ) : (
+                        <>
+                          <line x1="92" y1="22" x2="90" y2="128" stroke="#8b5a2b" strokeWidth="3.2" />
+                          <polygon points="92,12 87,25 97,25" fill="#e9c35a" stroke="#1f3550" strokeWidth="1.2" />
+                          <circle cx="30" cy="76" r="14" fill="#c89b52" stroke="#1f3550" strokeWidth="2" />
+                        </>
+                      )}
+                    </svg>
+                    <div style={{ fontSize: 10, color: GOLD, fontWeight: 700, marginTop: 2 }}>
+                      XP : {state.xp} / {stats.xpToNext}
                     </div>
                   </div>
-                  <div style={{ background: 'rgba(31,53,80,0.6)', padding: 8, borderRadius: 4 }}>
-                    <div style={{ color: '#94a3b8', fontSize: 10 }}>EXPÉRIENCE</div>
-                    <div style={{ color: '#e2e8f0', fontWeight: 700 }}>{state.xp} / {stats.xpToNext}</div>
-                  </div>
-                  <div style={{ background: 'rgba(31,53,80,0.6)', padding: 8, borderRadius: 4 }}>
-                    <div style={{ color: '#94a3b8', fontSize: 10 }}>DRACHMES</div>
-                    <div style={{ color: GOLD, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <Coins size={13} /> {state.gold}
-                    </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+                    {renderEquipTile('Arme', 'arme')}
+                    {renderEquipTile('Anneau', 'anneau')}
+                    {renderEquipTile('Relique 1', 'relique', 0)}
+                    {renderEquipTile('Relique 2', 'relique', 1)}
                   </div>
                 </div>
-                <div style={{ marginTop: 12, fontSize: 11.5, color: '#cbd5e1', lineHeight: 1.5 }}>
-                  <Sparkles size={12} color={GOLD} style={{ verticalAlign: 'middle' }} /> Don divin ({god.name}) : <b>{god.passiveBonus}</b>
+
+                {/* Bloc statistiques detaille style WoW */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 6,
+                  background: 'rgba(18, 32, 52, 0.85)',
+                  border: '1px solid rgba(143,195,230,0.28)',
+                  borderRadius: 4,
+                  padding: '9px 11px',
+                  fontSize: 11.5
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#94a3b8' }}>Points de vie</span>
+                    <b style={{ color: '#4ade80' }}>{Math.ceil(state.hp)}/{stats.maxHp}</b>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#94a3b8' }}>Attaque</span>
+                    <b style={{ color: GOLD }}>{stats.attack}</b>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#94a3b8' }}>Armure</span>
+                    <b style={{ color: '#93c5fd' }}>{stats.armor} ({Math.round(stats.damageReduction * 100)}%)</b>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#94a3b8' }}>Critique</span>
+                    <b style={{ color: '#fde047' }}>{Math.round(stats.critChance * 100)}%</b>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#94a3b8' }}>Vitesse</span>
+                    <b style={{ color: '#e2e8f0' }}>{Math.round(stats.speedMultiplier * 100)}%</b>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span style={{ color: '#94a3b8' }}>Drachmes</span>
+                    <b style={{ color: GOLD, display: 'flex', alignItems: 'center', gap: 3 }}><Coins size={11} /> {state.gold}</b>
+                  </div>
                 </div>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {state.inventory.map((slot) => {
-                  const item = ITEMS[slot.itemId];
-                  if (!item) return null;
+              {/* COLONNE DROITE : Sac en grille (4x5 cases icones) + Infobulle detaillee */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{
+                  background: 'rgba(11, 20, 35, 0.88)',
+                  border: '1px solid rgba(143, 195, 230, 0.35)',
+                  borderRadius: 6,
+                  padding: 12
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <span style={{ fontFamily: 'Cinzel, serif', fontSize: 13, fontWeight: 700, color: GOLD }}>
+                      Sac d'aventure ({state.inventory.length}/{bagGrid.length})
+                    </span>
+                    <span style={{ fontSize: 10.5, color: '#94a3b8' }}>Clic : inspecter • Double-clic : équiper/utiliser</span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 7 }}>
+                    {bagGrid.map((slot, i) => {
+                      const item = slot ? ITEMS[slot.itemId] : null;
+                      const isSel = Boolean(item && selectedItemId === item.id);
+                      const borderCol = item ? RARITY_COLOR[item.rarity] : 'rgba(143, 195, 230, 0.16)';
+                      return (
+                        <button
+                          key={slot ? slot.itemId : `empty_${i}`}
+                          onClick={() => item && setSelectedItemId(item.id)}
+                          onDoubleClick={() => {
+                            if (!item) return;
+                            if (item.category === 'consommable') onUseConsumable(item.id);
+                            else if (item.slot) onEquipItem(item.id);
+                          }}
+                          style={{
+                            aspectRatio: '1 / 1',
+                            minHeight: 52,
+                            borderRadius: 5,
+                            background: item ? 'rgba(18, 33, 55, 0.95)' : 'rgba(9, 16, 28, 0.65)',
+                            border: `2px solid ${isSel ? '#ffffff' : borderCol}`,
+                            boxShadow: item ? `inset 0 0 10px ${borderCol}30` : 'none',
+                            cursor: item ? 'pointer' : 'default',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            position: 'relative',
+                            padding: 4
+                          }}
+                        >
+                          {item && renderItemIcon(item, 22)}
+                          {slot && slot.quantity > 1 && (
+                            <span style={{
+                              position: 'absolute',
+                              bottom: 2,
+                              right: 4,
+                              fontSize: 10,
+                              fontWeight: 800,
+                              color: '#fff',
+                              textShadow: '0 1px 3px #000'
+                            }}>
+                              {slot.quantity}
+                            </span>
+                          )}
+                          {slot?.equipped && (
+                            <span style={{
+                              position: 'absolute',
+                              top: 2,
+                              left: 3,
+                              fontSize: 8.5,
+                              fontWeight: 800,
+                              color: '#1f3550',
+                              background: GOLD,
+                              padding: '0 3px',
+                              borderRadius: 2
+                            }}>
+                              E
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Panneau d'inspection / Infobulle style WoW */}
+                <div style={{
+                  background: 'rgba(10, 18, 32, 0.92)',
+                  border: `1.5px solid ${selectedItem ? RARITY_COLOR[selectedItem.rarity] : 'rgba(143,195,230,0.28)'}`,
+                  borderRadius: 6,
+                  padding: '12px 14px',
+                  minHeight: 132,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: 8
+                }}>
+                  {selectedItem && selectedSlot ? (
+                    <>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontFamily: 'Cinzel, serif', fontSize: 14, fontWeight: 700, color: RARITY_COLOR[selectedItem.rarity] }}>
+                            {selectedItem.name}
+                          </span>
+                          <span style={{ fontSize: 10.5, color: RARITY_COLOR[selectedItem.rarity], fontWeight: 700 }}>
+                            {RARITY_LABEL[selectedItem.rarity]}{selectedItem.slot ? ` • ${EQUIP_SLOT_LABELS[selectedItem.slot]}` : ''}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11.5, color: '#e2e8f0', marginTop: 4 }}>{selectedItem.description}</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 6, fontSize: 11.5, color: '#4ade80', fontWeight: 600 }}>
+                          {selectedItem.bonusAttack ? <span>+{selectedItem.bonusAttack} Attaque</span> : null}
+                          {selectedItem.bonusHp ? <span>+{selectedItem.bonusHp} PV max</span> : null}
+                          {selectedItem.bonusArmor ? <span>+{selectedItem.bonusArmor} Armure</span> : null}
+                        </div>
+                        <div style={{ fontSize: 11, color: SKY, marginTop: 6 }}>
+                          {selectedItem.usageHint}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(143,195,230,0.18)', paddingTop: 8 }}>
+                        <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                          {selectedItem.price > 0 ? `Valeur revente : ${Math.floor(selectedItem.price * 0.5)} drachmes` : 'Objet de quête / lié'}
+                        </span>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          {selectedItem.category === 'consommable' && (
+                            <button
+                              onClick={() => onUseConsumable(selectedItem.id)}
+                              style={{ background: '#4ade80', color: '#0f172a', border: 'none', borderRadius: 4, padding: '5px 12px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}
+                            >
+                              Utiliser
+                            </button>
+                          )}
+                          {selectedItem.slot && (
+                            <button
+                              onClick={() => onEquipItem(selectedItem.id)}
+                              style={{
+                                background: selectedSlot.equipped ? 'rgba(248, 113, 113, 0.2)' : GOLD,
+                                color: selectedSlot.equipped ? '#fecaca' : '#1f3550',
+                                border: selectedSlot.equipped ? '1px solid #f87171' : 'none',
+                                borderRadius: 4,
+                                padding: '5px 12px',
+                                fontSize: 11.5,
+                                fontWeight: 700,
+                                cursor: 'pointer'
+                              }}
+                            >
+                              {selectedSlot.equipped ? 'Retirer' : 'Équiper'}
+                            </button>
+                          )}
+                          {selectedItem.category === 'ressource' && (
+                            <button
+                              onClick={() => setTab('craft')}
+                              style={{ background: 'rgba(233,195,90,0.2)', color: GOLD, border: `1px solid ${GOLD}`, borderRadius: 4, padding: '5px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                            >
+                              Voir la Forge
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 12, color: '#94a3b8', margin: 'auto 0' }}>
+                      Sélectionnez un objet dans votre sac ou sur votre personnage pour voir ses statistiques et son utilité.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {tab === 'craft' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {([
+                    { id: 'all' as const, label: 'Toutes les recettes' },
+                    { id: 'forge' as const, label: 'Forge (Armes & Armures)' },
+                    { id: 'alchimie' as const, label: 'Alchimie (Potions)' }
+                  ]).map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => setCraftFilter(f.id)}
+                      style={{
+                        background: craftFilter === f.id ? GOLD : 'rgba(12, 22, 38, 0.78)',
+                        color: craftFilter === f.id ? '#1f3550' : MARBLE,
+                        border: `1px solid ${craftFilter === f.id ? GOLD : SKY}`,
+                        borderRadius: 4,
+                        padding: '5px 10px',
+                        fontSize: 11.5,
+                        fontWeight: 700,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+                <span style={{ fontSize: 12, color: GOLD, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Coins size={13} /> {state.gold} drachmes
+                </span>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))', gap: 10 }}>
+                {CRAFT_RECIPES.filter((r) => craftFilter === 'all' || r.station === craftFilter).map((recipe) => {
+                  const res = ITEMS[recipe.resultItemId];
+                  if (!res) return null;
+                  const canCraft = canCraftRecipe(state, recipe.id);
+                  const ownedUnique = !res.stackable && state.inventory.some((s) => s.itemId === res.id);
                   return (
                     <div
-                      key={slot.itemId}
+                      key={recipe.id}
                       style={{
-                        background: 'rgba(12, 22, 38, 0.72)',
-                        border: `1px solid ${slot.equipped ? GOLD : 'rgba(143, 195, 230, 0.35)'}`,
-                        borderRadius: 4,
+                        background: 'rgba(11, 20, 35, 0.85)',
+                        border: `1px solid ${canCraft ? GOLD : 'rgba(143,195,230,0.32)'}`,
+                        borderRadius: 5,
                         padding: '10px 12px',
                         display: 'flex',
+                        flexDirection: 'column',
                         justifyContent: 'space-between',
-                        alignItems: 'center',
-                        gap: 10
+                        gap: 8
                       }}
                     >
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: RARITY_COLOR[item.rarity] }}>
-                          {item.name} {slot.quantity > 1 ? `x${slot.quantity}` : ''}
-                          {slot.equipped && (
-                            <span style={{ marginLeft: 8, fontSize: 10, color: GOLD, border: `1px solid ${GOLD}`, padding: '1px 5px', borderRadius: 3 }}>
-                              ÉQUIPÉ
-                            </span>
-                          )}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontFamily: 'Cinzel, serif', fontSize: 13.5, fontWeight: 700, color: RARITY_COLOR[res.rarity] }}>
+                            {res.name} {recipe.resultQuantity > 1 ? `×${recipe.resultQuantity}` : ''}
+                          </span>
+                          <span style={{ fontSize: 10, color: SKY, textTransform: 'uppercase' }}>{recipe.station}</span>
                         </div>
-                        <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 2 }}>{item.description}</div>
+                        <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 2 }}>{res.description}</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 7 }}>
+                          {recipe.ingredients.map((ing) => {
+                            const have = countItem(state, ing.itemId);
+                            const ok = have >= ing.quantity;
+                            return (
+                              <span
+                                key={ing.itemId}
+                                style={{
+                                  fontSize: 10.8,
+                                  padding: '2px 6px',
+                                  borderRadius: 3,
+                                  background: ok ? 'rgba(34,197,94,0.16)' : 'rgba(239,68,68,0.16)',
+                                  color: ok ? '#86efac' : '#fca5a5',
+                                  border: `1px solid ${ok ? '#4ade80' : '#f87171'}55`
+                                }}
+                              >
+                                {ITEMS[ing.itemId]?.name ?? ing.itemId} ({have}/{ing.quantity})
+                              </span>
+                            );
+                          })}
+                        </div>
                       </div>
-                      {(item.category === 'arme' || item.category === 'armure' || (item.category === 'artefact' && (item.bonusAttack || item.bonusHp))) && !slot.equipped && (
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 11, color: state.gold >= recipe.goldCost ? GOLD : '#fca5a5', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <Coins size={11} /> {recipe.goldCost} drachmes
+                        </span>
                         <button
-                          onClick={() => onEquipItem(slot.itemId)}
+                          disabled={!canCraft}
+                          onClick={() => onCraftRecipe?.(recipe.id)}
                           style={{
-                            background: 'rgba(233, 195, 90, 0.18)',
-                            border: `1px solid ${GOLD}`,
-                            color: GOLD,
+                            background: ownedUnique ? 'rgba(34,197,94,0.2)' : canCraft ? GOLD : 'rgba(100,116,139,0.28)',
+                            color: ownedUnique ? '#86efac' : canCraft ? '#1f3550' : '#94a3b8',
+                            border: 'none',
                             borderRadius: 4,
-                            padding: '5px 10px',
+                            padding: '5px 12px',
                             fontSize: 11.5,
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            flexShrink: 0
+                            fontWeight: 700,
+                            cursor: canCraft ? 'pointer' : 'default'
                           }}
                         >
-                          Équiper
+                          {ownedUnique ? 'Déjà forgé' : recipe.station === 'forge' ? 'Forger' : 'Brasser'}
                         </button>
-                      )}
-                      {item.category === 'consommable' && (
-                        <button
-                          onClick={() => onUseConsumable(slot.itemId)}
-                          style={{
-                            background: 'rgba(74, 222, 128, 0.18)',
-                            border: '1px solid #4ade80',
-                            color: '#bbf7d0',
-                            borderRadius: 4,
-                            padding: '5px 10px',
-                            fontSize: 11.5,
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            flexShrink: 0
-                          }}
-                        >
-                          Utiliser
-                        </button>
-                      )}
+                      </div>
                     </div>
                   );
                 })}
@@ -307,87 +697,12 @@ export function InventoryModal({ state, initialTab, onUseConsumable, onEquipItem
             </div>
           )}
 
-          {tab === 'bestiary' && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 12 }}>
-              {(
-                [
-                  { type: 'satyre', zone: 'Plaines Foudroyées' },
-                  { type: 'harpie', zone: 'Plaines & Marécages' },
-                  { type: 'centaure', zone: 'Plaines Foudroyées' },
-                  { type: 'automate', zone: 'Sanctuaire Brisé' },
-                  { type: 'squelette', zone: 'Labyrinthe des Brumes' },
-                  { type: 'serpent_lerne', zone: 'Marécages de Lerne' },
-                  { type: 'gardien_airain', zone: 'Sanctuaire Brisé (Boss)' },
-                  { type: 'sentinelle_poseidon', zone: "Rivage d'Égée (Boss)" },
-                  { type: 'minotaure', zone: 'Labyrinthe des Brumes (Boss)' },
-                  { type: 'hydre_lerne', zone: 'Marécages de Lerne (Boss)' }
-                ] as { type: EnemyType; zone: string }[]
-              ).map(({ type, zone }) => {
-                const arch = ENEMY_ARCHETYPES[type];
-                const kills = state.bestiaryKills?.[type] ?? 0;
-                const drops = MONSTER_LOOT_TABLES[type] ?? [];
-                return (
-                  <div
-                    key={type}
-                    style={{
-                      background: 'rgba(12, 22, 38, 0.76)',
-                      border: `1px solid ${arch.isBoss ? GOLD : 'rgba(143,195,230,0.38)'}`,
-                      borderRadius: 4,
-                      padding: '11px 13px'
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                      <span style={{ fontFamily: 'Cinzel, serif', fontSize: 13.5, fontWeight: 700, color: arch.isBoss ? GOLD : MARBLE }}>
-                        {arch.name}
-                      </span>
-                      <span style={{ fontSize: 10.5, color: kills > 0 ? '#4ade80' : '#94a3b8', fontWeight: 600 }}>
-                        Vaincus : {kills}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 11, color: SKY, marginBottom: 8 }}>
-                      {zone} • {arch.maxHp} PV • {arch.attack} ATK
-                    </div>
-                    <div style={{ fontSize: 10.5, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 5 }}>
-                      Butin possible
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {drops.map((entry) => {
-                        const def = ITEMS[entry.itemId];
-                        if (!def) return null;
-                        return (
-                          <div
-                            key={entry.itemId}
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              fontSize: 11.5,
-                              background: 'rgba(24, 42, 66, 0.55)',
-                              padding: '3px 7px',
-                              borderRadius: 3
-                            }}
-                          >
-                            <span style={{ color: RARITY_COLOR[def.rarity], fontWeight: 600 }}>
-                              {def.name}{' '}
-                              <span style={{ fontSize: 10, opacity: 0.75 }}>({RARITY_LABEL[def.rarity]})</span>
-                            </span>
-                            <span style={{ color: '#cbd5e1', fontWeight: 700, fontSize: 11 }}>
-                              {formatDropChance(entry.chance)}
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {tab === 'bestiary' && <BestiaryPanel bestiaryKills={state.bestiaryKills} />}
         </div>
 
-        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(143,195,230,0.2)', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8' }}>
-          <span><Shield size={11} style={{ verticalAlign: 'middle' }} /> Progression sauvegardée automatiquement en local</span>
-          <span>Raccourcis : [I] Sac • [C] Chroniques • [Échap] Fermer</span>
+        <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(143,195,230,0.2)', display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#94a3b8' }}>
+          <span><Shield size={11} style={{ verticalAlign: 'middle' }} /> Progression sauvegardée en local</span>
+          <span>Raccourcis : [I] Sac • [T] Talents • [M] Carte • [Échap] Pause</span>
         </div>
       </div>
     </div>

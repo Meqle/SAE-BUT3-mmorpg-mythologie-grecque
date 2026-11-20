@@ -358,6 +358,10 @@ export function createInteractableSprite(def: ZoneInteractable): InteractableSpr
     base.rect(-13, -2, 26, 3.5).fill(BRONZE_SHADE);
     base.rect(-3, -4, 6, 7).fill(COLORS.gold).stroke({ ...LINE, width: 0.7 });
     label.y = -18;
+  } else if (def.kind === 'workbench') {
+    base.circle(0, 0, 14).fill(shaded(COLORS.bronze, BRONZE_SHADE)).stroke({ ...LINE, width: 1.6 });
+    base.circle(0, 0, 8).fill({ color: COLORS.gold, alpha: 0.75 });
+    label.y = -22;
   } else if (def.kind === 'stele' || def.kind === 'trial_stele') {
     const h = def.kind === 'trial_stele' ? 38 : 34;
     base.roundRect(-10, -h, 20, h, 3).fill(shaded(COLORS.marbleLit, COLORS.marbleShade)).stroke({ ...LINE, width: 1.6 });

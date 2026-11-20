@@ -2,6 +2,7 @@ import { CSSProperties } from 'react';
 import { GodLore, ServerInfo } from '@greek-myth/shared';
 import { Backpack, BookOpen, Coins, Flame, Menu, ScrollText, Sparkles, Swords, Wind, Zap } from 'lucide-react';
 import { HERO_CLASSES } from '../../game/data/classes';
+import { getUnlockedActiveSkills } from '../../game/data/skillTrees';
 import { QUEST_ORDER, QUESTS } from '../../game/data/story';
 import type { ZoneDefinition } from '../../game/data/zones';
 import type { GameSettings } from '../../game/settings';
@@ -28,6 +29,7 @@ interface HudProps {
   settings: GameSettings;
   specialCooldown: number;
   dashCooldown: number;
+  activeSkillCooldowns?: Record<string, number>;
   interactPrompt: string | null;
   toast: string | null;
   zoneBanner: boolean;
@@ -40,6 +42,7 @@ interface HudProps {
   onTriggerSpecial: () => void;
   onTriggerDash: () => void;
   onTriggerPotion: () => void;
+  onTriggerActiveSkill?: (skillId: string) => void;
   onTriggerInteract: () => void;
   onOpenModal: (tab: ModalTab) => void;
   onOpenPause: () => void;
@@ -70,6 +73,7 @@ export function Hud({
   settings,
   specialCooldown,
   dashCooldown,
+  activeSkillCooldowns = {},
   interactPrompt,
   toast,
   zoneBanner,
@@ -82,6 +86,7 @@ export function Hud({
   onTriggerSpecial,
   onTriggerDash,
   onTriggerPotion,
+  onTriggerActiveSkill,
   onTriggerInteract,
   onOpenModal,
   onOpenPause,
@@ -431,10 +436,24 @@ export function Hud({
             {slotBtn(settings.keys.special.label, <Flame size={18} color={god.color} />, onTriggerSpecial, 'Pouvoir divin (Clic droit)', specialCooldown, undefined, god.color)}
             {slotBtn(settings.keys.dash.label, <Wind size={18} color={SKY} />, onTriggerDash, 'Esquive', dashCooldown, undefined, SKY)}
             {slotBtn(settings.keys.potion.label, <Sparkles size={18} color="#4ade80" />, onTriggerPotion, "Potion d'ambroisie", 0, potions, '#4ade80')}
+            {getUnlockedActiveSkills(state.heroClass, state.god, state.unlockedSkills).map((sk, idx) => (
+              <span key={sk.id} style={{ display: 'contents' }}>
+                {slotBtn(
+                  String(idx + 1),
+                  <Sparkles size={16} color={sk.color} />,
+                  () => onTriggerActiveSkill?.(sk.id),
+                  `${sk.name} — ${sk.shortDesc}`,
+                  activeSkillCooldowns[sk.id] ?? 0,
+                  undefined,
+                  sk.color
+                )}
+              </span>
+            ))}
             <div style={{ width: 1, height: 28, background: 'rgba(143,195,230,0.3)', margin: '0 2px' }} />
             {slotBtn(settings.keys.inventory.label, <Backpack size={17} color={MARBLE} />, () => onOpenModal('inventory'), 'Inventaire', 0, undefined, SKY)}
             {slotBtn(settings.keys.quests.label, <ScrollText size={17} color={MARBLE} />, () => onOpenModal('quests'), 'Quêtes', 0, undefined, SKY)}
             {slotBtn(settings.keys.codex.label, <BookOpen size={17} color={MARBLE} />, () => onOpenModal('codex'), 'Chroniques', 0, undefined, SKY)}
+            {slotBtn('T', <Sparkles size={17} color={(state.skillPoints ?? 0) > 0 ? GOLD : MARBLE} />, () => onOpenModal('talents'), 'Arbre de compétences', 0, (state.skillPoints ?? 0) > 0 ? state.skillPoints : undefined, (state.skillPoints ?? 0) > 0 ? GOLD : SKY)}
           </div>
         )}
       </div>

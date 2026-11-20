@@ -1,7 +1,8 @@
 import type { GodAffinity } from '@greek-myth/shared';
 import { HERO_CLASSES, HeroClassId } from '../data/classes';
 import { ITEMS } from '../data/items';
-import { computeSkillBonuses, GOD_SKILL_TREES } from '../data/skillTrees';
+import { CRAFT_RECIPES } from '../data/crafting';
+import { computeSkillBonuses, getAllNodesForHero } from '../data/skillTrees';
 import { CODEX_ENTRIES, NPCS, QUEST_ORDER, QUESTS, QuestDef, QuestObjectiveType } from '../data/story';
 import type { ZoneId } from '../data/zones';
 
@@ -47,8 +48,10 @@ export interface ComputedHeroStats {
   speedMultiplier: number;
   xpToNext: number;
   critChance: number;
+  armor: number;
   damageReduction: number;
   lifeOnKill: number;
+  healPowerMult: number;
   specialDamageMult: number;
   specialCooldownMult: number;
   dashCooldownMult: number;
@@ -61,13 +64,14 @@ const saveKey = (heroName: string) =>
   SAVE_PREFIX + heroName.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
 
 export function xpRequiredForLevel(level: number): number {
-  return Math.round(100 * Math.pow(1.38, level - 1));
+  return Math.round(240 + (level - 1) * 165 + Math.pow(level - 1, 2) * 32);
 }
 
 export function getComputedStats(state: GameProgressState): ComputedHeroStats {
   const cls = HERO_CLASSES[state.heroClass];
   let bonusHp = 0;
   let bonusAttack = 0;
+  let bonusArmor = 0;
 
   for (const slot of state.inventory) {
     if (!slot.equipped) continue;
@@ -75,26 +79,32 @@ export function getComputedStats(state: GameProgressState): ComputedHeroStats {
     if (!item) continue;
     if (item.bonusHp) bonusHp += item.bonusHp;
     if (item.bonusAttack) bonusAttack += item.bonusAttack;
+    if (item.bonusArmor) bonusArmor += item.bonusArmor;
   }
 
-  const godHp = state.god === 'POSEIDON' ? 16 : 0;
+  const godHp = state.god === 'POSEIDON' ? 18 : 0;
   const godAtk = state.god === 'ARES' ? 4 : state.god === 'HADES' ? 2 : 0;
   const godSpeed = state.god === 'ZEUS' ? 0.1 : 0;
-  const sk = computeSkillBonuses(state.god, state.unlockedSkills);
+  const sk = computeSkillBonuses(state.heroClass, state.god, state.unlockedSkills);
 
-  const maxHp = cls.baseHp + (state.level - 1) * 11 + bonusHp + godHp + sk.maxHp;
+  const maxHp = cls.baseHp + (state.level - 1) * 14 + bonusHp + godHp + sk.maxHp;
   const attack = cls.baseAttack + (state.level - 1) * 3 + bonusAttack + godAtk + sk.attack;
+  const armor = (state.heroClass === 'GUERRIER' ? 8 : 2) + bonusArmor + sk.armor;
+  const armorMitigation = armor / (armor + 100);
+  const damageReduction = Math.min(0.65, sk.damageReduction + armorMitigation * 0.65);
   const speedMultiplier = 1 + cls.speedBonus / 220 + godSpeed + sk.speedPct;
   const baseCrit = state.heroClass === 'ASSASSIN' ? 0.16 : state.heroClass === 'ARCHER' ? 0.1 : 0.06;
 
   return {
     maxHp,
     attack,
+    armor,
     speedMultiplier,
     xpToNext: xpRequiredForLevel(state.level),
-    critChance: Math.min(0.65, baseCrit + sk.critChance),
-    damageReduction: sk.damageReduction,
+    critChance: Math.min(0.7, baseCrit + sk.critChance),
+    damageReduction,
     lifeOnKill: sk.lifeOnKill,
+    healPowerMult: 1 + sk.healPowerPct,
     specialDamageMult: 1 + sk.specialDamagePct,
     specialCooldownMult: Math.max(0.55, 1 - sk.specialCooldownPct),
     dashCooldownMult: Math.max(0.55, 1 - sk.dashCooldownPct),
@@ -242,7 +252,7 @@ export function consumeItem(state: GameProgressState, itemId: string): boolean {
 export function grantXp(state: GameProgressState, amount: number): { leveledUp: boolean; newLevel: number } {
   state.xp += amount;
   let leveledUp = false;
-  while (state.xp >= xpRequiredForLevel(state.level)) {
+  while (state.level < 40 && state.xp >= xpRequiredForLevel(state.level)) {
     state.xp -= xpRequiredForLevel(state.level);
     state.level += 1;
     state.skillPoints = (state.skillPoints ?? 0) + 1;
@@ -435,17 +445,21 @@ export function resolveNpcDialogue(state: GameProgressState, npcId: string): Npc
 export function equipItem(state: GameProgressState, itemId: string): boolean {
   const slot = state.inventory.find((s) => s.itemId === itemId);
   const def = ITEMS[itemId];
-  if (!slot || !def) return false;
-  if (def.category !== 'arme' && def.category !== 'armure' && def.category !== 'artefact') return false;
-  if (def.category === 'arme' || def.category === 'armure') {
-    for (const other of state.inventory) {
-      const otherDef = ITEMS[other.itemId];
-      if (otherDef && otherDef.category === def.category) other.equipped = false;
-    }
+  if (!slot || !def || !def.slot) return false;
+
+  if (slot.equipped) {
+    slot.equipped = false;
+  } else if (def.slot === 'relique') {
+    const equippedRelics = state.inventory.filter((s) => s.equipped && ITEMS[s.itemId]?.slot === 'relique');
+    if (equippedRelics.length >= 2) equippedRelics[0].equipped = false;
     slot.equipped = true;
   } else {
-    slot.equipped = !slot.equipped;
+    for (const other of state.inventory) {
+      if (ITEMS[other.itemId]?.slot === def.slot) other.equipped = false;
+    }
+    slot.equipped = true;
   }
+
   const stats = getComputedStats(state);
   if (state.hp > stats.maxHp) state.hp = stats.maxHp;
   return true;
@@ -478,9 +492,10 @@ export function markZoneDiscovered(state: GameProgressState, zoneId: ZoneId): vo
 
 export function canUpgradeSkill(state: GameProgressState, skillId: string): boolean {
   if ((state.skillPoints ?? 0) <= 0) return false;
-  const tree = GOD_SKILL_TREES[state.god] ?? [];
-  const node = tree.find((n) => n.id === skillId);
+  const nodes = getAllNodesForHero(state.heroClass, state.god);
+  const node = nodes.find((n) => n.id === skillId);
   if (!node) return false;
+  if (state.level < node.minLevel) return false;
   const cur = state.unlockedSkills?.[skillId] ?? 0;
   if (cur >= node.maxRank) return false;
   if (node.requires && (state.unlockedSkills?.[node.requires] ?? 0) <= 0) return false;
@@ -509,4 +524,28 @@ export function recordZoneKill(state: GameProgressState, zoneId: ZoneId): number
   if (!state.zoneKillCounts) state.zoneKillCounts = {};
   state.zoneKillCounts[zoneId] = (state.zoneKillCounts[zoneId] ?? 0) + 1;
   return state.zoneKillCounts[zoneId];
+}
+
+export function canCraftRecipe(state: GameProgressState, recipeId: string): boolean {
+  const recipe = CRAFT_RECIPES.find((r) => r.id === recipeId);
+  if (!recipe || state.gold < recipe.goldCost) return false;
+  const resultDef = ITEMS[recipe.resultItemId];
+  if (resultDef && !resultDef.stackable && state.inventory.some((s) => s.itemId === resultDef.id)) {
+    return false;
+  }
+  return recipe.ingredients.every((ing) => countItem(state, ing.itemId) >= ing.quantity);
+}
+
+export function craftRecipe(state: GameProgressState, recipeId: string): boolean {
+  if (!canCraftRecipe(state, recipeId)) return false;
+  const recipe = CRAFT_RECIPES.find((r) => r.id === recipeId)!;
+  state.gold -= recipe.goldCost;
+  for (const ing of recipe.ingredients) {
+    const idx = state.inventory.findIndex((s) => s.itemId === ing.itemId);
+    if (idx < 0) continue;
+    state.inventory[idx].quantity -= ing.quantity;
+    if (state.inventory[idx].quantity <= 0) state.inventory.splice(idx, 1);
+  }
+  addItemToState(state, recipe.resultItemId, recipe.resultQuantity);
+  return true;
 }

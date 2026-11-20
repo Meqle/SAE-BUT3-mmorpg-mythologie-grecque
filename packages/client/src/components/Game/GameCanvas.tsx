@@ -5,6 +5,7 @@ import { placeLayer, View, viewAround } from '../../game/camera';
 import { DIVINE_SKILLS, HERO_CLASSES } from '../../game/data/classes';
 import { ITEMS, RARITY_HEX, RARITY_LABEL } from '../../game/data/items';
 import { rollMonsterLoot } from '../../game/data/loot';
+import { getUnlockedActiveSkills } from '../../game/data/skillTrees';
 import { NPCS } from '../../game/data/story';
 import { stepZoneMovement, ZoneDefinition, ZoneId, zonePortalAt, ZONES } from '../../game/data/zones';
 import { sound } from '../../game/audio';
@@ -23,6 +24,7 @@ import {
   addItemToState,
   completeQuest,
   consumeItem,
+  craftRecipe,
   equipItem,
   GameProgressState,
   getComputedStats,
@@ -37,7 +39,8 @@ import {
   resolveNpcDialogue,
   saveGameState,
   sellItem,
-  upgradeSkill
+  upgradeSkill,
+  xpRequiredForLevel
 } from '../../game/state/gameState';
 import { useScreen } from '../../game/useScreen';
 import { PrologueOverlay } from '../Story/PrologueOverlay';
@@ -79,6 +82,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
   const [zoneBanner, setZoneBanner] = useState(true);
   const [specialCd, setSpecialCd] = useState(0);
   const [dashCd, setDashCd] = useState(0);
+  const [activeSkillCds, setActiveSkillCds] = useState<Record<string, number>>({});
   const [bossInfo, setBossInfo] = useState<BossHudInfo | null>(null);
   const [minimapMarkers, setMinimapMarkers] = useState<MinimapMarker[]>([]);
 
@@ -94,6 +98,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
     interact: () => void;
     refreshNpcBadges: () => void;
     travelToZone: (zoneId: ZoneId) => void;
+    castActiveSkill: (skillId: string) => void;
   } | null>(null);
 
   const showToast = useCallback((message: string) => {
@@ -155,6 +160,11 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
       if (e.code === keys.quests.code) setModalTab((prev) => (prev === 'quests' ? null : 'quests'));
       if (e.code === keys.codex.code) setModalTab((prev) => (prev === 'codex' ? null : 'codex'));
       if (e.code === 'KeyT') setModalTab((prev) => (prev === 'talents' ? null : 'talents'));
+      if (e.code === 'Digit1' || e.code === 'Digit2' || e.code === 'Digit3' || e.code === 'Digit4') {
+        const idx = Number(e.code.replace('Digit', '')) - 1;
+        const unlocked = getUnlockedActiveSkills(stateRef.current.heroClass, stateRef.current.god, stateRef.current.unlockedSkills);
+        if (unlocked[idx]) actionsRef.current?.castActiveSkill(unlocked[idx].id);
+      }
       if (e.code === keys.map.code || (keys.map.code === 'KeyM' && e.key.toLowerCase() === 'm')) { setModalTab(null); setWorldMapOpen((prev) => !prev); }
     };
     window.addEventListener('keydown', onGlobalKey);
@@ -242,6 +252,12 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
       let cameraShake = 0;
       let pendingRespawn = false;
       let potionCooldown = 0;
+      const activeCds: Record<string, number> = {};
+      let shieldBuffTimer = 0;
+      let shieldBuffPower = 0;
+      let hasteBuffTimer = 0;
+      let sanctuaryTimer = 0;
+      let sanctuaryTick = 0;
       let regenTimer = 0;
 
       const refreshNpcBadges = () => {
@@ -408,7 +424,8 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         }
 
         const statsNow = getComputedStats(stateRef.current);
-        const mitigated = Math.max(1, Math.round(amount * (1 - statsNow.damageReduction)));
+        const totalDr = Math.min(0.82, statsNow.damageReduction + (shieldBuffTimer > 0 ? shieldBuffPower : 0));
+        const mitigated = Math.max(1, Math.round(amount * (1 - totalDr)));
         stateRef.current.hp = Math.max(0, stateRef.current.hp - mitigated);
         iFrames = 0.48;
         sound.playPlayerHurt();
@@ -578,6 +595,126 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         return null;
       };
 
+      const castActiveSkill = (skillId: string) => {
+        const unlocked = getUnlockedActiveSkills(stateRef.current.heroClass, stateRef.current.god, stateRef.current.unlockedSkills);
+        const sk = unlocked.find((s) => s.id === skillId);
+        if (!sk || (activeCds[sk.id] ?? 0) > 0) return;
+
+        const stats = getComputedStats(stateRef.current);
+        activeCds[sk.id] = sk.cooldown * stats.specialCooldownMult;
+        const col = hexColor(sk.color);
+        hero.pulseAttack();
+        sound.playSpecial();
+
+        const eff = sk.effect;
+        if (eff === 'tank_taunt') {
+          shieldBuffTimer = 5;
+          shieldBuffPower = 0.3;
+          fx.spawnSlash(player.x, player.y, 0, 145, col, 'ring');
+          fx.spawnText(player.x, player.y - 28, 'Provocation !', col, 12);
+          for (const e of enemies) {
+            if (!e.alive) continue;
+            if (Math.hypot(e.x - player.x, e.y - player.y) <= 155) {
+              damageEnemy(e, Math.round(stats.attack * 1.1), false, 1.1);
+            }
+          }
+        } else if (eff === 'tank_shield_wall' || eff === 'divine_ath_aegis') {
+          shieldBuffTimer = eff === 'tank_shield_wall' ? 4.5 : 5;
+          shieldBuffPower = eff === 'tank_shield_wall' ? 0.6 : 0.55;
+          fx.spawnSlash(player.x, player.y, 0, 110, col, 'ring');
+          if (eff === 'divine_ath_aegis') {
+            const h = Math.round(stats.maxHp * 0.2 * stats.healPowerMult);
+            stateRef.current.hp = Math.min(stats.maxHp, stateRef.current.hp + h);
+            fx.spawnText(player.x, player.y - 28, `+${h} PV • Égide`, 0x4ade80, 12);
+          } else {
+            fx.spawnText(player.x, player.y - 28, 'Mur de Bouclier !', col, 12);
+          }
+        } else if (eff === 'tank_fortress') {
+          shieldBuffTimer = 6;
+          shieldBuffPower = 0.5;
+          const h = Math.round(stats.maxHp * 0.35 * stats.healPowerMult);
+          stateRef.current.hp = Math.min(stats.maxHp, stateRef.current.hp + h);
+          fx.spawnSlash(player.x, player.y, 0, 160, col, 'ring');
+          fx.spawnText(player.x, player.y - 28, `+${h} PV • Forteresse`, col, 13);
+        } else if (eff === 'heal_light' || eff === 'heal_revive_grace' || eff === 'divine_apo_hymn') {
+          const ratio = eff === 'heal_revive_grace' ? 0.65 : eff === 'heal_light' ? 0.3 : 0.28;
+          const h = Math.round(stats.maxHp * ratio * stats.healPowerMult);
+          stateRef.current.hp = Math.min(stats.maxHp, stateRef.current.hp + h);
+          if (eff === 'heal_revive_grace') { shieldBuffTimer = 5; shieldBuffPower = 0.35; }
+          sound.playHeal();
+          fx.spawnSlash(player.x, player.y, 0, 135, col, 'ring');
+          fx.spawnText(player.x, player.y - 28, `+${h} PV`, 0x4ade80, 13);
+          if (eff === 'divine_apo_hymn') {
+            for (const e of enemies) {
+              if (e.alive && Math.hypot(e.x - player.x, e.y - player.y) <= 145) damageEnemy(e, Math.round(stats.attack * 1.6), true, 0.3);
+            }
+          }
+        } else if (eff === 'heal_sanctuary') {
+          sanctuaryTimer = 5;
+          sanctuaryTick = 0;
+          sound.playHeal();
+          fx.spawnSlash(player.x, player.y, 0, 145, col, 'ring');
+          fx.spawnText(player.x, player.y - 28, 'Sanctuaire actif !', 0x4ade80, 12);
+        } else if (eff === 'dps_arrow_rain' || eff === 'dps_artemis_storm') {
+          const angles = eff === 'dps_arrow_rain'
+            ? [-0.36, -0.18, 0, 0.18, 0.36].map((o) => facingAngle + o)
+            : Array.from({ length: 12 }, (_, k) => (k / 12) * Math.PI * 2);
+          for (const ang of angles) {
+            fx.spawnProjectile({
+              x: player.x, y: player.y,
+              vx: Math.cos(ang) * 430, vy: Math.sin(ang) * 430,
+              damage: Math.round(stats.attack * (eff === 'dps_artemis_storm' ? 1.55 : 1.15)),
+              radius: 7, fromPlayer: true, life: 1.1, color: col, style: 'arrow', piercing: true
+            });
+          }
+        } else if (eff === 'dps_piercing_mark') {
+          fx.spawnProjectile({
+            x: player.x, y: player.y,
+            vx: Math.cos(facingAngle) * 560, vy: Math.sin(facingAngle) * 560,
+            damage: Math.round(stats.attack * 2.8),
+            radius: 10, fromPlayer: true, life: 1.2, color: col, style: 'arrow', piercing: true
+          });
+        } else if (eff === 'dps_shadow_step') {
+          player.vx += Math.cos(facingAngle) * 520;
+          player.vy += Math.sin(facingAngle) * 520;
+          iFrames = Math.max(iFrames, 0.4);
+          fx.spawnSlash(player.x, player.y, facingAngle, 120, col, 'arc');
+          for (const e of enemies) {
+            if (e.alive && Math.hypot(e.x - player.x, e.y - player.y) <= 135) damageEnemy(e, Math.round(stats.attack * 2.2), true, 0.25);
+          }
+        } else if (eff === 'dps_venom_spin' || eff === 'dps_styx_execute') {
+          const mult = eff === 'dps_styx_execute' ? 3.6 : 2.3;
+          if (eff === 'dps_styx_execute') dashCooldown = 0;
+          cameraShake = Math.max(cameraShake, 6);
+          fx.spawnSlash(player.x, player.y, 0, 130, col, 'ring');
+          for (const e of enemies) {
+            if (e.alive && Math.hypot(e.x - player.x, e.y - player.y) <= 140) damageEnemy(e, Math.round(stats.attack * mult), true, 0.3);
+          }
+        } else {
+          // Pouvoirs actifs de Faction Divine (Zeus, Poseidon, Hades, Athena, Ares, Apollo)
+          const mult = eff.includes('tempest') || eff.includes('rampage') || eff.includes('maelstrom') || eff.includes('legion') || eff.includes('spear') || eff.includes('nova') ? 3.2 : 2.1;
+          cameraShake = Math.max(cameraShake, 6);
+          fx.spawnSlash(player.x, player.y, 0, 155, col, eff.includes('zeus') ? 'bolt' : 'ring');
+          if (eff === 'divine_ares_warcry') hasteBuffTimer = 5;
+          if (eff === 'divine_pos_geyser') { shieldBuffTimer = 4; shieldBuffPower = 0.3; }
+          let hits = 0;
+          for (const e of enemies) {
+            if (!e.alive) continue;
+            if (Math.hypot(e.x - player.x, e.y - player.y) <= 165) {
+              damageEnemy(e, Math.round(stats.attack * mult * stats.specialDamageMult), true, eff.includes('zeus') || eff.includes('spear') ? 1.2 : 0.35);
+              hits++;
+            }
+          }
+          if (eff === 'divine_pos_geyser' || eff === 'divine_pos_maelstrom' || eff === 'divine_apo_nova' || ((eff === 'divine_had_pact' || eff === 'divine_had_legion') && hits > 0)) {
+            const h = Math.round(stats.maxHp * 0.28 * stats.healPowerMult);
+            stateRef.current.hp = Math.min(stats.maxHp, stateRef.current.hp + h);
+            sound.playHeal();
+            fx.spawnText(player.x, player.y - 28, `+${h} PV`, 0x4ade80, 12);
+          }
+        }
+        syncUi(false);
+      };
+
       const performInteract = () => {
         const nearest = findNearestInteraction();
         if (!nearest) return;
@@ -588,6 +725,10 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         }
 
         const def = nearest.sprite.def;
+        if (def.kind === 'workbench') {
+          setModalTab('craft');
+          return;
+        }
         if (def.kind === 'trial_stele') {
           if (!stateRef.current.activatedTrialSteles.includes(def.id)) {
             stateRef.current.activatedTrialSteles.push(def.id);
@@ -658,6 +799,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         potion: performPotion,
         interact: performInteract,
         refreshNpcBadges,
+        castActiveSkill,
         travelToZone: (targetZone: ZoneId) => {
           if (stateRef.current.zoneId !== targetZone) {
             const dest = ZONES[targetZone];
@@ -734,12 +876,16 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
 
         if (pendingRespawn) {
           pendingRespawn = false;
+          const goldLost = Math.floor(stateRef.current.gold * 0.15);
+          const xpLost = Math.min(stateRef.current.xp, Math.floor(xpRequiredForLevel(stateRef.current.level) * 0.25));
+          stateRef.current.gold = Math.max(0, stateRef.current.gold - goldLost);
+          stateRef.current.xp = Math.max(0, stateRef.current.xp - xpLost);
           const respawnStats = getComputedStats(stateRef.current);
           stateRef.current.hp = respawnStats.maxHp;
           iFrames = 1.2;
           player.vx = 0;
           player.vy = 0;
-          showToast("Vaincu ! Cassandre vous ramène à la cité de l'Agora.");
+          showToast(`Vaincu ! -${goldLost} drachmes, -${xpLost} XP. Retour à l'Agora.`);
           loadZone('agora', ZONES.agora.defaultSpawn.x, ZONES.agora.defaultSpawn.y);
           syncUi(true);
           return;
@@ -748,6 +894,22 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         attackCooldown = Math.max(0, attackCooldown - dt);
         specialCooldown = Math.max(0, specialCooldown - dt);
         potionCooldown = Math.max(0, potionCooldown - dt);
+        shieldBuffTimer = Math.max(0, shieldBuffTimer - dt);
+        hasteBuffTimer = Math.max(0, hasteBuffTimer - dt);
+        for (const k of Object.keys(activeCds)) {
+          if (activeCds[k] > 0) activeCds[k] = Math.max(0, activeCds[k] - dt);
+        }
+        if (sanctuaryTimer > 0) {
+          sanctuaryTimer = Math.max(0, sanctuaryTimer - dt);
+          sanctuaryTick += dt;
+          if (sanctuaryTick >= 1) {
+            sanctuaryTick = 0;
+            const h = Math.round(stats.maxHp * 0.1 * stats.healPowerMult);
+            stateRef.current.hp = Math.min(stats.maxHp, stateRef.current.hp + h);
+            fx.spawnSlash(player.x, player.y, 0, 95, 0x4ade80, 'ring');
+            fx.spawnText(player.x, player.y - 24, `+${h} PV`, 0x4ade80, 11);
+          }
+        }
         dashCooldown = Math.max(0, dashCooldown - dt);
         dashTimer = Math.max(0, dashTimer - dt);
         hasteTimer = Math.max(0, hasteTimer - dt);
@@ -898,78 +1060,104 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
             if (enemy.stateTimer <= 0) {
               const a = enemy.aimAngle;
               if (arch.attackStyle === 'lunge') {
-                enemy.state = 'dashing';
-                enemy.stateTimer = 0.28;
-                enemy.dashVx = Math.cos(a) * 385;
-                enemy.dashVy = Math.sin(a) * 385;
-                enemy.dashHitDone = false;
-                dust.burst(enemy.x, enemy.y + 8);
-              } else if (arch.attackStyle === 'charge') {
-                enemy.state = 'dashing';
-                enemy.stateTimer = 0.46;
-                const leadA = Math.atan2(player.y + player.vy * 0.22 - enemy.y, player.x + player.vx * 0.22 - enemy.x);
-                enemy.dashVx = Math.cos(leadA) * 475;
-                enemy.dashVy = Math.sin(leadA) * 475;
-                enemy.dashHitDone = false;
-                dust.burst(enemy.x, enemy.y + 10);
-              } else if (arch.attackStyle === 'ranged_fan') {
-                for (const offset of [-0.26, 0, 0.26]) {
-                  fx.spawnProjectile({
-                    x: enemy.x,
-                    y: enemy.y,
-                    vx: Math.cos(a + offset) * 265,
-                    vy: Math.sin(a + offset) * 265,
-                    damage: arch.attack,
-                    radius: 7,
-                    fromPlayer: false,
-                    life: 1.4,
-                    color: COLORS.sky,
-                    style: 'feather'
-                  });
-                }
-                enemy.state = 'cooldown';
-                enemy.stateTimer = arch.attackCooldown;
-              } else if (arch.attackStyle === 'fire_slam') {
-                if (dist <= 86) {
-                  fx.spawnSlash(enemy.x, enemy.y, 0, 88, 0xf97316, 'ring');
-                  damagePlayer(arch.attack, enemy.x);
+                const step = enemy.patternStep;
+                enemy.patternStep = (enemy.patternStep + 1) % 2;
+                if (step === 0) {
+                  enemy.state = 'dashing';
+                  enemy.stateTimer = 0.28;
+                  enemy.dashVx = Math.cos(a) * 340;
+                  enemy.dashVy = Math.sin(a) * 340;
+                  enemy.dashHitDone = false;
+                  dust.burst(enemy.x, enemy.y + 8);
                 } else {
-                  fx.spawnProjectile({
-                    x: enemy.x,
-                    y: enemy.y,
-                    vx: Math.cos(a) * 250,
-                    vy: Math.sin(a) * 250,
-                    damage: arch.attack - 2,
-                    radius: 9,
-                    fromPlayer: false,
-                    life: 1.5,
-                    color: 0xf97316,
-                    style: 'fireball'
-                  });
+                  fx.spawnSlash(enemy.x, enemy.y, 0, 86, 0xf97316, 'ring');
+                  if (dist <= 92) damagePlayer(Math.round(arch.attack * 1.15), enemy.x);
+                  enemy.state = 'cooldown';
+                  enemy.stateTimer = arch.attackCooldown;
+                }
+              } else if (arch.attackStyle === 'charge') {
+                const step = enemy.patternStep;
+                enemy.patternStep = (enemy.patternStep + 1) % 2;
+                if (step === 0) {
+                  enemy.state = 'dashing';
+                  enemy.stateTimer = 0.45;
+                  enemy.dashVx = Math.cos(a) * 425;
+                  enemy.dashVy = Math.sin(a) * 425;
+                  enemy.dashHitDone = false;
+                  dust.burst(enemy.x, enemy.y + 10);
+                } else {
+                  fx.spawnSlash(enemy.x, enemy.y, 0, 115, 0xf59e0b, 'ring');
+                  cameraShake = Math.max(cameraShake, 4.5);
+                  if (dist <= 118) damagePlayer(arch.attack, enemy.x);
+                  for (const off of [-0.35, 0.35]) {
+                    fx.spawnProjectile({
+                      x: enemy.x, y: enemy.y,
+                      vx: Math.cos(a + off) * 265, vy: Math.sin(a + off) * 265,
+                      damage: Math.round(arch.attack * 0.8), radius: 8, fromPlayer: false, life: 1.35, color: 0xf59e0b, style: 'orb'
+                    });
+                  }
+                  enemy.state = 'cooldown';
+                  enemy.stateTimer = arch.attackCooldown;
+                }
+              } else if (arch.attackStyle === 'ranged_fan') {
+                const step = enemy.patternStep;
+                enemy.patternStep = (enemy.patternStep + 1) % 2;
+                if (step === 0) {
+                  for (const offset of [-0.28, 0, 0.28]) {
+                    fx.spawnProjectile({
+                      x: enemy.x, y: enemy.y,
+                      vx: Math.cos(a + offset) * 270, vy: Math.sin(a + offset) * 270,
+                      damage: arch.attack, radius: 7, fromPlayer: false, life: 1.4, color: COLORS.sky, style: 'feather'
+                    });
+                  }
+                  enemy.state = 'cooldown';
+                  enemy.stateTimer = arch.attackCooldown;
+                } else {
+                  enemy.state = 'dashing';
+                  enemy.stateTimer = 0.34;
+                  enemy.dashVx = Math.cos(a) * 380;
+                  enemy.dashVy = Math.sin(a) * 380;
+                  enemy.dashHitDone = false;
+                  fx.spawnSlash(enemy.x, enemy.y, a, 70, COLORS.sky, 'arc');
+                }
+              } else if (arch.attackStyle === 'fire_slam') {
+                const step = enemy.patternStep;
+                enemy.patternStep = (enemy.patternStep + 1) % 2;
+                if (step === 0) {
+                  for (const off of [-0.24, 0, 0.24]) {
+                    fx.spawnProjectile({
+                      x: enemy.x, y: enemy.y,
+                      vx: Math.cos(a + off) * 255, vy: Math.sin(a + off) * 255,
+                      damage: arch.attack - 2, radius: 8.5, fromPlayer: false, life: 1.45, color: 0xf97316, style: 'fireball'
+                    });
+                  }
+                } else {
+                  fx.spawnSlash(enemy.x, enemy.y, 0, 105, 0xf97316, 'ring');
+                  if (dist <= 108) damagePlayer(arch.attack, enemy.x);
+                  fx.spawnHazard(player.x, player.y, 38, 1.0, Math.round(arch.attack * 0.85), 0xf97316);
                 }
                 enemy.state = 'cooldown';
                 enemy.stateTimer = arch.attackCooldown;
               } else if (arch.attackStyle === 'boss_burst') {
-                enemy.patternStep = (enemy.patternStep + 1) % 2;
-                if (enemy.patternStep === 0) {
+                const step = enemy.patternStep;
+                enemy.patternStep = (enemy.patternStep + 1) % 3;
+                if (step === 0) {
                   for (let k = 0; k < 6; k++) {
                     const ra = a + (k / 6) * Math.PI * 2;
                     fx.spawnProjectile({
-                      x: enemy.x,
-                      y: enemy.y,
-                      vx: Math.cos(ra) * 225,
-                      vy: Math.sin(ra) * 225,
-                      damage: 18,
-                      radius: 9,
-                      fromPlayer: false,
-                      life: 1.6,
-                      color: 0xf97316,
-                      style: 'fireball'
+                      x: enemy.x, y: enemy.y,
+                      vx: Math.cos(ra) * 235, vy: Math.sin(ra) * 235,
+                      damage: 18, radius: 9, fromPlayer: false, life: 1.6, color: 0xf97316, style: 'fireball'
                     });
                   }
+                } else if (step === 1) {
+                  fx.spawnSlash(enemy.x, enemy.y, 0, 126, 0xef4444, 'ring');
+                  cameraShake = Math.max(cameraShake, 5);
+                  if (dist <= 128) damagePlayer(arch.attack, enemy.x);
                 } else {
-                  fx.spawnSlash(enemy.x, enemy.y, 0, 112, 0xf97316, 'ring');
-                  if (dist <= 116) damagePlayer(arch.attack, enemy.x);
+                  for (const [ox, oy] of [[0, 0], [74, 0], [-74, 0]]) {
+                    fx.spawnHazard(player.x + ox, player.y + oy, 40, 1.05, 20, 0xfacc15);
+                  }
                 }
                 enemy.state = 'cooldown';
                 enemy.stateTimer = arch.attackCooldown;
@@ -977,39 +1165,55 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
                 const step = enemy.patternStep;
                 enemy.patternStep = (enemy.patternStep + 1) % 3;
                 if (step === 0) {
+                  // 1. Charge furieuse du Minotaure
                   enemy.state = 'dashing';
-                  enemy.stateTimer = 0.48;
-                  enemy.dashVx = Math.cos(a) * 425;
-                  enemy.dashVy = Math.sin(a) * 425;
+                  enemy.stateTimer = 0.5;
+                  enemy.dashVx = Math.cos(a) * 430;
+                  enemy.dashVy = Math.sin(a) * 430;
                   enemy.dashHitDone = false;
                   dust.burst(enemy.x, enemy.y + 10);
                 } else if (step === 1) {
-                  fx.spawnSlash(enemy.x, enemy.y, 0, 120, COLORS.gold, 'ring');
-                  cameraShake = Math.max(cameraShake, 6);
-                  if (dist <= 122) damagePlayer(arch.attack, enemy.x);
+                  // 2. Tourbillon de Labrys (anneau + 4 arcs)
+                  fx.spawnSlash(enemy.x, enemy.y, 0, 136, 0xdc2626, 'ring');
+                  for (let k = 0; k < 4; k++) {
+                    fx.spawnSlash(enemy.x, enemy.y, a + (k * Math.PI) / 2, 115, COLORS.gold, 'arc');
+                  }
+                  cameraShake = Math.max(cameraShake, 6.5);
+                  if (dist <= 140) damagePlayer(Math.round(arch.attack * 1.15), enemy.x);
                   enemy.state = 'cooldown';
                   enemy.stateTimer = arch.attackCooldown;
                 } else {
-                  for (const [ox, oy] of [[0, 0], [72, -35], [-72, 35]]) {
-                    fx.spawnHazard(player.x + ox, player.y + oy, 42, 0.95, 22, 0xf97316);
+                  // 3. Seisme du Labyrinthe (4 zones sismiques + 6 eclats radiaux)
+                  for (const [ox, oy] of [[0, 0], [82, -38], [-82, -38], [0, 74]]) {
+                    fx.spawnHazard(player.x + ox, player.y + oy, 44, 1.05, 22, 0xf97316);
+                  }
+                  for (let k = 0; k < 6; k++) {
+                    const ra = a + (k / 6) * Math.PI * 2;
+                    fx.spawnProjectile({
+                      x: enemy.x, y: enemy.y,
+                      vx: Math.cos(ra) * 245, vy: Math.sin(ra) * 245,
+                      damage: 18, radius: 8, fromPlayer: false, life: 1.5, color: COLORS.gold, style: 'fireball'
+                    });
                   }
                   enemy.state = 'cooldown';
                   enemy.stateTimer = arch.attackCooldown;
                 }
               } else if (arch.attackStyle === 'venom_spit') {
-                fx.spawnProjectile({
-                  x: enemy.x,
-                  y: enemy.y - 6,
-                  vx: Math.cos(a) * 285,
-                  vy: Math.sin(a) * 285,
-                  damage: arch.attack,
-                  radius: 6,
-                  fromPlayer: false,
-                  life: 1.4,
-                  color: 0x4ade80,
-                  style: 'venom'
-                });
-                fx.spawnHazard(player.x, player.y, 32, 0.95, Math.round(arch.attack * 0.75), 0x4ade80);
+                const step = enemy.patternStep;
+                enemy.patternStep = (enemy.patternStep + 1) % 2;
+                if (step === 0) {
+                  for (const off of [-0.14, 0.14]) {
+                    fx.spawnProjectile({
+                      x: enemy.x, y: enemy.y - 6,
+                      vx: Math.cos(a + off) * 275, vy: Math.sin(a + off) * 275,
+                      damage: Math.round(arch.attack * 0.85), radius: 6, fromPlayer: false, life: 1.4, color: 0x4ade80, style: 'venom'
+                    });
+                  }
+                } else {
+                  fx.spawnSlash(enemy.x, enemy.y, 0, 95, 0x22c55e, 'ring');
+                  fx.spawnHazard(player.x, player.y, 38, 1.0, Math.round(arch.attack * 0.8), 0x4ade80);
+                  if (dist <= 95) damagePlayer(arch.attack, enemy.x);
+                }
                 enemy.state = 'cooldown';
                 enemy.stateTimer = arch.attackCooldown;
               } else if (arch.attackStyle === 'hydra') {
@@ -1019,27 +1223,20 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
                   for (const offset of [-0.42, -0.21, 0, 0.21, 0.42]) {
                     const ang = a + offset;
                     fx.spawnProjectile({
-                      x: enemy.x,
-                      y: enemy.y - 10,
-                      vx: Math.cos(ang) * 295,
-                      vy: Math.sin(ang) * 295,
-                      damage: Math.round(arch.attack * 0.8),
-                      radius: 6.5,
-                      fromPlayer: false,
-                      life: 1.5,
-                      color: 0x4ade80,
-                      style: 'venom'
+                      x: enemy.x, y: enemy.y - 10,
+                      vx: Math.cos(ang) * 280, vy: Math.sin(ang) * 280,
+                      damage: Math.round(arch.attack * 0.8), radius: 6.5, fromPlayer: false, life: 1.5, color: 0x4ade80, style: 'venom'
                     });
                   }
                 } else if (step === 1) {
                   for (const offset of [-0.35, 0, 0.35]) {
-                    fx.spawnSlash(enemy.x, enemy.y - 4, a + offset, 118, 0x4ade80, 'arc');
+                    fx.spawnSlash(enemy.x, enemy.y - 4, a + offset, 122, 0x4ade80, 'arc');
                   }
                   cameraShake = Math.max(cameraShake, 6);
-                  if (dist <= 122) damagePlayer(arch.attack, enemy.x);
+                  if (dist <= 125) damagePlayer(arch.attack, enemy.x);
                 } else {
                   for (const [ox, oy] of [[0, 0], [82, -40], [-82, -40], [0, 78]]) {
-                    fx.spawnHazard(player.x + ox, player.y + oy, 44, 1.0, 24, 0x4ade80);
+                    fx.spawnHazard(player.x + ox, player.y + oy, 44, 1.05, 22, 0x4ade80);
                   }
                 }
                 enemy.state = 'cooldown';
@@ -1173,12 +1370,16 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
 
         if (pendingRespawn) {
           pendingRespawn = false;
+          const goldLost = Math.floor(stateRef.current.gold * 0.15);
+          const xpLost = Math.min(stateRef.current.xp, Math.floor(xpRequiredForLevel(stateRef.current.level) * 0.25));
+          stateRef.current.gold = Math.max(0, stateRef.current.gold - goldLost);
+          stateRef.current.xp = Math.max(0, stateRef.current.xp - xpLost);
           const respawnStats = getComputedStats(stateRef.current);
           stateRef.current.hp = respawnStats.maxHp;
           iFrames = 1.2;
           player.vx = 0;
           player.vy = 0;
-          showToast("Vaincu ! Cassandre vous ramène à la cité de l'Agora.");
+          showToast(`Vaincu ! -${goldLost} drachmes, -${xpLost} XP. Retour à l'Agora.`);
           loadZone('agora', ZONES.agora.defaultSpawn.x, ZONES.agora.defaultSpawn.y);
           syncUi(true);
           return;
@@ -1248,6 +1449,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         if (hudSyncTimer >= 0.12) {
           hudSyncTimer = 0;
           setSpecialCd(specialCooldown > 0.05 ? specialCooldown : 0);
+          setActiveSkillCds({ ...activeCds });
           setDashCd(dashCooldown > 0.05 ? dashCooldown : 0);
 
           const nearest = findNearestInteraction();
@@ -1372,6 +1574,14 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
     }
   };
 
+  const handleCraftRecipe = (recipeId: string) => {
+    if (craftRecipe(stateRef.current, recipeId)) {
+      sound.playChest();
+      syncUi(true);
+      showToast('Objet fabriqué avec succès !');
+    }
+  };
+
   const handleUpgradeSkill = (skillId: string) => {
     if (upgradeSkill(stateRef.current, skillId)) {
       sound.playQuest();
@@ -1411,6 +1621,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         settings={settings}
         specialCooldown={specialCd}
         dashCooldown={dashCd}
+        activeSkillCooldowns={activeSkillCds}
         interactPrompt={modalOpen ? null : interactPrompt}
         toast={toast}
         zoneBanner={zoneBanner}
@@ -1423,6 +1634,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
         onTriggerSpecial={() => actionsRef.current?.special()}
         onTriggerDash={() => actionsRef.current?.dash()}
         onTriggerPotion={() => actionsRef.current?.potion()}
+        onTriggerActiveSkill={(id) => actionsRef.current?.castActiveSkill(id)}
         onTriggerInteract={() => actionsRef.current?.interact()}
         onOpenModal={(tab) => setModalTab(tab)}
         onOpenPause={() => setPauseOpen(true)}
@@ -1478,6 +1690,7 @@ export function GameCanvas({ server, initialState, onLeave }: GameCanvasProps) {
           initialTab={modalTab}
           onUseConsumable={(itemId) => actionsRef.current?.potion(itemId)}
           onEquipItem={handleEquipItem}
+          onCraftRecipe={handleCraftRecipe}
           onUpgradeSkill={handleUpgradeSkill}
           onResetSkills={handleResetSkills}
           onClose={() => setModalTab(null)}

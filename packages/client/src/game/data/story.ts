@@ -458,6 +458,14 @@ export const NPCS: Record<string, NpcDef> = {
     idleDialogue:
       "Ma cité s'est effondrée en une nuit sous la foudre. Heureusement que les murailles de l'Agora ont tenu."
   },
+  homere: {
+    id: 'homere',
+    name: 'Homère',
+    role: 'Aède de la Taverne',
+    look: 'citizen',
+    idleDialogue:
+      "Bienvenue à la Taverne des Héros ! Reprends ton souffle près du feu : on raconte que les coffres les plus précieux des plaines et des donjons sont scellés par d'anciennes runes de combat."
+  },
   neree: {
     id: 'neree',
     name: 'Nérée',
