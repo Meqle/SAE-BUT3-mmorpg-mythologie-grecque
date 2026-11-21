@@ -74,6 +74,7 @@ Les règles importantes sont vérifiées par PostgreSQL lui-même, pas seulement
 - un pseudo, un email et un nom de personnage sont uniques (sans tenir compte des majuscules) ;
 - les PV restent entre 0 et le maximum, l'or ne devient jamais négatif ;
 - un compte a au plus 5 personnages ;
+- le journal des événements ne peut pas être modifié, ni effacé avant 6 mois (trigger) ;
 - une épée (objet non empilable) a toujours une quantité de 1 ;
 - un seul objet équipé par emplacement (deux pour les reliques), et une potion ne s'équipe pas (trigger) ;
 - un échange se fait en entier ou pas du tout (`effectuer_echange`), un objet équipé ne s'échange pas ;
@@ -82,6 +83,34 @@ Les règles importantes sont vérifiées par PostgreSQL lui-même, pas seulement
 - un personnage est dans une seule guilde, et une guilde n'a qu'un seul chef (index unique partiel) ;
 - pas d'amitié avec soi-même, et une seule relation par paire de joueurs, quel que soit le sens ;
 - les colonnes JSONB ont la bonne forme (tableau pour les phases et les étapes, objet pour les statistiques, la progression et les compteurs).
+
+## Journal des événements
+
+Le serveur écrit dans `journal_evenement` (code : `../journal/journal.ts`) :
+
+| Type | Quand | Détails (JSONB) |
+|---|---|---|
+| `inscription` | création d'un compte | — |
+| `connexion_reussie` / `deconnexion` | connexion, déconnexion | — |
+| `connexion_refusee` | mauvais mot de passe, compte inconnu, compte banni, trop d'essais | `motif`, `identifiant_tente` si le compte n'existe pas |
+| `creation_personnage` / `suppression_personnage` | API personnages | `personnage_id`, `nom`… |
+| `sauvegarde_refusee` | sauvegarde rejetée par la base (3 reliques, quête sautée…) | `personnage_id`, `motif` |
+| `sanction` | `npm run admin:bannir` | `action`, `motif` |
+
+- Écrire dans le journal ne bloque jamais le joueur : si l'écriture échoue, l'action continue.
+- Le journal est **infalsifiable** (trigger `journal_infalsifiable`) : une ligne ne peut être ni modifiée
+  ni supprimée, sauf après 6 mois (on ne garde pas les adresses IP indéfiniment).
+- Le mot de passe n'est **jamais** écrit dans le journal.
+
+Rapport de sécurité (rafales de connexions refusées, comptes visés, sauvegardes refusées) :
+
+```bash
+npm run admin:journal           # dernières 24 heures
+npm run admin:journal -- 168    # 7 derniers jours
+```
+
+⚠️ Derrière Nginx, l'adresse enregistrée est celle de Nginx tant que le serveur n'a pas
+`app.set('trust proxy', 1)` et que Nginx n'envoie pas `X-Forwarded-For` (à régler avec le pôle réseau).
 
 ## Tester l'échange de démonstration
 

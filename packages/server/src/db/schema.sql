@@ -373,14 +373,17 @@ CREATE TRIGGER progression_date_maj
     BEFORE UPDATE ON progression_quete
     FOR EACH ROW EXECUTE FUNCTION maj_date_progression();
 
--- Journal des événements : connexions, échanges, combats...
+-- Journal des événements : connexions, personnages, sauvegardes refusées, sanctions...
 -- Sert à repérer les tricheurs et les attaques (ex. force brute sur la connexion).
+-- Rempli par le serveur (packages/server/src/journal) ; on n'y écrit qu'en
+-- ajout : une ligne n'est jamais modifiée.
 -- compte_id est vide quand le compte est inconnu (ex. pseudo inexistant).
 CREATE TABLE journal_evenement (
     id          BIGINT      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     compte_id   INTEGER     REFERENCES compte(id) ON DELETE SET NULL,
     type        TEXT        NOT NULL CHECK (type IN (
                     'inscription','connexion_reussie','connexion_refusee','deconnexion',
+                    'creation_personnage','suppression_personnage','sauvegarde_refusee',
                     'echange','combat','victoire_boss','sanction')),
     horodatage  TIMESTAMPTZ NOT NULL DEFAULT now(),
     adresse_ip  INET,
@@ -391,6 +394,36 @@ CREATE TABLE journal_evenement (
 -- Index adaptés aux recherches fréquentes : par type et date, par compte et date.
 CREATE INDEX journal_type_date_idx   ON journal_evenement (type, horodatage DESC);
 CREATE INDEX journal_compte_date_idx ON journal_evenement (compte_id, horodatage DESC);
+
+-- Journal infalsifiable : une fois écrite, une ligne ne peut plus être
+-- modifiée (un tricheur qui obtiendrait l'accès au serveur ne pourrait pas
+-- effacer ses traces). Deux exceptions :
+--   - la suppression d'un compte vide compte_id (ON DELETE SET NULL) ;
+--   - les lignes de plus de 6 mois peuvent être supprimées : on ne garde pas
+--     les adresses IP indéfiniment (durée de conservation des journaux de connexion).
+CREATE FUNCTION proteger_journal() RETURNS trigger AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        IF OLD.horodatage > now() - interval '6 months' THEN
+            RAISE EXCEPTION 'Le journal ne peut pas être effacé avant 6 mois (événement %)', OLD.id
+                USING ERRCODE = 'insufficient_privilege';
+        END IF;
+        RETURN OLD;
+    END IF;
+    -- UPDATE : seul le passage de compte_id à NULL (compte supprimé) est permis.
+    IF NEW.compte_id IS NULL
+       AND (NEW.id, NEW.type, NEW.horodatage, NEW.adresse_ip, NEW.details)
+           IS NOT DISTINCT FROM (OLD.id, OLD.type, OLD.horodatage, OLD.adresse_ip, OLD.details) THEN
+        RETURN NEW;
+    END IF;
+    RAISE EXCEPTION 'Le journal ne peut pas être modifié (événement %)', OLD.id
+        USING ERRCODE = 'insufficient_privilege';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER journal_infalsifiable
+    BEFORE UPDATE OR DELETE ON journal_evenement
+    FOR EACH ROW EXECUTE FUNCTION proteger_journal();
 
 -- ---------------------------------------------------------------------
 -- 4. Inventaire

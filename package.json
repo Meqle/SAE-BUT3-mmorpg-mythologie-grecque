@@ -13,7 +13,8 @@
     "dev:server": "npm run dev -w @greek-myth/server",
     "build": "npm run build -w @greek-myth/shared && npm run build -w @greek-myth/server && npm run build -w @greek-myth/client",
     "db:verifier": "npm run db:verifier -w @greek-myth/server",
-    "admin:bannir": "npm run admin:bannir -w @greek-myth/server --"
+    "admin:bannir": "npm run admin:bannir -w @greek-myth/server --",
+    "admin:journal": "npm run admin:journal -w @greek-myth/server --"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

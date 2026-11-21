@@ -14,6 +14,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { asynchrone, erreurPostgres, exigerConnexion } from '../auth/routes.js';
+import { adresseClient, journaliser } from '../journal/journal.js';
 import {
   creerPersonnage,
   lirePersonnage,
@@ -84,6 +85,22 @@ function lireId(req: Request, res: Response): number | null {
 
 const introuvable = (res: Response) => res.status(404).json({ erreur: 'Personnage introuvable.' });
 
+// Répond par une erreur. Si c'est une SAUVEGARDE refusée, on la note dans le
+// journal : des refus répétés sur un compte = bug du jeu ou tentative de triche.
+function refuser(req: Request, res: Response, code: number, message: string): void {
+  // (req.params n'est pas rempli dans le gestionnaire d'erreurs : on relit l'id dans le chemin.)
+  const sauvegarde = req.method === 'PUT' ? /^\/(\d+)\/save$/.exec(req.path) : null;
+  if (sauvegarde) {
+    journaliser({
+      type: 'sauvegarde_refusee',
+      compteId: res.locals.compteId as number,
+      adresseIp: adresseClient(req),
+      details: { personnage_id: Number(sauvegarde[1]), motif: message.slice(0, 200) }
+    });
+  }
+  res.status(code).json({ erreur: message });
+}
+
 // --- Routes ---------------------------------------------------------------
 
 export const routeurPersonnages = Router();
@@ -106,6 +123,12 @@ routeurPersonnages.post(
     }
     const compteId = res.locals.compteId as number;
     const id = await creerPersonnage(compteId, resultat.data);
+    journaliser({
+      type: 'creation_personnage',
+      compteId,
+      adresseIp: adresseClient(req),
+      details: { personnage_id: id, nom: resultat.data.heroName, classe: resultat.data.heroClass, divinite: resultat.data.god }
+    });
     res.status(201).json({ personnage: await lirePersonnage(compteId, id) });
   })
 );
@@ -132,7 +155,7 @@ routeurPersonnages.put(
     const resultat = schemaSauvegarde.safeParse(req.body);
     if (!resultat.success) {
       const probleme = resultat.error.issues[0];
-      res.status(400).json({ erreur: `Sauvegarde invalide (${probleme?.path.join('.') || 'corps'}) : ${probleme?.message}` });
+      refuser(req, res, 400, `Sauvegarde invalide (${probleme?.path.join('.') || 'corps'}) : ${probleme?.message}`);
       return;
     }
     const donnees = resultat.data;
@@ -153,10 +176,17 @@ routeurPersonnages.delete(
   asynchrone(async (req, res) => {
     const id = lireId(req, res);
     if (id === null) return;
-    if (!(await supprimerPersonnage(res.locals.compteId as number, id))) {
+    const nom = await supprimerPersonnage(res.locals.compteId as number, id);
+    if (!nom) {
       introuvable(res);
       return;
     }
+    journaliser({
+      type: 'suppression_personnage',
+      compteId: res.locals.compteId as number,
+      adresseIp: adresseClient(req),
+      details: { personnage_id: id, nom }
+    });
     res.status(204).end();
   })
 );
@@ -166,22 +196,22 @@ routeurPersonnages.delete(
 //   23514 = CHECK ou trigger (RAISE ... ERRCODE 'check_violation')
 //   23505 = UNIQUE (nom déjà pris)
 //   23503 = clé étrangère (objet encore référencé par un échange)
-routeurPersonnages.use((erreur: unknown, _req: Request, res: Response, _next: NextFunction) => {
+routeurPersonnages.use((erreur: unknown, req: Request, res: Response, _next: NextFunction) => {
   if (erreur instanceof SauvegardeRefusee) {
-    res.status(400).json({ erreur: erreur.message });
+    refuser(req, res, 400, erreur.message);
     return;
   }
   const pg = erreurPostgres(erreur) as { code?: string; constraint?: string; message?: string };
   if (pg.code === '23514') {
-    res.status(400).json({ erreur: `Refusé par la base : ${messageLisible(pg)}` });
+    refuser(req, res, 400, `Refusé par la base : ${messageLisible(pg)}`);
     return;
   }
   if (pg.code === '23505' && pg.constraint === 'personnage_nom_unique') {
-    res.status(409).json({ erreur: 'Ce nom de héros est déjà pris.' });
+    refuser(req, res, 409, 'Ce nom de héros est déjà pris.');
     return;
   }
   if (pg.code === '23503') {
-    res.status(409).json({ erreur: 'Un objet de ce personnage est engagé dans un échange : impossible de le retirer.' });
+    refuser(req, res, 409, 'Un objet de ce personnage est engagé dans un échange : impossible de le retirer.');
     return;
   }
   const baseInjoignable = pg.code === 'ECONNREFUSED' || (erreur instanceof Error && /connect|timeout/i.test(erreur.message));

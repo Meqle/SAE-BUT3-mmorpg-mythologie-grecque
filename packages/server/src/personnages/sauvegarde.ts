@@ -246,12 +246,13 @@ export async function creerPersonnage(
 }
 
 // Supprime un personnage (ses objets, quêtes, amitiés... partent avec lui : ON DELETE CASCADE).
-export async function supprimerPersonnage(compteId: number, personnageId: number): Promise<boolean> {
-  const supprimes = await db
+// Renvoie son nom, ou null s'il n'existe pas ou n'appartient pas au compte.
+export async function supprimerPersonnage(compteId: number, personnageId: number): Promise<string | null> {
+  const [supprime] = await db
     .delete(personnage)
     .where(and(eq(personnage.id, personnageId), eq(personnage.compteId, compteId)))
-    .returning({ id: personnage.id });
-  return supprimes.length > 0;
+    .returning({ nom: personnage.nom });
+  return supprime?.nom ?? null;
 }
 
 // ---------------------------------------------------------------------

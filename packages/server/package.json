@@ -8,7 +8,8 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "db:verifier": "tsx src/db/verifier.ts",
-    "admin:bannir": "tsx src/admin/bannir.ts"
+    "admin:bannir": "tsx src/admin/bannir.ts",
+    "admin:journal": "tsx src/admin/journal.ts"
   },
   "dependencies": {
     "@greek-myth/shared": "*",

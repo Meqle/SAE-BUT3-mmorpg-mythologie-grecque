@@ -7,6 +7,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { creerCompte, trouverCompteParId, trouverCompteParIdentifiant } from '../db/requetes.js';
+import { adresseClient, journaliser } from '../journal/journal.js';
 import { ServiceIndisponible } from '../redis/client.js';
 import { cleEchecs, effacerEchecs, enregistrerEchec, secondesDeBlocage } from '../redis/antiForceBrute.js';
 import { creerSession, sessionActive, supprimerSession } from '../redis/sessions.js';
@@ -102,6 +103,7 @@ routeurAuth.post(
 
     try {
       const compte = await creerCompte({ email, pseudo, motDePasseHash: await hacherMotDePasse(motDePasse) });
+      journaliser({ type: 'inscription', compteId: compte.id, adresseIp: adresseClient(req) });
       res.status(201).json(await reponseAvecJeton(compte));
     } catch (erreur) {
       const pg = erreurPostgres(erreur);
@@ -126,12 +128,23 @@ routeurAuth.post(
     const { identifiant, motDePasse } = resultat.data;
 
     const compte = await trouverCompteParIdentifiant(identifiant);
+    const adresseIp = adresseClient(req);
+    // Connexion refusée : on garde la raison. Si le compte n'existe pas, on note
+    // ce qui a été tapé (utile pour repérer quelqu'un qui essaie « admin1, admin2... »).
+    const refus = (motif: string) =>
+      journaliser({
+        type: 'connexion_refusee',
+        compteId: compte?.id ?? null,
+        adresseIp,
+        details: compte ? { motif } : { motif, identifiant_tente: identifiant.slice(0, 60) }
+      });
 
     // Anti force brute : trop d'échecs récents sur ce compte -> on refuse sans
     // même vérifier le mot de passe (429 = « trop de requêtes »).
     const cle = cleEchecs(compte?.id ?? null, identifiant);
     const attente = await secondesDeBlocage(cle);
     if (attente > 0) {
+      refus('trop_de_tentatives');
       res.set('Retry-After', String(attente));
       res.status(429).json({ erreur: `Trop de tentatives. Réessayez dans ${Math.ceil(attente / 60)} min.` });
       return;
@@ -143,16 +156,20 @@ routeurAuth.post(
     // Même message que le pseudo soit inconnu ou le mot de passe faux :
     // on ne révèle pas quels comptes existent.
     if (!compte || !(await verifierMotDePasse(compte.motDePasseHash, motDePasse))) {
+      refus(compte ? 'mot_de_passe' : 'compte_inconnu');
       await enregistrerEchec(cle);
       res.status(401).json({ erreur: 'Identifiant ou mot de passe incorrect.' });
       return;
     }
     await effacerEchecs(cle);
     if (compte.banni) {
+      refus('compte_banni');
       res.status(403).json({ erreur: 'Ce compte a été banni.' });
       return;
     }
-    res.json(await reponseAvecJeton(compte));
+    const reponse = await reponseAvecJeton(compte);
+    journaliser({ type: 'connexion_reussie', compteId: compte.id, adresseIp });
+    res.json(reponse);
   })
 );
 
@@ -173,8 +190,9 @@ routeurAuth.get(
 routeurAuth.post(
   '/logout',
   exigerConnexion,
-  asynchrone(async (_req, res) => {
+  asynchrone(async (req, res) => {
     await supprimerSession(res.locals.jti as string, res.locals.compteId as number);
+    journaliser({ type: 'deconnexion', compteId: res.locals.compteId as number, adresseIp: adresseClient(req) });
     res.status(204).end();
   })
 );

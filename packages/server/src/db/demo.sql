@@ -155,7 +155,7 @@ JOIN compte c ON c.pseudo = 'demo_persee';
 INSERT INTO journal_evenement (compte_id, type, horodatage, adresse_ip, details)
 SELECT NULL, 'connexion_refusee',
        '2026-11-15 21:03:00+01'::timestamptz + (n * 4 || ' seconds')::interval,
-       '203.0.113.42', jsonb_build_object('motif', 'compte_inconnu', 'pseudo_tente', 'admin' || n)
+       '203.0.113.42', jsonb_build_object('motif', 'compte_inconnu', 'identifiant_tente', 'admin' || n)
 FROM generate_series(1, 12) AS n;
 
 COMMIT;
