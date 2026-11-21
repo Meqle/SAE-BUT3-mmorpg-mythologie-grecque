@@ -28,14 +28,51 @@ export interface PhaseBoss {
   attaques: string[];
 }
 
+// Objectif de quête, au format du client (story.ts).
 export interface EtapeQuete {
-  type: 'dialogue' | 'deplacement' | 'collecte' | 'combat';
-  [cle: string]: unknown;
+  id: string;
+  type: 'interact' | 'kill' | 'enter_zone';
+  targetId: string;
+  required: number;
+  label: string;
 }
+
+// Progression détaillée du personnage (colonne personnage.progression).
+// Mêmes noms de champs que la sauvegarde du client (GameProgressState).
+export interface ProgressionEtendue {
+  prologueSeen?: boolean;
+  collectedInteractables?: string[];
+  activatedTrialSteles?: string[];
+  unlockedCodex?: string[];
+  defeatedBosses?: string[];
+  bestiaryKills?: Record<string, number>;
+  discoveredZones?: string[];
+  skillPoints?: number;
+  unlockedSkills?: Record<string, number>;
+  zoneKillCounts?: Record<string, number>;
+  [champ: string]: unknown;
+}
+
+export type EmplacementObjet = 'arme' | 'tete' | 'torse' | 'bouclier' | 'pieds' | 'anneau' | 'relique';
+export type StatutQuete = 'en_cours' | 'a_rendre' | 'terminee' | 'abandonnee';
 
 // ---------------------------------------------------------------------
 // Référentiels
 // ---------------------------------------------------------------------
+
+export const objet = pgTable('objet', {
+  id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+  code: text('code').notNull().unique(),
+  nom: text('nom').notNull().unique(),
+  description: text('description').notNull().default(''),
+  categorie: text('categorie').notNull(),
+  emplacement: text('emplacement').$type<EmplacementObjet>(),
+  rarete: text('rarete').notNull().default('commun'),
+  empilable: boolean('empilable').notNull().default(false),
+  prix: integer('prix').notNull().default(0),
+  // Ex. { attaque: 4 } ou { soin_pct: 38 } : chaque objet a ses propres statistiques
+  statistiques: jsonb('statistiques').$type<Record<string, number | string>>().notNull().default({})
+});
 
 export const classe = pgTable('classe', {
   id: smallint('id').primaryKey().generatedAlwaysAsIdentity(),
@@ -43,7 +80,8 @@ export const classe = pgTable('classe', {
   nom: text('nom').notNull().unique(),
   description: text('description').notNull().default(''),
   pvBase: integer('pv_base').notNull(),
-  attaqueBase: integer('attaque_base').notNull()
+  attaqueBase: integer('attaque_base').notNull(),
+  armeDepartCode: text('arme_depart_code').notNull().references(() => objet.code)
 });
 
 export const divinite = pgTable('divinite', {
@@ -57,9 +95,12 @@ export const divinite = pgTable('divinite', {
 
 export const zone = pgTable('zone', {
   id: smallint('id').primaryKey().generatedAlwaysAsIdentity(),
+  code: text('code').notNull().unique(),
   nom: text('nom').notNull().unique(),
   royaume: text('royaume').notNull(),
-  niveauMin: smallint('niveau_min').notNull().default(1)
+  niveauMin: smallint('niveau_min').notNull().default(1),
+  zoneSure: boolean('zone_sure').notNull().default(false),
+  modeVue: text('mode_vue').notNull().default('top-down')
 });
 
 export const boss = pgTable('boss', {
@@ -73,23 +114,13 @@ export const boss = pgTable('boss', {
   phases: jsonb('phases').$type<PhaseBoss[]>().notNull().default([])
 });
 
-export const objet = pgTable('objet', {
-  id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
-  nom: text('nom').notNull().unique(),
-  description: text('description').notNull().default(''),
-  categorie: text('categorie').notNull(),
-  rarete: text('rarete').notNull().default('commun'),
-  empilable: boolean('empilable').notNull().default(false),
-  prix: integer('prix').notNull().default(0),
-  // Ex. { attaque: 8 } ou { soin_pv: 40 } : chaque objet a ses propres statistiques
-  statistiques: jsonb('statistiques').$type<Record<string, number | string>>().notNull().default({})
-});
-
 export const quete = pgTable('quete', {
   id: text('id').primaryKey(),
   titre: text('titre').notNull().unique(),
-  niveauRequis: smallint('niveau_requis').notNull().default(1),
+  type: text('type').$type<'principale' | 'secondaire'>().notNull().default('principale'),
+  niveauConseille: smallint('niveau_conseille').notNull().default(1),
   recompenseXp: integer('recompense_xp').notNull().default(0),
+  recompenseOr: integer('recompense_or').notNull().default(0),
   etapes: jsonb('etapes').$type<EtapeQuete[]>().notNull().default([])
 });
 
@@ -132,7 +163,9 @@ export const personnage = pgTable('personnage', {
   positionY: doublePrecision('position_y').notNull().default(300),
   modeVue: text('mode_vue').notNull().default('top-down'),
   piecesOr: integer('pieces_or').notNull().default(0),
-  dateCreation: timestamp('date_creation', { withTimezone: true }).notNull().defaultNow()
+  progression: jsonb('progression').$type<ProgressionEtendue>().notNull().default({}),
+  dateCreation: timestamp('date_creation', { withTimezone: true }).notNull().defaultNow(),
+  dateSauvegarde: timestamp('date_sauvegarde', { withTimezone: true }).notNull().defaultNow()
 });
 
 // ---------------------------------------------------------------------
@@ -210,7 +243,9 @@ export const progressionQuete = pgTable(
   {
     personnageId: integer('personnage_id').notNull().references(() => personnage.id, { onDelete: 'cascade' }),
     queteId: text('quete_id').notNull().references(() => quete.id, { onDelete: 'cascade' }),
-    statut: text('statut').notNull().default('en_cours'),
+    statut: text('statut').$type<StatutQuete>().notNull().default('en_cours'),
+    // Compteur de chaque objectif. Ex. { kill_satyres: 2 }
+    compteurs: jsonb('compteurs').$type<Record<string, number>>().notNull().default({}),
     dateMaj: timestamp('date_maj', { withTimezone: true }).notNull().defaultNow()
   },
   (table) => [primaryKey({ columns: [table.personnageId, table.queteId] })]

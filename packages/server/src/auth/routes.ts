@@ -53,14 +53,14 @@ async function reponseAvecJeton(compte: Compte) {
 }
 
 // Express 4 ne rattrape pas les erreurs des fonctions async : on les transmet nous-mêmes.
-function asynchrone(fonction: (req: Request, res: Response) => Promise<unknown>) {
+export function asynchrone(fonction: (req: Request, res: Response) => Promise<unknown>) {
   return (req: Request, res: Response, next: NextFunction) => {
     fonction(req, res).catch(next);
   };
 }
 
 // Récupère le code d'erreur PostgreSQL (Drizzle l'enveloppe dans "cause").
-function erreurPostgres(erreur: unknown): { code?: string; constraint?: string } {
+export function erreurPostgres(erreur: unknown): { code?: string; constraint?: string } {
   const e = erreur as { code?: string; constraint?: string; cause?: unknown };
   return e?.code ? e : ((e?.cause as { code?: string; constraint?: string }) ?? {});
 }

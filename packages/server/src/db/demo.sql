@@ -18,27 +18,39 @@ INSERT INTO compte (email, pseudo, mot_de_passe_hash) VALUES
     ('demo.persee@mythologia.test',   'demo_persee',   '!demo-aucune-connexion'),
     ('demo.atalante@mythologia.test', 'demo_atalante', '!demo-aucune-connexion');
 
-INSERT INTO personnage (compte_id, classe_id, divinite_code, zone_id, nom, niveau, pv, pv_max, pieces_or)
-SELECT c.id, cl.id, d.divinite, z.id, d.nom, d.niveau, cl.pv_base, cl.pv_base, d.pieces_or
+INSERT INTO personnage (compte_id, classe_id, divinite_code, zone_id, nom, niveau, experience, pv, pv_max, pieces_or, progression)
+SELECT c.id, cl.id, d.divinite, z.id, d.nom, d.niveau, d.xp, cl.pv_base, cl.pv_base, d.pieces_or, d.progression::jsonb
 FROM (VALUES
-    ('demo_persee',   'GUERRIER', 'ATHENA', 'Persée',   12, 300),
-    ('demo_atalante', 'ARCHER',   'APOLLO', 'Atalante', 10, 150)
-) AS d(pseudo, classe, divinite, nom, niveau, pieces_or)
+    ('demo_persee',   'GUERRIER', 'ATHENA', 'rivage',     'Persée',   12, 420, 300,
+     '{"prologueSeen": true, "discoveredZones": ["agora", "plaines", "sanctuaire", "rivage"],
+       "defeatedBosses": ["gardien_airain", "centaure", "sentinelle_poseidon"],
+       "bestiaryKills": {"satyre": 21, "harpie": 14, "automate": 6, "squelette": 2},
+       "skillPoints": 2, "unlockedSkills": {"w_plate": 3, "w_taunt": 1}}'),
+    ('demo_atalante', 'ARCHER',   'APOLLO', 'plaines',    'Atalante', 10, 150, 150,
+     '{"prologueSeen": true, "discoveredZones": ["agora", "plaines"],
+       "defeatedBosses": [], "bestiaryKills": {"satyre": 3, "harpie": 1}, "skillPoints": 1}')
+) AS d(pseudo, classe, divinite, zone, nom, niveau, xp, pieces_or, progression)
 JOIN compte c  ON c.pseudo = d.pseudo
 JOIN classe cl ON cl.code = d.classe
-JOIN zone z    ON z.nom = 'Agora de l''Olympe';
+JOIN zone z    ON z.code = d.zone;
 
+-- Inventaire : la base vérifie les règles (un objet non empilable a une
+-- quantité de 1, un seul objet équipé par emplacement, deux reliques au plus).
 INSERT INTO instance_objet (objet_id, proprietaire_id, quantite, equipe)
 SELECT o.id, p.id, d.quantite, d.equipe
 FROM (VALUES
-    ('Persée',   'Épée de bronze',         1, TRUE),
-    ('Persée',   'Bouclier d''hoplite',    1, FALSE),
-    ('Persée',   'Potion d''ambroisie',    5, FALSE),
-    ('Atalante', 'Arc en bois d''olivier', 1, TRUE),
-    ('Atalante', 'Éclat de foudre',        2, FALSE)
+    ('Persée',   'epee_bronze',       1, TRUE),
+    ('Persée',   'casque_corinthien', 1, TRUE),
+    ('Persée',   'coeur_braise',      1, TRUE),
+    ('Persée',   'coeur_airain',      1, TRUE),
+    ('Persée',   'bouclier_hoplite',  1, FALSE),
+    ('Persée',   'potion_ambroisie',  5, FALSE),
+    ('Atalante', 'arc_olivier',       1, TRUE),
+    ('Atalante', 'eclat_foudre',      2, FALSE),
+    ('Atalante', 'herbe_ambroisie',   1, FALSE)
 ) AS d(personnage, objet, quantite, equipe)
 JOIN personnage p ON p.nom = d.personnage
-JOIN objet o      ON o.nom = d.objet;
+JOIN objet o      ON o.code = d.objet;
 
 INSERT INTO victoire_boss (personnage_id, boss_code, duree_combat_s)
 SELECT id, 'BOSS_ATHENA', 184 FROM personnage WHERE nom = 'Persée';
@@ -46,13 +58,37 @@ SELECT id, 'BOSS_ATHENA', 184 FROM personnage WHERE nom = 'Persée';
 INSERT INTO classement_saison (personnage_id, saison, score)
 SELECT id, 1, CASE nom WHEN 'Persée' THEN 1250 ELSE 980 END FROM personnage;
 
--- Quêtes : insérées dans l'ordre, car la base vérifie les prérequis et le niveau.
-INSERT INTO progression_quete (personnage_id, quete_id, statut)
-SELECT id, 'tutoriel_agora', 'terminee' FROM personnage;
-INSERT INTO progression_quete (personnage_id, quete_id, statut)
-SELECT id, 'offrande_athena', CASE nom WHEN 'Persée' THEN 'terminee' ELSE 'en_cours' END FROM personnage;
-INSERT INTO progression_quete (personnage_id, quete_id, statut)
-SELECT id, 'epreuve_athena', 'en_cours' FROM personnage WHERE nom = 'Persée';
+-- Quêtes : insérées dans l'ordre, car la base vérifie les prérequis.
+INSERT INTO progression_quete (personnage_id, quete_id, statut, compteurs)
+SELECT p.id, d.quete, d.statut, d.compteurs::jsonb
+FROM (VALUES
+    ('Persée',   'mq_1_etincelle',         'terminee', '{"light_brasero": 1}'),
+    ('Persée',   'sq_ambroisie_perdue',    'terminee', '{"collect_herbs": 3}'),
+    ('Atalante', 'mq_1_etincelle',         'terminee', '{"light_brasero": 1}'),
+    ('Atalante', 'sq_ambroisie_perdue',    'en_cours', '{"collect_herbs": 1}')
+) AS d(personnage, quete, statut, compteurs)
+JOIN personnage p ON p.nom = d.personnage;
+
+INSERT INTO progression_quete (personnage_id, quete_id, statut, compteurs)
+SELECT p.id, d.quete, d.statut, d.compteurs::jsonb
+FROM (VALUES
+    ('Persée',   'mq_2_terres_foudroyees', 'terminee', '{"kill_satyres": 3, "kill_harpies": 2, "read_stele": 1}'),
+    ('Persée',   'sq_portes_chaos',        'terminee', '{"kill_centaure": 1}'),
+    ('Atalante', 'mq_2_terres_foudroyees', 'en_cours', '{"kill_satyres": 3, "kill_harpies": 1, "read_stele": 0}')
+) AS d(personnage, quete, statut, compteurs)
+JOIN personnage p ON p.nom = d.personnage;
+
+INSERT INTO progression_quete (personnage_id, quete_id, statut, compteurs)
+SELECT id, 'mq_3_sanctuaire', 'terminee', '{"enter_sanctuaire": 1, "kill_automates": 2, "kill_gardien": 1}'
+FROM personnage WHERE nom = 'Persée';
+
+INSERT INTO progression_quete (personnage_id, quete_id, statut, compteurs)
+SELECT p.id, d.quete, d.statut, d.compteurs::jsonb
+FROM (VALUES
+    ('mq_4_rivage_epreuve',  'a_rendre', '{"activate_steles": 3, "kill_sentinel": 1}'),
+    ('sq_chasse_squelettes', 'en_cours', '{"kill_squelettes": 2}')
+) AS d(quete, statut, compteurs)
+CROSS JOIN personnage p WHERE p.nom = 'Persée';
 
 -- Échange proposé : Persée donne son bouclier + 50 pièces d'or,
 -- Atalante donne ses 2 éclats de foudre.
@@ -68,16 +104,21 @@ INSERT INTO ligne_echange (echange_id, instance_id, donneur_id)
 SELECT e.id, i.id, i.proprietaire_id
 FROM echange e, instance_objet i
 JOIN objet o ON o.id = i.objet_id
-WHERE o.nom IN ('Bouclier d''hoplite', 'Éclat de foudre');
+WHERE o.code IN ('bouclier_hoplite', 'eclat_foudre');
 
 -- Un troisième joueur, pour montrer les « amis d'amis ».
 INSERT INTO compte (email, pseudo, mot_de_passe_hash) VALUES
     ('demo.jason@mythologia.test', 'demo_jason', '!demo-aucune-connexion');
 
-INSERT INTO personnage (compte_id, classe_id, divinite_code, zone_id, nom, niveau, pv, pv_max, pieces_or)
-SELECT c.id, cl.id, 'ZEUS', z.id, 'Jason', 8, cl.pv_base, cl.pv_base, 90
+INSERT INTO personnage (compte_id, classe_id, divinite_code, zone_id, nom, niveau, pv, pv_max, pieces_or, progression)
+SELECT c.id, cl.id, 'ZEUS', z.id, 'Jason', 8, cl.pv_base, cl.pv_base, 90,
+       '{"prologueSeen": true, "discoveredZones": ["agora"], "defeatedBosses": []}'
 FROM compte c, classe cl, zone z
-WHERE c.pseudo = 'demo_jason' AND cl.code = 'MAGE' AND z.nom = 'Agora de l''Olympe';
+WHERE c.pseudo = 'demo_jason' AND cl.code = 'MAGE' AND z.code = 'agora';
+
+INSERT INTO instance_objet (objet_id, proprietaire_id, quantite, equipe)
+SELECT o.id, p.id, 1, TRUE FROM objet o, personnage p
+WHERE o.code = 'baton_oracle' AND p.nom = 'Jason';
 
 -- Guilde : Persée en est le chef, Atalante membre (Jason n'est dans aucune guilde).
 INSERT INTO guilde (nom, sigle) VALUES ('Les Argonautes', 'ARGO');

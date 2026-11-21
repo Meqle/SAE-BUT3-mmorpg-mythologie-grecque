@@ -22,15 +22,44 @@ BEGIN;
 -- 1. Référentiels du jeu (remplis par seed.sql, rarement modifiés)
 -- ---------------------------------------------------------------------
 
+-- Les codes (classe.code, zone.code, objet.code, quete.id) sont les MÊMES
+-- identifiants que ceux du client (packages/client/src/game/data) : la
+-- sauvegarde envoyée par le jeu se range directement dans ces tables.
+
+-- Modèle d'objet : "l'épée de bronze" en général.
+CREATE TABLE objet (
+    id           INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    code         TEXT    NOT NULL UNIQUE,            -- ex. 'epee_bronze', identifiant du client
+    nom          TEXT    NOT NULL UNIQUE,
+    description  TEXT    NOT NULL DEFAULT '',
+    categorie    TEXT    NOT NULL
+                 CHECK (categorie IN ('arme','armure','consommable','artefact','ressource')),
+    -- Emplacement où l'objet s'équipe ; vide pour un objet qui ne s'équipe pas (potion, ressource)
+    emplacement  TEXT    CHECK (emplacement IN ('arme','tete','torse','bouclier','pieds','anneau','relique')),
+    rarete       TEXT    NOT NULL DEFAULT 'commun'
+                 CHECK (rarete IN ('commun','rare','epique','legendaire','divin')),
+    empilable    BOOLEAN NOT NULL DEFAULT FALSE,     -- les potions s'empilent, les épées non
+    prix         INTEGER NOT NULL DEFAULT 0 CHECK (prix >= 0),
+    -- Statistiques propres à chaque objet (une épée a une attaque, une potion
+    -- un soin...) : document JSONB. Ex. {"attaque": 4} ou {"soin_pct": 38}
+    statistiques JSONB   NOT NULL DEFAULT '{}',
+    CONSTRAINT objet_code_format CHECK (code ~ '^[a-z0-9_]+$'),
+    CONSTRAINT objet_statistiques_objet CHECK (jsonb_typeof(statistiques) = 'object')
+);
+-- Index GIN : permet de chercher DANS le JSON (opérateur @>) sans tout parcourir.
+CREATE INDEX objet_statistiques_gin ON objet USING GIN (statistiques jsonb_path_ops);
+
 -- Classe du personnage : son style de combat.
 -- Pas de classe de soin : tous les personnages ont des sorts de soin.
 CREATE TABLE classe (
-    id            SMALLINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    code          TEXT     NOT NULL UNIQUE,          -- ex. 'GUERRIER', utilisé côté TypeScript
-    nom           TEXT     NOT NULL UNIQUE,
-    description   TEXT     NOT NULL DEFAULT '',
-    pv_base       INTEGER  NOT NULL CHECK (pv_base > 0),
-    attaque_base  INTEGER  NOT NULL CHECK (attaque_base >= 0),
+    id                SMALLINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    code              TEXT     NOT NULL UNIQUE,          -- ex. 'GUERRIER', utilisé côté TypeScript
+    nom               TEXT     NOT NULL UNIQUE,
+    description       TEXT     NOT NULL DEFAULT '',
+    pv_base           INTEGER  NOT NULL CHECK (pv_base > 0),
+    attaque_base      INTEGER  NOT NULL CHECK (attaque_base >= 0),
+    -- Arme donnée à la création du personnage
+    arme_depart_code  TEXT     NOT NULL REFERENCES objet(code),
     CONSTRAINT classe_code_format CHECK (code ~ '^[A-Z_]+$')
 );
 
@@ -50,9 +79,13 @@ CREATE TABLE divinite (
 -- Zone du monde, rattachée à l'un des trois royaumes.
 CREATE TABLE zone (
     id          SMALLINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    code        TEXT     NOT NULL UNIQUE,            -- ex. 'agora', identifiant du client (ZoneId)
     nom         TEXT     NOT NULL UNIQUE,
     royaume     TEXT     NOT NULL CHECK (royaume IN ('olympus','elysium','tartarus')),
-    niveau_min  SMALLINT NOT NULL DEFAULT 1 CHECK (niveau_min BETWEEN 1 AND 100)
+    niveau_min  SMALLINT NOT NULL DEFAULT 1 CHECK (niveau_min BETWEEN 1 AND 100),
+    zone_sure   BOOLEAN  NOT NULL DEFAULT FALSE,     -- pas de monstres (cité, intérieurs)
+    mode_vue    TEXT     NOT NULL DEFAULT 'top-down' CHECK (mode_vue IN ('top-down','side-view')),
+    CONSTRAINT zone_code_format CHECK (code ~ '^[a-z_]+$')
 );
 
 -- Boss divin : chaque divinité garde une zone (au plus un boss par zone).
@@ -70,33 +103,19 @@ CREATE TABLE boss (
     CONSTRAINT boss_phases_tableau CHECK (jsonb_typeof(phases) = 'array')
 );
 
--- Modèle d'objet : "l'épée de bronze" en général.
-CREATE TABLE objet (
-    id           INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    nom          TEXT    NOT NULL UNIQUE,
-    description  TEXT    NOT NULL DEFAULT '',
-    categorie    TEXT    NOT NULL
-                 CHECK (categorie IN ('arme','armure','consommable','artefact','ressource')),
-    rarete       TEXT    NOT NULL DEFAULT 'commun'
-                 CHECK (rarete IN ('commun','rare','epique','legendaire','divin')),
-    empilable    BOOLEAN NOT NULL DEFAULT FALSE,     -- les potions s'empilent, les épées non
-    prix         INTEGER NOT NULL DEFAULT 0 CHECK (prix >= 0),
-    -- Statistiques propres à chaque objet (une épée a une attaque, une potion
-    -- un soin...) : document JSONB. Ex. {"attaque": 8} ou {"soin_pv": 40}
-    statistiques JSONB   NOT NULL DEFAULT '{}',
-    CONSTRAINT objet_statistiques_objet CHECK (jsonb_typeof(statistiques) = 'object')
-);
--- Index GIN : permet de chercher DANS le JSON (opérateur @>) sans tout parcourir.
-CREATE INDEX objet_statistiques_gin ON objet USING GIN (statistiques jsonb_path_ops);
-
--- Quête : son contenu (étapes, dialogues) est un document JSONB.
+-- Quête : ses objectifs sont un document JSONB (chaque quête a les siens).
 CREATE TABLE quete (
-    id             TEXT     PRIMARY KEY,                 -- ex. 'tutoriel_agora'
-    titre          TEXT     NOT NULL UNIQUE,
-    niveau_requis  SMALLINT NOT NULL DEFAULT 1 CHECK (niveau_requis BETWEEN 1 AND 100),
-    recompense_xp  INTEGER  NOT NULL DEFAULT 0 CHECK (recompense_xp >= 0),
-    -- Ex. [{"type": "dialogue", "pnj": "Hermès"}, {"type": "combat", "boss": "BOSS_ATHENA"}]
-    etapes         JSONB    NOT NULL DEFAULT '[]',
+    id                TEXT     PRIMARY KEY,                 -- ex. 'mq_1_etincelle', identifiant du client
+    titre             TEXT     NOT NULL UNIQUE,
+    type              TEXT     NOT NULL DEFAULT 'principale' CHECK (type IN ('principale','secondaire')),
+    -- Niveau conseillé : le jeu ne bloque pas une quête selon le niveau,
+    -- la base ne le fait donc pas non plus (seuls les prérequis sont imposés).
+    niveau_conseille  SMALLINT NOT NULL DEFAULT 1 CHECK (niveau_conseille BETWEEN 1 AND 100),
+    recompense_xp     INTEGER  NOT NULL DEFAULT 0 CHECK (recompense_xp >= 0),
+    recompense_or     INTEGER  NOT NULL DEFAULT 0 CHECK (recompense_or >= 0),
+    -- Objectifs, au format du client. Ex. [{"id": "kill_satyres", "type": "kill",
+    --   "targetId": "satyre", "required": 3, "label": "Satyres vaincus"}]
+    etapes            JSONB    NOT NULL DEFAULT '[]',
     CONSTRAINT quete_id_format CHECK (id ~ '^[a-z0-9_]+$'),
     CONSTRAINT quete_etapes_tableau CHECK (jsonb_typeof(etapes) = 'array')
 );
@@ -166,7 +185,7 @@ CREATE TABLE personnage (
     zone_id        SMALLINT         NOT NULL REFERENCES zone(id),
     nom            TEXT             NOT NULL,
     niveau         SMALLINT         NOT NULL DEFAULT 1 CHECK (niveau BETWEEN 1 AND 100),
-    experience     INTEGER          NOT NULL DEFAULT 0 CHECK (experience >= 0),
+    experience     INTEGER          NOT NULL DEFAULT 0 CHECK (experience >= 0),  -- XP gagnée dans le niveau actuel
     pv             INTEGER          NOT NULL CHECK (pv >= 0),
     pv_max         INTEGER          NOT NULL CHECK (pv_max > 0),
     -- Dernière position sauvegardée. La position en direct vit dans le serveur
@@ -175,13 +194,22 @@ CREATE TABLE personnage (
     position_y     DOUBLE PRECISION NOT NULL DEFAULT 300,
     mode_vue       TEXT             NOT NULL DEFAULT 'top-down'
                    CHECK (mode_vue IN ('top-down','side-view')),
-    pieces_or      INTEGER          NOT NULL DEFAULT 0 CHECK (pieces_or >= 0),
+    pieces_or      INTEGER          NOT NULL DEFAULT 0 CHECK (pieces_or >= 0),     -- « drachmes » dans le jeu
+    -- Progression détaillée, propre au contenu du jeu et qui change souvent :
+    -- bestiaire, compétences, codex, zones découvertes, boss vaincus...
+    -- Document JSONB : le client peut ajouter un champ sans modifier la base.
+    -- Ex. {"defeatedBosses": ["minotaure"], "bestiaryKills": {"satyre": 12}}
+    progression    JSONB            NOT NULL DEFAULT '{}',
     date_creation  TIMESTAMPTZ      NOT NULL DEFAULT now(),
+    date_sauvegarde TIMESTAMPTZ     NOT NULL DEFAULT now(),
     CONSTRAINT personnage_pv_max CHECK (pv <= pv_max),
-    CONSTRAINT personnage_nom_format CHECK (nom ~ '^[A-Za-zÀ-ÿ0-9_ -]{3,20}$')
+    CONSTRAINT personnage_nom_format CHECK (nom ~ '^[A-Za-zÀ-ÿ0-9_ -]{3,20}$'),
+    CONSTRAINT personnage_progression_objet CHECK (jsonb_typeof(progression) = 'object')
 );
 CREATE UNIQUE INDEX personnage_nom_unique ON personnage (lower(nom));
 CREATE INDEX personnage_compte_idx ON personnage (compte_id);
+-- Ex. « qui a vaincu le Minotaure ? » : progression @> '{"defeatedBosses": ["minotaure"]}'
+CREATE INDEX personnage_progression_gin ON personnage USING GIN (progression jsonb_path_ops);
 
 -- Règle du jeu : 5 personnages maximum par compte.
 CREATE FUNCTION verifier_limite_personnages() RETURNS trigger AS $$
@@ -293,31 +321,27 @@ FROM classement_saison c
 JOIN personnage p ON p.id = c.personnage_id;
 
 -- Avancement des quêtes (association porteuse SUIT entre PERSONNAGE et QUETE).
+-- Une quête sans ligne ici n'est pas commencée (« verrouillée » ou « disponible »).
 CREATE TABLE progression_quete (
     personnage_id  INTEGER     NOT NULL REFERENCES personnage(id) ON DELETE CASCADE,
     quete_id       TEXT        NOT NULL REFERENCES quete(id) ON DELETE CASCADE,
+    -- en_cours = acceptée ; a_rendre = objectifs remplis, à rendre au PNJ ; terminee = récompense reçue
     statut         TEXT        NOT NULL DEFAULT 'en_cours'
-                   CHECK (statut IN ('en_cours','terminee','abandonnee')),
+                   CHECK (statut IN ('en_cours','a_rendre','terminee','abandonnee')),
+    -- Compteur de chaque objectif. Ex. {"kill_satyres": 2, "kill_harpies": 0}
+    compteurs      JSONB       NOT NULL DEFAULT '{}',
     date_maj       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (personnage_id, quete_id)
+    PRIMARY KEY (personnage_id, quete_id),
+    CONSTRAINT progression_compteurs_objet CHECK (jsonb_typeof(compteurs) = 'object')
 );
 CREATE INDEX progression_quete_quete_idx ON progression_quete (quete_id);
 
--- Règle du jeu : pour commencer une quête, il faut le niveau requis
--- et avoir terminé toutes ses quêtes prérequises.
+-- Règle du jeu : pour commencer une quête, il faut avoir terminé toutes
+-- ses quêtes prérequises.
 CREATE FUNCTION verifier_debut_quete() RETURNS trigger AS $$
 DECLARE
-    v_niveau     SMALLINT;
-    v_requis     SMALLINT;
     v_manquante  TEXT;
 BEGIN
-    SELECT niveau INTO v_niveau FROM personnage WHERE id = NEW.personnage_id;
-    SELECT niveau_requis INTO v_requis FROM quete WHERE id = NEW.quete_id;
-    IF v_niveau < v_requis THEN
-        RAISE EXCEPTION 'Niveau % requis pour la quête % (niveau actuel : %)', v_requis, NEW.quete_id, v_niveau
-            USING ERRCODE = 'check_violation';
-    END IF;
-
     SELECT qp.prerequis_id INTO v_manquante
       FROM quete_prerequis qp
      WHERE qp.quete_id = NEW.quete_id
@@ -388,7 +412,7 @@ CREATE INDEX instance_proprietaire_idx ON instance_objet (proprietaire_id);
 CREATE FUNCTION verifier_quantite_instance() RETURNS trigger AS $$
 BEGIN
     IF NEW.quantite > 1 AND NOT (SELECT empilable FROM objet WHERE id = NEW.objet_id) THEN
-        RAISE EXCEPTION 'L''objet % n''est pas empilable', NEW.objet_id
+        RAISE EXCEPTION 'L''objet % n''est pas empilable', (SELECT code FROM objet WHERE id = NEW.objet_id)
             USING ERRCODE = 'check_violation';
     END IF;
     RETURN NEW;
@@ -398,6 +422,50 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER instance_quantite
     BEFORE INSERT OR UPDATE OF quantite, objet_id ON instance_objet
     FOR EACH ROW EXECUTE FUNCTION verifier_quantite_instance();
+
+-- Règle du jeu : un seul objet équipé par emplacement (une arme, un casque...),
+-- sauf les reliques : deux au maximum. Un objet sans emplacement (potion,
+-- ressource) ne peut pas être équipé.
+-- (Le client a eu un bug « 3 reliques équipées » : la base l'aurait refusé.)
+CREATE FUNCTION verifier_equipement() RETURNS trigger AS $$
+DECLARE
+    v_emplacement  TEXT;
+    v_code         TEXT;
+    v_maximum      INTEGER;
+    v_deja         INTEGER;
+BEGIN
+    IF NOT NEW.equipe THEN
+        RETURN NEW;
+    END IF;
+    SELECT emplacement, code INTO v_emplacement, v_code FROM objet WHERE id = NEW.objet_id;
+    IF v_emplacement IS NULL THEN
+        RAISE EXCEPTION 'L''objet % ne s''équipe pas', v_code
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    -- Verrouille le personnage : deux requêtes simultanées ne peuvent pas
+    -- équiper chacune un objet sur le même emplacement.
+    PERFORM 1 FROM personnage WHERE id = NEW.proprietaire_id FOR UPDATE;
+
+    v_maximum := CASE v_emplacement WHEN 'relique' THEN 2 ELSE 1 END;
+    SELECT count(*) INTO v_deja
+      FROM instance_objet io
+      JOIN objet o ON o.id = io.objet_id
+     WHERE io.proprietaire_id = NEW.proprietaire_id
+       AND io.equipe
+       AND o.emplacement = v_emplacement
+       AND io.id <> NEW.id;
+    IF v_deja >= v_maximum THEN
+        RAISE EXCEPTION 'Emplacement « % » déjà occupé (% objet(s) équipé(s) au maximum)', v_emplacement, v_maximum
+            USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER instance_equipement
+    BEFORE INSERT OR UPDATE OF equipe, objet_id, proprietaire_id ON instance_objet
+    FOR EACH ROW EXECUTE FUNCTION verifier_equipement();
 
 -- ---------------------------------------------------------------------
 -- 5. Interactions et échanges entre joueurs

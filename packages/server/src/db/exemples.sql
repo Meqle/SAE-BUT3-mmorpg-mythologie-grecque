@@ -10,26 +10,25 @@
 --   docker compose exec -T postgres psql -U mythologia -d mythologia < packages/server/src/db/exemples.sql
 -- =====================================================================
 
-\echo '=== 1. Requête récursive : toutes les quêtes débloquées par « offrande_athena »'
+\echo '=== 1. Requête récursive : toutes les quêtes débloquées par « mq_1_etincelle »'
 WITH RECURSIVE suite AS (
     SELECT quete_id, 1 AS profondeur
       FROM quete_prerequis
-     WHERE prerequis_id = 'offrande_athena'
+     WHERE prerequis_id = 'mq_1_etincelle'
     UNION
     SELECT qp.quete_id, s.profondeur + 1
       FROM quete_prerequis qp
       JOIN suite s ON qp.prerequis_id = s.quete_id
 )
-SELECT q.titre, min(s.profondeur) AS etapes_plus_tard
+SELECT q.titre, q.type, min(s.profondeur) AS etapes_plus_tard
   FROM suite s JOIN quete q ON q.id = s.quete_id
- GROUP BY q.titre
+ GROUP BY q.titre, q.type
  ORDER BY etapes_plus_tard, q.titre;
 
-\echo '=== 2. Quêtes que Persée peut commencer maintenant (prérequis terminés, niveau suffisant)'
-SELECT q.titre, q.niveau_requis
+\echo '=== 2. Quêtes que Persée peut accepter maintenant (prérequis terminés, pas encore commencées)'
+SELECT q.titre, q.type, q.niveau_conseille
   FROM quete q, personnage p
  WHERE p.nom = 'Persée'
-   AND q.niveau_requis <= p.niveau
    AND NOT EXISTS (SELECT 1 FROM progression_quete pq
                     WHERE pq.personnage_id = p.id AND pq.quete_id = q.id)
    AND NOT EXISTS (SELECT 1 FROM quete_prerequis qp
@@ -37,7 +36,8 @@ SELECT q.titre, q.niveau_requis
                       AND NOT EXISTS (SELECT 1 FROM progression_quete pq
                                        WHERE pq.personnage_id = p.id
                                          AND pq.quete_id = qp.prerequis_id
-                                         AND pq.statut = 'terminee'));
+                                         AND pq.statut = 'terminee'))
+ ORDER BY q.niveau_conseille, q.titre;
 
 \echo '=== 3. Requête récursive : amis et amis d''amis de Persée (jusqu''à 2 niveaux)'
 WITH RECURSIVE reseau AS (
@@ -56,14 +56,14 @@ SELECT p.nom, min(r.distance) AS distance,
  GROUP BY p.nom
  ORDER BY distance;
 
-\echo '=== 4. JSONB : quêtes qui contiennent un combat (utilise l''index GIN)'
-SELECT titre FROM quete WHERE etapes @> '[{"type": "combat"}]';
+\echo '=== 4. JSONB : quêtes qui demandent de vaincre le Minotaure (utilise l''index GIN)'
+SELECT titre FROM quete WHERE etapes @> '[{"type": "kill", "targetId": "minotaure"}]';
 
-\echo '=== 5. JSONB : armes avec au moins 7 d''attaque, et nombre de phases de chaque boss'
-SELECT nom, (statistiques ->> 'attaque')::int AS attaque
+\echo '=== 5. JSONB : équipements avec au moins 10 d''attaque, et nombre de phases de chaque boss divin'
+SELECT nom, emplacement, rarete, (statistiques ->> 'attaque')::int AS attaque
   FROM objet
- WHERE (statistiques ->> 'attaque')::int >= 7
- ORDER BY attaque DESC;
+ WHERE (statistiques ->> 'attaque')::int >= 10
+ ORDER BY attaque DESC, nom;
 
 SELECT nom, jsonb_array_length(phases) AS nb_phases FROM boss ORDER BY nb_phases DESC, nom;
 
@@ -86,7 +86,24 @@ SELECT g.sigle, p.nom, m.rang
   JOIN personnage p ON p.id = m.personnage_id
  ORDER BY g.sigle, m.rang, p.nom;
 
-\echo '=== 8. Preuve que l''index GIN est utilisé (seqscan désactivé car la table est petite)'
+\echo '=== 8. JSONB : personnages qui ont vaincu le Gardien d''Airain, et monstres les plus chassés'
+SELECT nom, niveau FROM personnage WHERE progression @> '{"defeatedBosses": ["gardien_airain"]}';
+
+SELECT p.nom, b.monstre, b.nombre::int AS nombre
+  FROM personnage p,
+       jsonb_each_text(p.progression -> 'bestiaryKills') AS b(monstre, nombre)
+ ORDER BY nombre DESC
+ LIMIT 5;
+
+\echo '=== 9. Inventaire : équipement porté par Persée, par emplacement'
+SELECT o.emplacement, o.nom, o.rarete, o.statistiques
+  FROM instance_objet i
+  JOIN objet o ON o.id = i.objet_id
+  JOIN personnage p ON p.id = i.proprietaire_id
+ WHERE p.nom = 'Persée' AND i.equipe
+ ORDER BY o.emplacement;
+
+\echo '=== 10. Preuve que l''index GIN est utilisé (seqscan désactivé car la table est petite)'
 SET enable_seqscan = off;
-EXPLAIN (COSTS OFF) SELECT titre FROM quete WHERE etapes @> '[{"type": "combat"}]';
+EXPLAIN (COSTS OFF) SELECT titre FROM quete WHERE etapes @> '[{"type": "kill", "targetId": "minotaure"}]';
 RESET enable_seqscan;
