@@ -7,10 +7,12 @@
 //
 // Convention : nom en camelCase côté TypeScript, en snake_case dans la base.
 import {
+  bigint,
   boolean,
   doublePrecision,
   inet,
   integer,
+  jsonb,
   pgTable,
   pgView,
   primaryKey,
@@ -18,6 +20,18 @@ import {
   text,
   timestamp
 } from 'drizzle-orm/pg-core';
+
+// Forme des documents JSONB (vérifiée par TypeScript, pas par la base).
+export interface PhaseBoss {
+  phase: number;
+  seuil_pv_pct: number;
+  attaques: string[];
+}
+
+export interface EtapeQuete {
+  type: 'dialogue' | 'deplacement' | 'collecte' | 'combat';
+  [cle: string]: unknown;
+}
 
 // ---------------------------------------------------------------------
 // Référentiels
@@ -54,7 +68,9 @@ export const boss = pgTable('boss', {
   zoneId: smallint('zone_id').notNull().unique().references(() => zone.id),
   nom: text('nom').notNull(),
   titre: text('titre').notNull(),
-  niveau: smallint('niveau').notNull()
+  niveau: smallint('niveau').notNull(),
+  // Phases de combat : [{ phase, seuil_pv_pct, attaques: [...] }, ...]
+  phases: jsonb('phases').$type<PhaseBoss[]>().notNull().default([])
 });
 
 export const objet = pgTable('objet', {
@@ -64,8 +80,28 @@ export const objet = pgTable('objet', {
   categorie: text('categorie').notNull(),
   rarete: text('rarete').notNull().default('commun'),
   empilable: boolean('empilable').notNull().default(false),
-  prix: integer('prix').notNull().default(0)
+  prix: integer('prix').notNull().default(0),
+  // Ex. { attaque: 8 } ou { soin_pv: 40 } : chaque objet a ses propres statistiques
+  statistiques: jsonb('statistiques').$type<Record<string, number | string>>().notNull().default({})
 });
+
+export const quete = pgTable('quete', {
+  id: text('id').primaryKey(),
+  titre: text('titre').notNull().unique(),
+  niveauRequis: smallint('niveau_requis').notNull().default(1),
+  recompenseXp: integer('recompense_xp').notNull().default(0),
+  etapes: jsonb('etapes').$type<EtapeQuete[]>().notNull().default([])
+});
+
+// Chaîne de quêtes : prerequisId doit être terminée avant queteId.
+export const quetePrerequis = pgTable(
+  'quete_prerequis',
+  {
+    queteId: text('quete_id').notNull().references(() => quete.id, { onDelete: 'cascade' }),
+    prerequisId: text('prerequis_id').notNull().references(() => quete.id, { onDelete: 'cascade' })
+  },
+  (table) => [primaryKey({ columns: [table.queteId, table.prerequisId] })]
+);
 
 // ---------------------------------------------------------------------
 // Joueurs et personnages
@@ -98,6 +134,41 @@ export const personnage = pgTable('personnage', {
   piecesOr: integer('pieces_or').notNull().default(0),
   dateCreation: timestamp('date_creation', { withTimezone: true }).notNull().defaultNow()
 });
+
+// ---------------------------------------------------------------------
+// Social : guildes et amis
+// ---------------------------------------------------------------------
+
+export const guilde = pgTable('guilde', {
+  id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+  nom: text('nom').notNull(),
+  sigle: text('sigle').notNull(),
+  dateCreation: timestamp('date_creation', { withTimezone: true }).notNull().defaultNow()
+});
+
+export const membreGuilde = pgTable('membre_guilde', {
+  personnageId: integer('personnage_id').primaryKey().references(() => personnage.id, { onDelete: 'cascade' }),
+  guildeId: integer('guilde_id').notNull().references(() => guilde.id, { onDelete: 'cascade' }),
+  rang: text('rang').$type<'chef' | 'officier' | 'membre'>().notNull().default('membre'),
+  dateEntree: timestamp('date_entree', { withTimezone: true }).notNull().defaultNow()
+});
+
+export const amitie = pgTable(
+  'amitie',
+  {
+    demandeurId: integer('demandeur_id').notNull().references(() => personnage.id, { onDelete: 'cascade' }),
+    destinataireId: integer('destinataire_id').notNull().references(() => personnage.id, { onDelete: 'cascade' }),
+    statut: text('statut').$type<'en_attente' | 'acceptee' | 'refusee'>().notNull().default('en_attente'),
+    dateDemande: timestamp('date_demande', { withTimezone: true }).notNull().defaultNow()
+  },
+  (table) => [primaryKey({ columns: [table.demandeurId, table.destinataireId] })]
+);
+
+// Vue : chaque amitié acceptée, dans les deux sens.
+export const vAmis = pgView('v_amis', {
+  personnageId: integer('personnage_id').notNull(),
+  amiId: integer('ami_id').notNull()
+}).existing();
 
 // ---------------------------------------------------------------------
 // Activité en jeu
@@ -138,12 +209,32 @@ export const progressionQuete = pgTable(
   'progression_quete',
   {
     personnageId: integer('personnage_id').notNull().references(() => personnage.id, { onDelete: 'cascade' }),
-    queteId: text('quete_id').notNull(),
+    queteId: text('quete_id').notNull().references(() => quete.id, { onDelete: 'cascade' }),
     statut: text('statut').notNull().default('en_cours'),
     dateMaj: timestamp('date_maj', { withTimezone: true }).notNull().defaultNow()
   },
   (table) => [primaryKey({ columns: [table.personnageId, table.queteId] })]
 );
+
+export type TypeEvenement =
+  | 'inscription'
+  | 'connexion_reussie'
+  | 'connexion_refusee'
+  | 'deconnexion'
+  | 'echange'
+  | 'combat'
+  | 'victoire_boss'
+  | 'sanction';
+
+// Journal : compteId est vide quand le compte est inconnu (ex. pseudo inexistant).
+export const journalEvenement = pgTable('journal_evenement', {
+  id: bigint('id', { mode: 'number' }).primaryKey().generatedAlwaysAsIdentity(),
+  compteId: integer('compte_id').references(() => compte.id, { onDelete: 'set null' }),
+  type: text('type').$type<TypeEvenement>().notNull(),
+  horodatage: timestamp('horodatage', { withTimezone: true }).notNull().defaultNow(),
+  adresseIp: inet('adresse_ip'),
+  details: jsonb('details').$type<Record<string, unknown>>().notNull().default({})
+});
 
 // ---------------------------------------------------------------------
 // Inventaire et échanges
