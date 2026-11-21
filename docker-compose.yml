@@ -7,7 +7,8 @@ services:
       PORT: 3001
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       # Utilisée par la couche base de données (packages/server/src/db)
-      DATABASE_URL: postgres://${POSTGRES_USER:-mythologia}:${POSTGRES_PASSWORD:-mythologia}@postgres:5432/${POSTGRES_DB:-mythologia}
+      # Le serveur utilise le rôle limité mythologia_app (voir packages/server/src/db/roles.sql)
+      DATABASE_URL: postgres://mythologia_app:${POSTGRES_APP_PASSWORD:-mythologia_app}@postgres:5432/${POSTGRES_DB:-mythologia}
       # Secret qui signe les jetons de connexion (à définir dans .env)
       JWT_SECRET: ${JWT_SECRET:-}
       # Base en mémoire : sessions, anti force brute, classement en direct
@@ -50,11 +51,16 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-mythologia}
       POSTGRES_USER: ${POSTGRES_USER:-mythologia}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mythologia}
+      # Mots de passe des rôles limités, créés par 04_roles.sh
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-mythologia_app}
+      POSTGRES_LECTURE_PASSWORD: ${POSTGRES_LECTURE_PASSWORD:-mythologia_lecture}
     volumes:
       - pg_data:/var/lib/postgresql/data
       - ./packages/server/src/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
       - ./packages/server/src/db/seed.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
       - ./packages/server/src/db/demo.sql:/docker-entrypoint-initdb.d/03_demo.sql:ro
+      - ./packages/server/src/db/04_roles.sh:/docker-entrypoint-initdb.d/04_roles.sh:ro
+      - ./packages/server/src/db/roles.sql:/etc/mythologia/roles.sql:ro
     ports:
       # Accessible uniquement depuis la machine (pour psql, DBeaver, pgAdmin...)
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
@@ -84,6 +90,28 @@ services:
       retries: 10
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-mythologia}
+
+  # Sauvegarde automatique de PostgreSQL : une au démarrage, puis toutes les 24 h,
+  # dans le dossier ./sauvegardes de la machine (7 jours gardés).
+  # Sauvegarde immédiate : docker compose run --rm -e SAUVEGARDE_UNE_FOIS=1 sauvegarde
+  # Restauration : voir packages/server/src/db/README.md
+  sauvegarde:
+    image: postgres:16-alpine
+    entrypoint: ["sh", "/usr/local/bin/sauvegarde.sh"]
+    environment:
+      PGHOST: postgres
+      PGUSER: ${POSTGRES_USER:-mythologia}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-mythologia}
+      PGDATABASE: ${POSTGRES_DB:-mythologia}
+      SAUVEGARDE_INTERVALLE: ${SAUVEGARDE_INTERVALLE:-86400}
+      SAUVEGARDE_JOURS: ${SAUVEGARDE_JOURS:-7}
+    volumes:
+      - ./sauvegardes:/sauvegardes
+      - ./packages/server/src/db/sauvegarde.sh:/usr/local/bin/sauvegarde.sh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   pg_data:

@@ -32,6 +32,10 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
+# Sauvegardes de la base : contiennent emails et hash de mots de passe, jamais sur GitHub
+sauvegardes/
+*.dump
+
 # Database / SQLite
 *.sqlite
 *.sqlite3

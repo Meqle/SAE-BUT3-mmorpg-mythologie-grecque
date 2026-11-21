@@ -17,6 +17,9 @@ PostgreSQL reprend aussi ce qui était prévu dans d'autres bases, pour éviter 
 | `seed.sql` | Remplit les référentiels **avec les identifiants du client** : 36 objets, 4 classes, 6 divinités, 15 zones (9 du jeu + 6 de fin de jeu), 6 boss divins, 12 quêtes et leurs prérequis |
 | `demo.sql` | Données fictives : 3 joueurs, un échange prêt à tester, une guilde, des amitiés, des quêtes en cours, un extrait de journal |
 | `exemples.sql` | Requêtes à montrer : récursives, JSONB, détection de force brute, preuve d'utilisation de l'index GIN |
+| `roles.sql` + `04_roles.sh` | Rôles limités : le serveur ne peut ni supprimer une table, ni modifier les objets, ni effacer le journal |
+| `performances.sql` | Mesures `EXPLAIN ANALYZE` sur 500 000 événements, avec et sans index |
+| `sauvegarde.sh` | Sauvegarde automatique quotidienne (service `sauvegarde` de docker-compose) |
 
 ## Lancer la base
 
@@ -27,7 +30,7 @@ cp .env.example .env        # puis changer le mot de passe
 docker compose up -d postgres
 ```
 
-Au **premier** démarrage, Docker exécute automatiquement `schema.sql`, `seed.sql` puis `demo.sql`.
+Au **premier** démarrage, Docker exécute automatiquement `schema.sql`, `seed.sql`, `demo.sql` puis `04_roles.sh`.
 Ces scripts ne sont pas rejoués ensuite. Pour repartir de zéro après une modification :
 
 ```bash
@@ -83,6 +86,75 @@ Les règles importantes sont vérifiées par PostgreSQL lui-même, pas seulement
 - un personnage est dans une seule guilde, et une guilde n'a qu'un seul chef (index unique partiel) ;
 - pas d'amitié avec soi-même, et une seule relation par paire de joueurs, quel que soit le sens ;
 - les colonnes JSONB ont la bonne forme (tableau pour les phases et les étapes, objet pour les statistiques, la progression et les compteurs).
+
+## Rôles : le serveur n'a que les droits dont il a besoin
+
+| Rôle | Utilisé par | Peut | Ne peut pas |
+|---|---|---|---|
+| `mythologia` (propriétaire) | installation, maintenance, sauvegardes | tout | — |
+| `mythologia_app` | le serveur (`DATABASE_URL`) | lire tout ; écrire les données des joueurs ; **ajouter** au journal | `DROP`/`ALTER` une table, modifier les objets, quêtes et zones, modifier ou effacer le journal, créer une table |
+| `mythologia_lecture` | consultation (DBeaver, statistiques) | lire | écrire, lancer un échange |
+
+C'est le **principe du moindre privilège** : si le serveur avait une faille (injection SQL…),
+un attaquant ne pourrait ni détruire la base, ni rendre son épée surpuissante, ni effacer ses traces.
+
+```
+mythologia_app> DROP TABLE personnage;              ERROR: must be owner of table personnage
+mythologia_app> UPDATE objet SET statistiques = …;  ERROR: permission denied for table objet
+mythologia_app> DELETE FROM journal_evenement;      ERROR: permission denied for table journal_evenement
+```
+
+Mots de passe dans `.env` : `POSTGRES_APP_PASSWORD` et `POSTGRES_LECTURE_PASSWORD`. En local, le serveur
+utilise `mythologia_app` dès que `POSTGRES_APP_PASSWORD` est défini (sinon, le propriétaire, comme avant).
+
+## Performances : les index servent-ils vraiment ?
+
+`performances.sql` remplit la base comme après 6 mois de jeu (500 000 événements, 20 000 personnages),
+chronomètre les requêtes fréquentes avec `EXPLAIN ANALYZE`, puis annule tout (`ROLLBACK`) :
+
+```bash
+docker compose exec -T postgres psql -U mythologia -d mythologia < packages/server/src/db/performances.sql
+```
+
+| Requête | Avec index | Sans index | Gain |
+|---|---|---|---|
+| Connexions refusées de la dernière heure (force brute) | 0,1 à 0,2 ms (Index Scan) | 20 à 45 ms (lecture des 500 000 lignes) | ≈ 100 à 400× |
+| 20 derniers événements d'un joueur | 0,1 à 0,4 ms | 15 à 35 ms | ≈ 100× |
+| JSONB : qui a vaincu la Sentinelle ? (valeur rare, 1/1000) | 0,1 ms (GIN) | 5 à 15 ms | ≈ 50 à 150× |
+| JSONB : qui a vaincu l'Hydre ? (1/50) | 0,4 ms (GIN) | — | — |
+
+(Fourchettes mesurées sur deux machines : les temps varient, les ordres de grandeur restent.)
+
+**Piège rencontré : la « liste d'attente » de l'index GIN.** Mettre à jour un index GIN à chaque
+insertion coûte cher ; PostgreSQL range donc d'abord les nouvelles lignes dans une liste d'attente
+(*pending list*), intégrée plus tard à l'index par l'autovacuum. Juste après l'insertion massive de
+20 000 personnages, cette liste n'était pas encore intégrée : la recherche devait la parcourir en entier,
+et l'index GIN était **plus lent que sans index** (13,7 ms contre 5,1 ms), PostgreSQL allant même jusqu'à
+l'ignorer. Le script appelle maintenant `gin_clean_pending_list()` (ce que fait l'autovacuum en
+production) : la recherche passe alors à 0,1 ms. Leçon : mesurer dans des conditions réalistes, et
+ne pas conclure trop vite.
+
+## Sauvegardes
+
+Le service `sauvegarde` de docker-compose fait une sauvegarde au démarrage puis toutes les 24 h,
+dans le dossier `sauvegardes/` à la racine du dépôt, et garde 7 jours.
+Ce dossier n'est jamais commité (`.gitignore`) : il contient les emails et les hash des mots de passe.
+
+```bash
+docker compose logs sauvegarde                                    # voir les sauvegardes faites
+docker compose run --rm -e SAUVEGARDE_UNE_FOIS=1 sauvegarde       # sauvegarder tout de suite
+```
+
+**Restaurer** (remplace le contenu actuel de la base par celui de la sauvegarde) :
+
+```bash
+docker compose exec -T postgres pg_restore --clean --if-exists -U mythologia -d mythologia < sauvegardes/mythologia_2026-11-21_15h56.dump
+```
+
+Testé : après un `TRUNCATE compte CASCADE` (toutes les données des joueurs perdues), la restauration
+remet comptes, personnages, objets, journal et droits des rôles ; l'échange de démo fonctionne ensuite.
+Sur la VM, il faut aussi copier régulièrement `sauvegardes/` **ailleurs** (une sauvegarde sur la même
+machine ne protège pas d'une panne de cette machine).
 
 ## Journal des événements
 

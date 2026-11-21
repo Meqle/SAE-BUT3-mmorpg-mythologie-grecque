@@ -1,0 +1,3 @@
+# Les scripts shell sont exécutés dans les conteneurs Linux :
+# ils doivent garder des fins de ligne LF, même sur Windows.
+*.sh text eol=lf
