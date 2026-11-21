@@ -7,7 +7,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "db:verifier": "tsx src/db/verifier.ts"
+    "db:verifier": "tsx src/db/verifier.ts",
+    "admin:bannir": "tsx src/admin/bannir.ts"
   },
   "dependencies": {
     "@greek-myth/shared": "*",
@@ -16,6 +17,7 @@
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.45.4",
     "express": "^4.19.2",
+    "ioredis": "^5.11.1",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.23.1",
     "ws": "^8.17.0",

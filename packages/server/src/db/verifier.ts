@@ -1,6 +1,7 @@
-// Petit script pour vérifier que le serveur arrive à parler à la base.
+// Petit script pour vérifier que le serveur arrive à parler aux deux bases.
 // Lancement : npm run db:verifier
 import { count } from 'drizzle-orm';
+import { attendreRedis, fermerRedis, redis } from '../redis/client.js';
 import { baseDisponible, db, fermerBase } from './client.js';
 import { classe, compte, objet, personnage } from './schema.js';
 import { listerDivinites, listerPersonnagesDuCompte, trouverCompteParPseudo } from './requetes.js';
@@ -36,6 +37,16 @@ async function main(): Promise<void> {
     console.log(`\nPersonnages du compte « ${demo.pseudo} » :`);
     console.table(await listerPersonnagesDuCompte(demo.id));
   }
+
+  if (!(await attendreRedis())) {
+    console.error('\n❌ Impossible de joindre Redis.');
+    console.error('   Vérifiez qu\'il tourne : docker compose up -d redis');
+    console.error('   et que REDIS_PORT et REDIS_PASSWORD dans .env sont corrects.');
+    process.exitCode = 1;
+    return;
+  }
+  const sessions = await redis.keys('session:*');
+  console.log(`\n✅ Connexion à Redis réussie (${await redis.dbsize()} clés, dont ${sessions.length} sessions ouvertes)`);
 }
 
 main()
@@ -43,4 +54,7 @@ main()
     console.error('❌ Erreur :', error instanceof Error ? error.message : error);
     process.exitCode = 1;
   })
-  .finally(() => fermerBase());
+  .finally(async () => {
+    await fermerRedis();
+    await fermerBase();
+  });

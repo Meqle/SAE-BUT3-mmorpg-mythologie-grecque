@@ -66,6 +66,10 @@ export async function creerCompte(donnees: { email: string; pseudo: string; motD
   return nouveau;
 }
 
+export async function definirBanni(compteId: number, banni: boolean): Promise<void> {
+  await db.update(compte).set({ banni }).where(eq(compte.id, compteId));
+}
+
 // Réalise un échange de façon atomique (fonction effectuer_echange de schema.sql).
 // En cas de problème (or insuffisant, objet équipé...), PostgreSQL annule tout
 // et l'erreur remonte ici avec son message.

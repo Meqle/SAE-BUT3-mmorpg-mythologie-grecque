@@ -4,6 +4,7 @@ import { createServer } from 'http';
 import { randomUUID } from 'crypto';
 import { WebSocket, WebSocketServer } from 'ws';
 import { routeurAuth } from './auth/routes.js';
+import { routeurClassement } from './classement/routes.js';
 import type {
   GodAffinity,
   JoinRequestPacket,
@@ -19,6 +20,7 @@ app.use(express.json({ limit: '16kb' }));
 
 // API d'authentification (pôle Base de données)
 app.use('/api/auth', routeurAuth);
+app.use('/api/classement', routeurClassement);
 
 const PORT = Number(process.env.PORT || 3001);
 const TICK_RATE = 20;

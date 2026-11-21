@@ -3,12 +3,17 @@
 // Après une connexion réussie, le serveur donne au joueur un jeton signé.
 // Le client le renvoie ensuite à chaque requête (en-tête Authorization),
 // comme un badge d'accès. Le serveur vérifie la signature : un jeton
-// modifié ou expiré est refusé, sans avoir besoin d'interroger la base.
+// modifié ou expiré est refusé.
+//
+// Chaque jeton porte aussi un identifiant unique (jti), enregistré comme
+// session dans Redis : supprimer la session suffit à révoquer le jeton
+// avant son expiration (déconnexion, bannissement). Voir redis/sessions.ts.
 import '../env.js';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import jwt from 'jsonwebtoken';
 
-const DUREE_VALIDITE = '2h';
+// Durée de validité d'un jeton, et donc de la session Redis associée.
+export const DUREE_SESSION_SECONDES = 2 * 60 * 60; // 2 heures
 
 function secret(): string {
   const valeur = process.env.JWT_SECRET;
@@ -36,23 +41,32 @@ export interface ContenuJeton {
   role: string;
 }
 
-export function creerJeton(contenu: ContenuJeton): string {
-  return jwt.sign({ pseudo: contenu.pseudo, role: contenu.role }, secret(), {
+export interface JetonLu extends ContenuJeton {
+  jti: string;
+}
+
+// Crée un jeton et renvoie aussi son identifiant unique (jti) pour la session Redis.
+export function creerJeton(contenu: ContenuJeton): { jeton: string; jti: string } {
+  const jti = randomUUID();
+  const jeton = jwt.sign({ pseudo: contenu.pseudo, role: contenu.role }, secret(), {
     subject: String(contenu.compteId),
-    expiresIn: DUREE_VALIDITE,
+    jwtid: jti,
+    expiresIn: DUREE_SESSION_SECONDES,
     algorithm: 'HS256'
   });
+  return { jeton, jti };
 }
 
 // Renvoie le contenu du jeton, ou null s'il est invalide ou expiré.
-export function lireJeton(jeton: string): ContenuJeton | null {
+export function lireJeton(jeton: string): JetonLu | null {
   try {
     const donnees = jwt.verify(jeton, secret(), { algorithms: ['HS256'] });
-    if (typeof donnees === 'string' || !donnees.sub) return null;
+    if (typeof donnees === 'string' || !donnees.sub || !donnees.jti) return null;
     return {
       compteId: Number(donnees.sub),
       pseudo: String(donnees.pseudo),
-      role: String(donnees.role)
+      role: String(donnees.role),
+      jti: donnees.jti
     };
   } catch {
     return null;

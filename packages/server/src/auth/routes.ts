@@ -1,12 +1,16 @@
-// API d'authentification : inscription, connexion, compte connecté.
+// API d'authentification : inscription, connexion, compte connecté, déconnexion.
 //
 //   POST /api/auth/register   { email, pseudo, motDePasse }  -> 201 { jeton, compte }
 //   POST /api/auth/login      { identifiant, motDePasse }    -> 200 { jeton, compte }
 //   GET  /api/auth/me         (en-tête Authorization: Bearer <jeton>) -> 200 { compte }
+//   POST /api/auth/logout     (en-tête Authorization: Bearer <jeton>) -> 204
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { creerCompte, trouverCompteParId, trouverCompteParIdentifiant } from '../db/requetes.js';
-import { creerJeton, lireJeton } from './jeton.js';
+import { ServiceIndisponible } from '../redis/client.js';
+import { cleEchecs, effacerEchecs, enregistrerEchec, secondesDeBlocage } from '../redis/antiForceBrute.js';
+import { creerSession, sessionActive, supprimerSession } from '../redis/sessions.js';
+import { creerJeton, DUREE_SESSION_SECONDES, lireJeton } from './jeton.js';
 import { hacherMotDePasse, simulerVerification, verifierMotDePasse } from './motDePasse.js';
 
 // Les règles reprennent celles de la base (schema.sql), pour donner un
@@ -41,11 +45,11 @@ function comptePublic(compte: Compte) {
   };
 }
 
-function reponseAvecJeton(compte: Compte) {
-  return {
-    jeton: creerJeton({ compteId: compte.id, pseudo: compte.pseudo, role: compte.role }),
-    compte: comptePublic(compte)
-  };
+// Crée le jeton ET la session Redis correspondante.
+async function reponseAvecJeton(compte: Compte) {
+  const { jeton, jti } = creerJeton({ compteId: compte.id, pseudo: compte.pseudo, role: compte.role });
+  await creerSession(jti, compte.id, DUREE_SESSION_SECONDES);
+  return { jeton, compte: comptePublic(compte) };
 }
 
 // Express 4 ne rattrape pas les erreurs des fonctions async : on les transmet nous-mêmes.
@@ -61,7 +65,8 @@ function erreurPostgres(erreur: unknown): { code?: string; constraint?: string }
   return e?.code ? e : ((e?.cause as { code?: string; constraint?: string }) ?? {});
 }
 
-// Middleware : laisse passer uniquement les requêtes avec un jeton valide.
+// Middleware : laisse passer uniquement les requêtes avec un jeton valide
+// ET une session encore ouverte dans Redis (pas déconnectée, pas révoquée).
 // Le compte connecté est ensuite disponible dans res.locals.compteId.
 export function exigerConnexion(req: Request, res: Response, next: NextFunction): void {
   const entete = req.headers.authorization ?? '';
@@ -70,8 +75,17 @@ export function exigerConnexion(req: Request, res: Response, next: NextFunction)
     res.status(401).json({ erreur: 'Connexion requise ou jeton expiré.' });
     return;
   }
-  res.locals.compteId = contenu.compteId;
-  next();
+  sessionActive(contenu.jti, contenu.compteId)
+    .then((active) => {
+      if (!active) {
+        res.status(401).json({ erreur: 'Session fermée : veuillez vous reconnecter.' });
+        return;
+      }
+      res.locals.compteId = contenu.compteId;
+      res.locals.jti = contenu.jti;
+      next();
+    })
+    .catch(next);
 }
 
 export const routeurAuth = Router();
@@ -88,7 +102,7 @@ routeurAuth.post(
 
     try {
       const compte = await creerCompte({ email, pseudo, motDePasseHash: await hacherMotDePasse(motDePasse) });
-      res.status(201).json(reponseAvecJeton(compte));
+      res.status(201).json(await reponseAvecJeton(compte));
     } catch (erreur) {
       const pg = erreurPostgres(erreur);
       if (pg.code === '23505') {
@@ -112,20 +126,33 @@ routeurAuth.post(
     const { identifiant, motDePasse } = resultat.data;
 
     const compte = await trouverCompteParIdentifiant(identifiant);
+
+    // Anti force brute : trop d'échecs récents sur ce compte -> on refuse sans
+    // même vérifier le mot de passe (429 = « trop de requêtes »).
+    const cle = cleEchecs(compte?.id ?? null, identifiant);
+    const attente = await secondesDeBlocage(cle);
+    if (attente > 0) {
+      res.set('Retry-After', String(attente));
+      res.status(429).json({ erreur: `Trop de tentatives. Réessayez dans ${Math.ceil(attente / 60)} min.` });
+      return;
+    }
+
     if (!compte) {
       await simulerVerification(motDePasse);
     }
     // Même message que le pseudo soit inconnu ou le mot de passe faux :
     // on ne révèle pas quels comptes existent.
     if (!compte || !(await verifierMotDePasse(compte.motDePasseHash, motDePasse))) {
+      await enregistrerEchec(cle);
       res.status(401).json({ erreur: 'Identifiant ou mot de passe incorrect.' });
       return;
     }
+    await effacerEchecs(cle);
     if (compte.banni) {
       res.status(403).json({ erreur: 'Ce compte a été banni.' });
       return;
     }
-    res.json(reponseAvecJeton(compte));
+    res.json(await reponseAvecJeton(compte));
   })
 );
 
@@ -142,8 +169,23 @@ routeurAuth.get(
   })
 );
 
+// Déconnexion : la session est supprimée de Redis, le jeton ne sert plus à rien.
+routeurAuth.post(
+  '/logout',
+  exigerConnexion,
+  asynchrone(async (_req, res) => {
+    await supprimerSession(res.locals.jti as string, res.locals.compteId as number);
+    res.status(204).end();
+  })
+);
+
 // Gestion des erreurs inattendues de ces routes (base injoignable, bug...).
 routeurAuth.use((erreur: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  if (erreur instanceof ServiceIndisponible) {
+    console.error('[auth]', erreur.message, '-', (erreur.cause as Error | undefined)?.message ?? '');
+    res.status(503).json({ erreur: 'Service temporairement indisponible, réessayez dans un instant.' });
+    return;
+  }
   const code = erreurPostgres(erreur).code;
   const baseInjoignable = code === 'ECONNREFUSED' || (erreur instanceof Error && /connect|timeout/i.test(erreur.message));
   console.error('[auth]', erreur instanceof Error ? erreur.message : erreur);
