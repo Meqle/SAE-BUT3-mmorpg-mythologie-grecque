@@ -2,10 +2,16 @@
 -- Mythologia — Schéma PostgreSQL
 -- Pôle Base de données
 --
--- Ce script crée toutes les tables du jeu, avec leurs contraintes.
+-- Ce script crée les 21 tables du jeu, avec leurs contraintes.
 -- Principe : les règles importantes du jeu sont vérifiées PAR LA BASE
 -- (CHECK, UNIQUE, clés étrangères, triggers). Même si le serveur a un
 -- bug, la base refuse une donnée incohérente.
+--
+-- Architecture retenue : PostgreSQL (données durables) + Redis (temps réel).
+-- PostgreSQL reprend aussi ce qui était prévu dans d'autres bases :
+--   - documents souples (ex-MongoDB)      -> colonnes JSONB + index GIN
+--   - relations amis / chaînes de quêtes (ex-Neo4j) -> requêtes récursives
+--   - journal des événements (ex-Elasticsearch)     -> table journal_evenement
 --
 -- Ordre d'exécution : schema.sql -> seed.sql -> demo.sql (optionnel)
 -- =====================================================================
@@ -56,11 +62,15 @@ CREATE TABLE boss (
     zone_id        SMALLINT NOT NULL UNIQUE REFERENCES zone(id),
     nom            TEXT     NOT NULL,
     titre          TEXT     NOT NULL,
-    niveau         SMALLINT NOT NULL CHECK (niveau BETWEEN 1 AND 100)
+    niveau         SMALLINT NOT NULL CHECK (niveau BETWEEN 1 AND 100),
+    -- Déroulé du combat : chaque boss a ses propres phases et attaques,
+    -- donc une structure souple (JSONB) plutôt que des colonnes fixes.
+    -- Ex. [{"phase": 1, "seuil_pv_pct": 100, "attaques": ["…"]}, …]
+    phases         JSONB    NOT NULL DEFAULT '[]',
+    CONSTRAINT boss_phases_tableau CHECK (jsonb_typeof(phases) = 'array')
 );
 
 -- Modèle d'objet : "l'épée de bronze" en général.
--- Le détail (statistiques, effets) est stocké dans MongoDB.
 CREATE TABLE objet (
     id           INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     nom          TEXT    NOT NULL UNIQUE,
@@ -70,8 +80,63 @@ CREATE TABLE objet (
     rarete       TEXT    NOT NULL DEFAULT 'commun'
                  CHECK (rarete IN ('commun','rare','epique','legendaire','divin')),
     empilable    BOOLEAN NOT NULL DEFAULT FALSE,     -- les potions s'empilent, les épées non
-    prix         INTEGER NOT NULL DEFAULT 0 CHECK (prix >= 0)
+    prix         INTEGER NOT NULL DEFAULT 0 CHECK (prix >= 0),
+    -- Statistiques propres à chaque objet (une épée a une attaque, une potion
+    -- un soin...) : document JSONB. Ex. {"attaque": 8} ou {"soin_pv": 40}
+    statistiques JSONB   NOT NULL DEFAULT '{}',
+    CONSTRAINT objet_statistiques_objet CHECK (jsonb_typeof(statistiques) = 'object')
 );
+-- Index GIN : permet de chercher DANS le JSON (opérateur @>) sans tout parcourir.
+CREATE INDEX objet_statistiques_gin ON objet USING GIN (statistiques jsonb_path_ops);
+
+-- Quête : son contenu (étapes, dialogues) est un document JSONB.
+CREATE TABLE quete (
+    id             TEXT     PRIMARY KEY,                 -- ex. 'tutoriel_agora'
+    titre          TEXT     NOT NULL UNIQUE,
+    niveau_requis  SMALLINT NOT NULL DEFAULT 1 CHECK (niveau_requis BETWEEN 1 AND 100),
+    recompense_xp  INTEGER  NOT NULL DEFAULT 0 CHECK (recompense_xp >= 0),
+    -- Ex. [{"type": "dialogue", "pnj": "Hermès"}, {"type": "combat", "boss": "BOSS_ATHENA"}]
+    etapes         JSONB    NOT NULL DEFAULT '[]',
+    CONSTRAINT quete_id_format CHECK (id ~ '^[a-z0-9_]+$'),
+    CONSTRAINT quete_etapes_tableau CHECK (jsonb_typeof(etapes) = 'array')
+);
+CREATE INDEX quete_etapes_gin ON quete USING GIN (etapes jsonb_path_ops);
+
+-- Chaîne de quêtes (association réflexive DÉBLOQUE) :
+-- la quête prerequis_id doit être terminée avant de commencer quete_id.
+CREATE TABLE quete_prerequis (
+    quete_id      TEXT NOT NULL REFERENCES quete(id) ON DELETE CASCADE,
+    prerequis_id  TEXT NOT NULL REFERENCES quete(id) ON DELETE CASCADE,
+    PRIMARY KEY (quete_id, prerequis_id),
+    CONSTRAINT quete_pas_son_propre_prerequis CHECK (quete_id <> prerequis_id)
+);
+CREATE INDEX quete_prerequis_prerequis_idx ON quete_prerequis (prerequis_id);
+
+-- Interdit les boucles (A débloque B, B débloque A) : sinon plus personne ne
+-- pourrait commencer ces quêtes. On remonte récursivement tous les prérequis
+-- du prérequis ajouté : si on y retrouve la quête elle-même, c'est une boucle.
+CREATE FUNCTION verifier_cycle_quete() RETURNS trigger AS $$
+BEGIN
+    IF EXISTS (
+        WITH RECURSIVE ancetres AS (
+            SELECT prerequis_id FROM quete_prerequis WHERE quete_id = NEW.prerequis_id
+            UNION
+            SELECT qp.prerequis_id
+              FROM quete_prerequis qp
+              JOIN ancetres a ON qp.quete_id = a.prerequis_id
+        )
+        SELECT 1 FROM ancetres WHERE prerequis_id = NEW.quete_id
+    ) THEN
+        RAISE EXCEPTION 'Boucle de prérequis : % dépend déjà de %', NEW.prerequis_id, NEW.quete_id
+            USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER quete_prerequis_sans_cycle
+    BEFORE INSERT OR UPDATE ON quete_prerequis
+    FOR EACH ROW EXECUTE FUNCTION verifier_cycle_quete();
 
 -- ---------------------------------------------------------------------
 -- 2. Joueurs et personnages
@@ -136,6 +201,57 @@ CREATE TRIGGER personnage_limite
     FOR EACH ROW EXECUTE FUNCTION verifier_limite_personnages();
 
 -- ---------------------------------------------------------------------
+-- 2 bis. Social : guildes et amis
+-- ---------------------------------------------------------------------
+
+CREATE TABLE guilde (
+    id             INTEGER     GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    nom            TEXT        NOT NULL,
+    sigle          TEXT        NOT NULL,                  -- ex. 'ARGO', affiché à côté du pseudo
+    date_creation  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT guilde_nom_format CHECK (nom ~ '^[A-Za-zÀ-ÿ0-9'' -]{3,30}$'),
+    CONSTRAINT guilde_sigle_format CHECK (sigle ~ '^[A-Z]{2,5}$')
+);
+CREATE UNIQUE INDEX guilde_nom_unique ON guilde (lower(nom));
+CREATE UNIQUE INDEX guilde_sigle_unique ON guilde (sigle);
+
+-- Association porteuse MEMBRE DE : un personnage est dans au plus une guilde
+-- (d'où personnage_id seul en clé primaire), avec un rang.
+CREATE TABLE membre_guilde (
+    personnage_id  INTEGER     PRIMARY KEY REFERENCES personnage(id) ON DELETE CASCADE,
+    guilde_id      INTEGER     NOT NULL REFERENCES guilde(id) ON DELETE CASCADE,
+    rang           TEXT        NOT NULL DEFAULT 'membre'
+                   CHECK (rang IN ('chef','officier','membre')),
+    date_entree    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX membre_guilde_guilde_idx ON membre_guilde (guilde_id);
+-- Index unique PARTIEL : il ne s'applique qu'aux lignes où rang = 'chef'.
+-- Résultat : une guilde ne peut avoir qu'un seul chef.
+CREATE UNIQUE INDEX membre_guilde_un_seul_chef ON membre_guilde (guilde_id) WHERE rang = 'chef';
+
+-- Association réflexive EST AMI DE : un personnage demande, l'autre accepte ou refuse.
+CREATE TABLE amitie (
+    demandeur_id     INTEGER     NOT NULL REFERENCES personnage(id) ON DELETE CASCADE,
+    destinataire_id  INTEGER     NOT NULL REFERENCES personnage(id) ON DELETE CASCADE,
+    statut           TEXT        NOT NULL DEFAULT 'en_attente'
+                     CHECK (statut IN ('en_attente','acceptee','refusee')),
+    date_demande     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (demandeur_id, destinataire_id),
+    CONSTRAINT amitie_pas_avec_soi_meme CHECK (demandeur_id <> destinataire_id)
+);
+-- Une seule relation par paire, quel que soit le sens :
+-- si Persée a demandé Atalante, Atalante ne peut pas créer une 2e demande vers Persée.
+CREATE UNIQUE INDEX amitie_paire_unique
+    ON amitie (LEAST(demandeur_id, destinataire_id), GREATEST(demandeur_id, destinataire_id));
+CREATE INDEX amitie_destinataire_idx ON amitie (destinataire_id);
+
+-- Vue pratique : chaque amitié acceptée dans les deux sens (personnage -> ami).
+CREATE VIEW v_amis AS
+SELECT demandeur_id AS personnage_id, destinataire_id AS ami_id FROM amitie WHERE statut = 'acceptee'
+UNION ALL
+SELECT destinataire_id, demandeur_id FROM amitie WHERE statut = 'acceptee';
+
+-- ---------------------------------------------------------------------
 -- 3. Activité en jeu
 -- ---------------------------------------------------------------------
 
@@ -176,16 +292,51 @@ SELECT c.saison,
 FROM classement_saison c
 JOIN personnage p ON p.id = c.personnage_id;
 
--- Avancement des quêtes. Le contenu des quêtes (étapes, dialogues) est dans
--- MongoDB : quete_id est l'identifiant du document correspondant.
+-- Avancement des quêtes (association porteuse SUIT entre PERSONNAGE et QUETE).
 CREATE TABLE progression_quete (
     personnage_id  INTEGER     NOT NULL REFERENCES personnage(id) ON DELETE CASCADE,
-    quete_id       TEXT        NOT NULL,
+    quete_id       TEXT        NOT NULL REFERENCES quete(id) ON DELETE CASCADE,
     statut         TEXT        NOT NULL DEFAULT 'en_cours'
                    CHECK (statut IN ('en_cours','terminee','abandonnee')),
     date_maj       TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (personnage_id, quete_id)
 );
+CREATE INDEX progression_quete_quete_idx ON progression_quete (quete_id);
+
+-- Règle du jeu : pour commencer une quête, il faut le niveau requis
+-- et avoir terminé toutes ses quêtes prérequises.
+CREATE FUNCTION verifier_debut_quete() RETURNS trigger AS $$
+DECLARE
+    v_niveau     SMALLINT;
+    v_requis     SMALLINT;
+    v_manquante  TEXT;
+BEGIN
+    SELECT niveau INTO v_niveau FROM personnage WHERE id = NEW.personnage_id;
+    SELECT niveau_requis INTO v_requis FROM quete WHERE id = NEW.quete_id;
+    IF v_niveau < v_requis THEN
+        RAISE EXCEPTION 'Niveau % requis pour la quête % (niveau actuel : %)', v_requis, NEW.quete_id, v_niveau
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    SELECT qp.prerequis_id INTO v_manquante
+      FROM quete_prerequis qp
+     WHERE qp.quete_id = NEW.quete_id
+       AND NOT EXISTS (SELECT 1 FROM progression_quete pq
+                        WHERE pq.personnage_id = NEW.personnage_id
+                          AND pq.quete_id = qp.prerequis_id
+                          AND pq.statut = 'terminee')
+     LIMIT 1;
+    IF v_manquante IS NOT NULL THEN
+        RAISE EXCEPTION 'La quête % doit d''abord être terminée', v_manquante
+            USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER progression_debut_quete
+    BEFORE INSERT ON progression_quete
+    FOR EACH ROW EXECUTE FUNCTION verifier_debut_quete();
 
 CREATE FUNCTION maj_date_progression() RETURNS trigger AS $$
 BEGIN
@@ -197,6 +348,25 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER progression_date_maj
     BEFORE UPDATE ON progression_quete
     FOR EACH ROW EXECUTE FUNCTION maj_date_progression();
+
+-- Journal des événements : connexions, échanges, combats...
+-- Sert à repérer les tricheurs et les attaques (ex. force brute sur la connexion).
+-- compte_id est vide quand le compte est inconnu (ex. pseudo inexistant).
+CREATE TABLE journal_evenement (
+    id          BIGINT      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    compte_id   INTEGER     REFERENCES compte(id) ON DELETE SET NULL,
+    type        TEXT        NOT NULL CHECK (type IN (
+                    'inscription','connexion_reussie','connexion_refusee','deconnexion',
+                    'echange','combat','victoire_boss','sanction')),
+    horodatage  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    adresse_ip  INET,
+    -- Informations propres à chaque type d'événement. Ex. {"motif": "mot_de_passe"}
+    details     JSONB       NOT NULL DEFAULT '{}',
+    CONSTRAINT journal_details_objet CHECK (jsonb_typeof(details) = 'object')
+);
+-- Index adaptés aux recherches fréquentes : par type et date, par compte et date.
+CREATE INDEX journal_type_date_idx   ON journal_evenement (type, horodatage DESC);
+CREATE INDEX journal_compte_date_idx ON journal_evenement (compte_id, horodatage DESC);
 
 -- ---------------------------------------------------------------------
 -- 4. Inventaire
