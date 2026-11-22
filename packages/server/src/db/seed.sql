@@ -59,4 +59,64 @@ INSERT INTO objet (nom, description, categorie, rarete, empilable, prix) VALUES
     ('Éclat de foudre',    'Fragment laissé par Zeus, sert à l''artisanat.',   'ressource',   'epique',     TRUE,  200),
     ('Toison d''or',       'Artefact légendaire convoité par tous les héros.', 'artefact',    'legendaire', FALSE, 5000);
 
+-- Statistiques des objets (JSONB) : chaque objet a les siennes.
+UPDATE objet o SET statistiques = s.stats::jsonb
+FROM (VALUES
+    ('Épée de bronze',         '{"attaque": 8}'),
+    ('Arc en bois d''olivier', '{"attaque": 7, "portee": 5}'),
+    ('Bâton de l''oracle',     '{"puissance_magique": 9}'),
+    ('Dagues jumelles',        '{"attaque": 6, "vitesse": 3}'),
+    ('Bouclier d''hoplite',    '{"defense": 10, "parade": 5}'),
+    ('Potion d''ambroisie',    '{"soin_pv": 40}'),
+    ('Nectar divin',           '{"soin_pv": 100, "cible": "equipe"}'),
+    ('Toison d''or',           '{"bonus_xp_pct": 20}')
+) AS s(nom, stats)
+WHERE o.nom = s.nom;
+
+-- Phases de combat des boss (JSONB) : provisoires, en attendant les règles de combat.
+UPDATE boss b SET phases = p.phases::jsonb
+FROM (VALUES
+    ('BOSS_ATHENA',   '[{"phase": 1, "seuil_pv_pct": 100, "attaques": ["Coup de lance"]},
+                        {"phase": 2, "seuil_pv_pct": 50,  "attaques": ["Coup de lance", "Égide protectrice"]}]'),
+    ('BOSS_APOLLO',   '[{"phase": 1, "seuil_pv_pct": 100, "attaques": ["Flèche solaire"]},
+                        {"phase": 2, "seuil_pv_pct": 40,  "attaques": ["Pluie de flèches", "Aveuglement"]}]'),
+    ('BOSS_POSEIDON', '[{"phase": 1, "seuil_pv_pct": 100, "attaques": ["Coup de trident"]},
+                        {"phase": 2, "seuil_pv_pct": 60,  "attaques": ["Raz-de-marée"]},
+                        {"phase": 3, "seuil_pv_pct": 25,  "attaques": ["Raz-de-marée", "Séisme"]}]'),
+    ('BOSS_ZEUS',     '[{"phase": 1, "seuil_pv_pct": 100, "attaques": ["Éclair"]},
+                        {"phase": 2, "seuil_pv_pct": 60,  "attaques": ["Foudre de l''Olympe"]},
+                        {"phase": 3, "seuil_pv_pct": 20,  "attaques": ["Foudre de l''Olympe", "Tempête céleste"]}]'),
+    ('BOSS_HADES',    '[{"phase": 1, "seuil_pv_pct": 100, "attaques": ["Étreinte des ombres"]},
+                        {"phase": 2, "seuil_pv_pct": 50,  "attaques": ["Invocation des âmes"]}]'),
+    ('BOSS_ARES',     '[{"phase": 1, "seuil_pv_pct": 100, "attaques": ["Charge brutale"]},
+                        {"phase": 2, "seuil_pv_pct": 30,  "attaques": ["Rage du champ de bataille"]}]')
+) AS p(code, phases)
+WHERE b.code = p.code;
+
+-- Quêtes (étapes en JSONB) puis chaîne de prérequis :
+--   tutoriel_agora -> offrande_athena -> epreuve_athena ─┐
+--                                     -> oracle_delphes -> colere_poseidon -> descente_enfers
+--   (descente_enfers demande à la fois epreuve_athena et colere_poseidon)
+INSERT INTO quete (id, titre, niveau_requis, recompense_xp, etapes) VALUES
+    ('tutoriel_agora',  'Premiers pas sur l''Agora', 1, 50,
+     '[{"type": "dialogue", "pnj": "Hermès"}, {"type": "deplacement", "zone": "Agora de l''Olympe"}]'),
+    ('offrande_athena', 'Une offrande pour Athéna', 5, 150,
+     '[{"type": "collecte", "objet": "Potion d''ambroisie", "quantite": 3}, {"type": "dialogue", "pnj": "Prêtresse d''Athéna"}]'),
+    ('epreuve_athena',  'L''épreuve d''Athéna', 12, 400,
+     '[{"type": "deplacement", "zone": "Temple d''Athéna"}, {"type": "combat", "boss": "BOSS_ATHENA"}]'),
+    ('oracle_delphes',  'L''oracle de Delphes', 12, 300,
+     '[{"type": "deplacement", "zone": "Sanctuaire de Delphes"}, {"type": "dialogue", "pnj": "La Pythie"}]'),
+    ('colere_poseidon', 'La colère de Poséidon', 20, 600,
+     '[{"type": "deplacement", "zone": "Rivage d''Égée"}, {"type": "combat", "boss": "BOSS_POSEIDON"}]'),
+    ('descente_enfers', 'Descente aux Enfers', 30, 1000,
+     '[{"type": "deplacement", "zone": "Portes des Enfers"}, {"type": "dialogue", "pnj": "Charon"}, {"type": "combat", "boss": "BOSS_HADES"}]');
+
+INSERT INTO quete_prerequis (quete_id, prerequis_id) VALUES
+    ('offrande_athena', 'tutoriel_agora'),
+    ('epreuve_athena',  'offrande_athena'),
+    ('oracle_delphes',  'offrande_athena'),
+    ('colere_poseidon', 'oracle_delphes'),
+    ('descente_enfers', 'colere_poseidon'),
+    ('descente_enfers', 'epreuve_athena');
+
 COMMIT;
